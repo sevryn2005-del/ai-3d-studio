@@ -6,10 +6,13 @@ import { facesOf } from './sketchPlane';
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
+import { patternError, shellError } from './features';
 import { resolveProfile, sketchErrors, sketchFeatureRef, revolveProfileError } from './sketch';
 
 export function childIds(obj: CadObject): ObjectId[] {
-  return obj.kind === 'boolean' ? [obj.boolean.base, ...obj.boolean.tools] : [];
+  if (obj.kind === 'boolean') return [obj.boolean.base, ...obj.boolean.tools];
+  if (obj.kind === 'pattern') return [obj.pattern.source];
+  return [];
 }
 
 /** 자식 ID → 부모 ID */
@@ -46,10 +49,10 @@ export function subtreeIds(model: ModelDefinition, rootId: ObjectId): ObjectId[]
   return out;
 }
 
-/** 트리 깊이: 기본 도형 = 0, 기본 도형만 가진 불리언 = 1 */
+/** 트리 깊이: 기본 도형 = 0, 기본 도형만 가진 불리언·패턴 = 1 */
 export function depthOf(model: ModelDefinition, id: ObjectId, index = byId(model)): number {
   const o = index.get(id);
-  if (!o || o.kind !== 'boolean') return 0;
+  if (!o || childIds(o).length === 0) return 0;
   return 1 + Math.max(...childIds(o).map((c) => depthOf(model, c, index)));
 }
 
@@ -98,17 +101,25 @@ export function validateGraph(model: ModelDefinition): string[] {
       const err = edgeFeatureError(o.params, o.edgeFeature);
       if (err) errors.push(`${o.id}: ${err}`);
     }
+    if ((o.kind === 'box' || o.kind === 'cylinder' || o.kind === 'extrude') && o.shell) {
+      const err = shellError(o, o.shell, model);
+      if (err) errors.push(`${o.id}: ${err}`);
+    }
+    if (o.kind === 'pattern') {
+      const err = patternError(o.pattern);
+      if (err) errors.push(`${o.id}: ${err}`);
+    }
   }
   const parentOf = new Map<ObjectId, ObjectId>();
   for (const o of model.objects) {
-    if (o.kind !== 'boolean') continue;
+    if (childIds(o).length === 0) continue;
     const ids = childIds(o);
     if (new Set(ids).size !== ids.length) errors.push(`${o.id}: 같은 객체가 두 번 이상 참조되었습니다`);
     for (const c of ids) {
       if (c === o.id) errors.push(`${o.id}: 자기 자신을 참조할 수 없습니다`);
       else if (!index.has(c)) errors.push(`${o.id}: 존재하지 않는 객체를 참조합니다: ${c}`);
       else if (parentOf.has(c) && parentOf.get(c) !== o.id)
-        errors.push(`${c}: 두 개 이상의 불리언에서 사용되었습니다`);
+        errors.push(`${c}: 두 개 이상의 불리언·패턴에서 사용되었습니다`);
       else parentOf.set(c, o.id);
     }
   }
@@ -143,7 +154,7 @@ export function dependencyCycle(model: ModelDefinition): string | null {
   for (const o of model.objects) {
     const ref = sketchFeatureRef(o);
     if (ref) add(`o:${o.id}`, `s:${ref.sketch}`);
-    if (o.kind === 'boolean') for (const c of childIds(o)) add(`o:${o.id}`, `o:${c}`);
+    for (const c of childIds(o)) add(`o:${o.id}`, `o:${c}`);
   }
   for (const sk of model.sketches) if (sk.plane.type === 'face') add(`s:${sk.id}`, `o:${sk.plane.object}`);
   const state = new Map<string, 1 | 2>(); // 1 = 방문 중, 2 = 끝

@@ -99,6 +99,13 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       const base = model.objects.find((o) => o.id === obj.boolean.base);
       return base ? facesOf(model, base, depth + 1) : [];
     }
+    case 'pattern': {
+      // 패턴 결과의 면 = 원본의 면 (첫 번째 사본)
+      const src = model.objects.find((o) => o.id === obj.pattern.source);
+      return src ? facesOf(model, src, depth + 1) : [];
+    }
+    case 'hole':
+      return [];
   }
 }
 
@@ -153,6 +160,13 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
       const f = base ? faceLocalMatrix(model, base, face, depth + 1) : null;
       return base && f ? toMatrix(base.transform).multiply(f) : null;
     }
+    case 'pattern': {
+      const src = model.objects.find((o) => o.id === obj.pattern.source);
+      const f = src ? faceLocalMatrix(model, src, face, depth + 1) : null;
+      return src && f ? toMatrix(src.transform).multiply(f) : null;
+    }
+    case 'hole':
+      return null;
   }
 }
 

@@ -30,6 +30,8 @@ class Limits:
     MAX_SKETCH_ENTITIES = 100
     MAX_POLYGON_POINTS = 64
     MAX_SKETCH_CONSTRAINTS = 300
+    MAX_PATTERN_COUNT = 100
+    MAX_PATTERN_TOTAL = 400
 
 
 def _num(ge: float, le: float) -> object:
@@ -118,6 +120,31 @@ class RevolveParams(Strict):
     angle: RevolveAngle
 
 
+class HoleParams(Strict):
+    """구멍 도구 (형식 v6): 원점 = 바닥면 중심, 축 = +Z, 위(z = depth)가 가공 면. 카운터보어/카운터싱크 0 = 없음."""
+
+    diameter: Dimension
+    depth: Dimension
+    cboreDiameter: RadiusOrZero
+    cboreDepth: RadiusOrZero
+    csinkDiameter: RadiusOrZero
+
+    @model_validator(mode="after")
+    def _rules(self) -> HoleParams:
+        # frontend commandTypes.ts HoleParamsSchema 와 같은 규칙·메시지
+        if self.cboreDiameter > 0 and self.csinkDiameter > 0:
+            raise ValueError("카운터보어와 카운터싱크는 함께 쓸 수 없습니다")
+        if self.cboreDiameter > 0 and self.cboreDiameter <= self.diameter:
+            raise ValueError("카운터보어 지름은 구멍 지름보다 커야 합니다")
+        if self.cboreDiameter > 0 and not (0 < self.cboreDepth < self.depth):
+            raise ValueError("카운터보어 깊이는 0보다 크고 구멍 깊이보다 작아야 합니다")
+        if self.csinkDiameter > 0 and self.csinkDiameter <= self.diameter:
+            raise ValueError("카운터싱크 지름은 구멍 지름보다 커야 합니다")
+        if self.csinkDiameter > 0 and (self.csinkDiameter - self.diameter) / 2 >= self.depth:
+            raise ValueError("카운터싱크가 구멍 깊이보다 깊습니다")
+        return self
+
+
 PARAMS_MODELS: dict[str, type[Strict]] = {
     "box": BoxParams,
     "cylinder": CylinderParams,
@@ -125,6 +152,7 @@ PARAMS_MODELS: dict[str, type[Strict]] = {
     "cone": ConeParams,
     "extrude": ExtrudeParams,
     "revolve": RevolveParams,
+    "hole": HoleParams,
 }
 
 
@@ -254,10 +282,27 @@ class Transform(Strict):
     rotation: Rotation
 
 
+Color = Annotated[str, StringConstraints(strict=True, pattern=r"^#[0-9a-f]{6}$")]
+StrictBool = Annotated[bool, Field(strict=True)]
+
+
+def _opt(default=None):
+    """선택 필드: 없으면 직렬화에서 뺀다 (Zod optional 과 같은 의미)"""
+    return Field(default=default, exclude_if=lambda v: v is None)
+
+
 class _ObjectBase(Strict):
     id: ObjectId
     name: Name
     transform: Transform
+    # 형식 v6: 억제(계산·내보내기 제외), 숨김(화면만), 외관 색
+    suppressed: StrictBool | None = _opt()
+    hidden: StrictBool | None = _opt()
+    color: Color | None = _opt()
+
+    @property
+    def child_ids(self) -> list[str]:
+        return []
 
 
 EdgeSelection = Literal["all", "vertical"]
@@ -276,16 +321,28 @@ def max_edge_size(p: BoxParams, edges: str) -> float:
     return min(dims) / 2
 
 
+FaceName = Literal["top", "bottom", "+X", "-X", "+Y", "-Y", "start", "end", "+u", "-u", "+v", "-v"]
+
+
+class Shell(Strict):
+    """쉘 (형식 v6): 바깥에서 thickness 만 남기고 비움. open = 열린 면"""
+
+    thickness: Annotated[float, _num(Limits.MIN_DIMENSION, Limits.MAX_DIMENSION / 2)]
+    open: Annotated[list[FaceName], Field(max_length=6)]
+
+
 class BoxObject(_ObjectBase):
     kind: Literal["box"]
     params: BoxParams
     # 없으면 직렬화에서 필드를 뺀다 (Zod 의 optional 과 같은 의미: null 이 아니라 "없음")
     edgeFeature: EdgeFeature | None = Field(default=None, exclude_if=lambda v: v is None)
+    shell: Shell | None = _opt()
 
 
 class CylinderObject(_ObjectBase):
     kind: Literal["cylinder"]
     params: CylinderParams
+    shell: Shell | None = _opt()
 
 
 class SphereObject(_ObjectBase):
@@ -311,6 +368,7 @@ class ExtrudeObject(_ObjectBase):
     kind: Literal["extrude"]
     params: ExtrudeParams
     extrude: ExtrudeRef
+    shell: Shell | None = _opt()
 
 
 class RevolveObject(_ObjectBase):
@@ -345,19 +403,69 @@ class BooleanObject(_ObjectBase):
         return [self.boolean.base, *self.boolean.tools]
 
 
-PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject]
+class HoleObject(_ObjectBase):
+    kind: Literal["hole"]
+    params: HoleParams
+
+
+Axis = Literal["x", "y", "z"]
+PatternCount = Annotated[int, Field(strict=True, ge=1, le=Limits.MAX_PATTERN_COUNT)]
+PatternSpacing = Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
+
+
+class LinearPattern(Strict):
+    type: Literal["linear"]
+    source: ObjectId
+    axis: Axis
+    count: PatternCount
+    spacing: PatternSpacing
+    axis2: Axis | None = _opt()
+    count2: PatternCount | None = _opt()
+    spacing2: PatternSpacing | None = _opt()
+
+
+class CircularPattern(Strict):
+    type: Literal["circular"]
+    source: ObjectId
+    axis: Axis
+    count: PatternCount
+    angle: Annotated[float, _num(1, 360)]
+
+
+class MirrorPattern(Strict):
+    type: Literal["mirror"]
+    source: ObjectId
+    plane: Literal["XY", "XZ", "YZ"]
+    offset: Coordinate
+
+
+PatternDef = Annotated[Union[LinearPattern, CircularPattern, MirrorPattern], Field(discriminator="type")]
+
+
+class PatternObject(_ObjectBase):
+    """패턴·대칭 (형식 v6): 결과 = 원본 ∪ 사본. 축·평면은 패턴 좌표계 원점을 지난다"""
+
+    kind: Literal["pattern"]
+    pattern: PatternDef
+
+    @property
+    def child_ids(self) -> list[str]:
+        return [self.pattern.source]
+
+
+PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
-    BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject,
+    BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
 )
 
 CadObject = Annotated[
-    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject],
+    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject],
     Field(discriminator="kind"),
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[5]
+    schemaVersion: Literal[6]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -542,6 +650,10 @@ class SetParamsParams(Strict):
     radiusTop: RadiusOrZero | None = None
     distance: ExtrudeDistance | None = None
     angle: RevolveAngle | None = None
+    diameter: Dimension | None = None
+    cboreDiameter: RadiusOrZero | None = None
+    cboreDepth: RadiusOrZero | None = None
+    csinkDiameter: RadiusOrZero | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:
@@ -601,6 +713,58 @@ class DeleteObject(Strict):
     target: ObjectId
 
 
+class SetSuppressed(Strict):
+    type: Literal["set_suppressed"]
+    target: ObjectId
+    suppressed: StrictBool
+
+
+class SetAppearance(Strict):
+    type: Literal["set_appearance"]
+    target: ObjectId
+    color: Color | Literal["default"] | None = None
+    hidden: StrictBool | None = None
+
+    @model_validator(mode="after")
+    def _something(self) -> SetAppearance:
+        if self.color is None and self.hidden is None:
+            raise ValueError("color 또는 hidden 이 필요합니다")
+        return self
+
+
+class ShellCommand(Strict):
+    type: Literal["shell"]
+    target: ObjectId
+    thickness: Annotated[float, _num(0, Limits.MAX_DIMENSION / 2)]
+    open: Annotated[list[FaceName], Field(max_length=6)] | None = None
+
+
+class PatternCommand(Strict):
+    type: Literal["pattern"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    pattern: PatternDef
+
+
+class SetPattern(Strict):
+    type: Literal["set_pattern"]
+    target: ObjectId
+    pattern: PatternDef
+
+
+class HoleCommand(Strict):
+    type: Literal["hole"]
+    id: ObjectId | None = None
+    target: ObjectId
+    face: FaceName
+    at: Point2
+    diameter: Dimension
+    depth: Dimension
+    cboreDiameter: RadiusOrZero | None = None
+    cboreDepth: RadiusOrZero | None = None
+    csinkDiameter: RadiusOrZero | None = None
+
+
 CadCommand = Annotated[
     Union[
         CreateBox,
@@ -634,6 +798,12 @@ CadCommand = Annotated[
         RenameObject,
         DuplicateObject,
         DeleteObject,
+        SetSuppressed,
+        SetAppearance,
+        ShellCommand,
+        PatternCommand,
+        SetPattern,
+        HoleCommand,
     ],
     Field(discriminator="type"),
 ]
@@ -672,4 +842,10 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     RenameObject,
     DuplicateObject,
     DeleteObject,
+    SetSuppressed,
+    SetAppearance,
+    ShellCommand,
+    PatternCommand,
+    SetPattern,
+    HoleCommand,
 )

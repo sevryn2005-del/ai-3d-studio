@@ -29,6 +29,7 @@ from app.cad.commands import (
     SphereObject,
     StandardPlane,
     Transform,
+    PatternObject,
     resolve_profile,
 )
 
@@ -77,7 +78,7 @@ def plane_matrix(plane: StandardPlane) -> np.ndarray:
 
 def object_world_matrix(model: ModelDefinition, oid: str) -> np.ndarray:
     index = {o.id: o for o in model.objects}
-    parent = {c: o.id for o in model.objects if isinstance(o, BooleanObject) for c in o.child_ids}
+    parent = {c: o.id for o in model.objects for c in o.child_ids}
     m = np.eye(4)
     cur: str | None = oid
     while cur and cur in index:
@@ -108,6 +109,9 @@ def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str
         case BooleanObject():
             base = next((o for o in model.objects if o.id == obj.boolean.base), None)
             return faces_of(model, base, depth + 1) if base else []
+        case PatternObject():
+            src = next((o for o in model.objects if o.id == obj.pattern.source), None)
+            return faces_of(model, src, depth + 1) if src else []
     return []
 
 
@@ -151,6 +155,10 @@ def face_local_matrix(model: ModelDefinition, obj: CadObject, face: str, depth: 
             base = next((o for o in model.objects if o.id == obj.boolean.base), None)
             f = face_local_matrix(model, base, face, depth + 1) if base else None
             return transform_matrix(base.transform) @ f if base is not None and f is not None else None
+        case PatternObject():
+            src = next((o for o in model.objects if o.id == obj.pattern.source), None)
+            f = face_local_matrix(model, src, face, depth + 1) if src else None
+            return transform_matrix(src.transform) @ f if src is not None and f is not None else None
     return None
 
 
@@ -181,7 +189,7 @@ def dependency_cycle(model: ModelDefinition) -> str | None:
     for o in model.objects:
         if ref := sketch_feature_ref(o):
             edges.setdefault(f"o:{o.id}", []).append(f"s:{ref.sketch}")
-        if isinstance(o, BooleanObject):
+        if o.child_ids:
             edges.setdefault(f"o:{o.id}", []).extend(f"o:{c}" for c in o.child_ids)
     for sk in model.sketches:
         if isinstance(sk.plane, FacePlane):

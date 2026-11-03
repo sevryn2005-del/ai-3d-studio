@@ -53,6 +53,12 @@ describe('shared/schemas 동기화', () => {
       'rename_object',
       'duplicate_object',
       'delete_object',
+      'set_suppressed',
+      'set_appearance',
+      'shell',
+      'pattern',
+      'set_pattern',
+      'hole',
     ]);
   });
 });

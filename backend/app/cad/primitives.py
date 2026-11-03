@@ -33,7 +33,10 @@ from app.cad.commands import (
     CylinderObject,
     SphereObject,
     Transform,
+    HoleObject,
+    PatternObject,
 )
+from app.cad.features import is_suppressed, pattern_matrices
 from app.cad.frames import extrude_local_matrix
 
 _ORIGIN = cq.Vector(0, 0, 0)
@@ -50,6 +53,14 @@ def local_solid(obj: CadObject) -> cq.Shape:
     match obj:
         case BoxObject(params=p, edgeFeature=f):
             solid = cq.Solid.makeBox(p.width, p.depth, p.height, pnt=cq.Vector(-p.width / 2, -p.depth / 2, 0))
+            if obj.shell is not None:
+                # 쉘: 안쪽 상자(열린 면 쪽은 바깥까지 연장)를 뺀다 — 브라우저 엔진 geometry.ts 와 같은 형상
+                t, o = obj.shell.thickness, obj.shell.open
+                w, d, h = p.width, p.depth, p.height
+                lo = (-w / 2 - 1 if "-X" in o else -w / 2 + t, -d / 2 - 1 if "-Y" in o else -d / 2 + t, -1 if "bottom" in o else t)
+                hi = (w / 2 + 1 if "+X" in o else w / 2 - t, d / 2 + 1 if "+Y" in o else d / 2 - t, h + 1 if "top" in o else h - t)
+                core = cq.Solid.makeBox(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], pnt=cq.Vector(*lo))
+                return solid.cut(core)
             if f is None:
                 return solid
             edges = solid.Edges() if f.edges == "all" else _VERTICAL.filter(solid.Edges())
@@ -59,7 +70,22 @@ def local_solid(obj: CadObject) -> cq.Shape:
                 what = "모서리를 둥글게" if f.type == "fillet" else "모따기를"
                 raise GeometryError(f"'{obj.name}': {what} 할 수 없습니다 (크기를 줄여 보세요)") from e
         case CylinderObject(params=p):
-            return cq.Solid.makeCylinder(p.radius, p.height)
+            solid = cq.Solid.makeCylinder(p.radius, p.height)
+            if obj.shell is None:
+                return solid
+            t = obj.shell.thickness
+            z0 = -1 if "bottom" in obj.shell.open else t
+            z1 = p.height + 1 if "top" in obj.shell.open else p.height - t
+            return solid.cut(cq.Solid.makeCylinder(p.radius - t, z1 - z0, cq.Vector(0, 0, z0)))
+        case HoleObject(params=p):
+            # 구멍 도구: 바닥(z 0)~depth 지름 diameter, 위쪽 카운터보어 또는 90° 카운터싱크
+            tool = cq.Solid.makeCylinder(p.diameter / 2, p.depth)
+            if p.cboreDiameter > 0:
+                tool = tool.fuse(cq.Solid.makeCylinder(p.cboreDiameter / 2, p.cboreDepth, cq.Vector(0, 0, p.depth - p.cboreDepth)))
+            if p.csinkDiameter > 0:
+                ch = (p.csinkDiameter - p.diameter) / 2
+                tool = tool.fuse(cq.Solid.makeCone(p.diameter / 2, p.csinkDiameter / 2, ch, cq.Vector(0, 0, p.depth - ch)))
+            return tool.clean()
         case SphereObject(params=p):
             return cq.Solid.makeSphere(
                 p.radius, cq.Vector(0, 0, p.radius), angleDegrees1=-90, angleDegrees2=90, angleDegrees3=360
@@ -68,7 +94,7 @@ def local_solid(obj: CadObject) -> cq.Shape:
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
-        case BooleanObject() | ExtrudeObject() | RevolveObject():
+        case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -104,12 +130,15 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
     local = extrude_local_matrix(model, obj)  # type: ignore[arg-type]
     if local is None:
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
-    if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
-        wp = cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
-    else:
+    def profile_wp() -> cq.Workplane:
+        # 작업 평면의 대기 윤곽은 돌출 한 번에 소모되므로, 쓸 때마다 새로 만든다
+        if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
+            return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
         # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
-        wp = cq.Workplane("XY").pushPoints([tuple(p["center"])])
-        wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
+        w = cq.Workplane("XY").pushPoints([tuple(p["center"])])
+        return w.rect(p["width"], p["height"]) if p["type"] == "rectangle" else w.circle(p["diameter"] / 2)
+
+    wp = profile_wp()
     if isinstance(obj, RevolveObject):
         if err := revolve_profile_error(p):
             raise GeometryError(f"'{obj.name}': {err}")
@@ -117,6 +146,18 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
     else:
         d = obj.params.distance
         solid = wp.extrude(abs(d)).val()
+        if obj.shell is not None:
+            # 쉘: 단면을 안쪽으로 줄인(모서리 연장 = intersection) 기둥을 뺀다 — 브라우저 CrossSection.offset(Miter) 와 같음
+            t = obj.shell.thickness
+            low_open = ("start" if d > 0 else "end") in obj.shell.open
+            high_open = ("end" if d > 0 else "start") in obj.shell.open
+            z0 = -1 if low_open else t
+            z1 = abs(d) + 1 if high_open else abs(d) - t
+            try:
+                inner = profile_wp().offset2D(-t, kind="intersection").extrude(z1 - z0).val().translate(cq.Vector(0, 0, z0))
+            except Exception as e:
+                raise GeometryError(f"'{obj.name}': 쉘 두께가 단면보다 큽니다") from e
+            solid = solid.cut(inner)
         if d < 0:
             solid = solid.translate(cq.Vector(0, 0, d))
     # 강체 변환(회전+이동)으로 굽는다. cq.Matrix 는 일반 행렬(gp_GTrsf)이라 OCCT 가 거부하므로 gp_Trsf 를 직접 만든다
@@ -130,16 +171,21 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
     sketches = sketches or {}
     if isinstance(obj, (ExtrudeObject, RevolveObject)):
         return extrude_solid(obj, index, sketches)
-    if not isinstance(obj, BooleanObject):
-        return local_solid(obj)
 
     def placed(child_id: str) -> cq.Shape:
         child = index[child_id]
         return apply_transform(build_solid(child, index, sketches), child.transform)
 
+    if isinstance(obj, PatternObject):
+        return pattern_solid(obj, placed(obj.pattern.source))
+    if not isinstance(obj, BooleanObject):
+        return local_solid(obj)
+
     result = placed(obj.boolean.base)
     op = obj.boolean.operation
     for tool_id in obj.boolean.tools:
+        if is_suppressed(index[tool_id], index):
+            continue  # 억제된 도구는 이 연산에서만 빠진다
         tool = placed(tool_id)
         if op == "cut":
             result = result.cut(tool)
@@ -154,4 +200,22 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
         raise GeometryError(f"'{obj.name}': {_OPERATION_LABEL[op]} 결과가 비어 있습니다 (겹치는 부분이 없습니다)")
     if not result.isValid():
         raise GeometryError(f"'{obj.name}': {_OPERATION_LABEL[op]} 결과 형상이 올바르지 않습니다")
+    return result
+
+
+def pattern_solid(obj: PatternObject, src: cq.Shape) -> cq.Shape:
+    """패턴·대칭: 원본 ∪ 사본. 대칭은 반사(행렬식 −1)라 강체 변환 대신 mirror 로 만든다."""
+    p = obj.pattern
+    if p.type == "mirror":
+        normal = {"XY": (0, 0, 1), "XZ": (0, 1, 0), "YZ": (1, 0, 0)}[p.plane]
+        copies = [src.mirror(p.plane, cq.Vector(*normal) * p.offset)]
+    else:
+        copies = []
+        for m in pattern_matrices(p)[1:]:
+            trsf = gp_Trsf()
+            trsf.SetValues(*m[:3, :4].ravel().tolist())
+            copies.append(cq.Shape.cast(BRepBuilderAPI_Transform(src.wrapped, trsf, True).Shape()))
+    result = src.fuse(*copies).clean() if copies else src
+    if not result.isValid():
+        raise GeometryError(f"'{obj.name}': 패턴 결과 형상이 올바르지 않습니다")
     return result

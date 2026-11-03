@@ -13,6 +13,7 @@ import { SketchDrawTool } from './SketchDrawTool';
 import { MouseScheme } from './MouseScheme';
 import { ConfirmationCorner, PendingPreview, PlanePicker } from './FeatureFlow';
 import { useEditorStore } from '../../features/selection/editorStore';
+import { MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
 
 /**
  * 3D 뷰포트. 1 Three.js 단위 = 1 mm, Z-up.
@@ -40,7 +41,7 @@ export function Viewport() {
         }}
       >
         {/* 배경은 CSS 그라디언트 (.viewport) — 밝은 작업 화면 */}
-        <hemisphereLight args={['#ffffff', '#8c96a3', 1.0]} />
+        <hemisphereLight args={['#ffffff', '#3a4250', 1.1]} />
         <directionalLight position={[120, -160, 220]} intensity={1.6} />
         <directionalLight position={[-150, 100, 80]} intensity={0.4} />
 
@@ -49,8 +50,8 @@ export function Viewport() {
           rotation={[Math.PI / 2, 0, 0]}
           cellSize={1}
           sectionSize={10}
-          cellColor="#c5cdd7"
-          sectionColor="#9aa6b5"
+          cellColor="#2c323b"
+          sectionColor="#46505e"
           cellThickness={0.6}
           sectionThickness={1}
           fadeDistance={600}
@@ -66,6 +67,9 @@ export function Viewport() {
         <SketchDrawTool />
         <PlanePicker />
         <PendingPreview />
+        <SectionClip />
+        <MeasureOverlay />
+        <ScreenshotTaker />
         {!drawTool && <SelectionGizmo activeRef={gizmoActiveRef} />}
         <CameraFitter />
         {import.meta.env.DEV && <DevProbe />}
@@ -79,6 +83,9 @@ export function Viewport() {
       </Canvas>
       <ViewportToolbar />
       <ConfirmationCorner />
+      <SectionPanel />
+      <MeasureReadout />
+      <MassPanel />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
           ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`

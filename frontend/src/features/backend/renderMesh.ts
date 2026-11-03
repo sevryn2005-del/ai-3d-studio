@@ -22,13 +22,21 @@ export function geometryKey(
   index: Map<ObjectId, CadObject>,
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): string {
+  // 억제는 상위 불리언·패턴의 결과를 바꾼다 → 키에 넣는다 (색·숨김은 형상과 무관해 넣지 않음)
+  const sup = obj.suppressed ? '!off' : '';
   if (obj.kind === 'boolean') {
     const parts = [obj.boolean.base, ...obj.boolean.tools].map((id) => {
       const child = index.get(id);
       return child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${id}`;
     });
-    return `${obj.boolean.operation}(${parts.join(';')})`;
+    return `${obj.boolean.operation}(${parts.join(';')})${sup}`;
   }
+  if (obj.kind === 'pattern') {
+    const child = index.get(obj.pattern.source);
+    const src = child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${obj.pattern.source}`;
+    return `pattern:${JSON.stringify(obj.pattern)}(${src})${sup}`;
+  }
+  const shell = 'shell' in obj && obj.shell ? `|shell:${obj.shell.thickness}:${obj.shell.open.join(',')}` : '';
   if (obj.kind === 'extrude' || obj.kind === 'revolve') {
     const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
     const sk = sketches.get(ref.sketch);
@@ -39,14 +47,14 @@ export function geometryKey(
       : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`;
     // 면 위 스케치: 붙은 면의 좌표계(돌출 객체 로컬 기준)를 키에 넣는다 → 붙은 객체가 바뀌거나 움직이면 다시 계산
     const frame = sk?.plane.type === 'face' ? `|frame:${faceFrameKey(obj, index, sketches)}` : '';
-    return obj.kind === 'revolve' ? `revolve:${prof}|a=${obj.params.angle}${frame}` : `extrude:${prof}|d=${obj.params.distance}${frame}`;
+    return obj.kind === 'revolve' ? `revolve:${prof}|a=${obj.params.angle}${frame}${sup}` : `extrude:${prof}|d=${obj.params.distance}${frame}${shell}${sup}`;
   }
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)
     .sort()
     .map((k) => `${k}=${params[k]}`);
   const edge = obj.kind === 'box' && obj.edgeFeature ? `|${obj.edgeFeature.type}:${obj.edgeFeature.size}:${obj.edgeFeature.edges}` : '';
-  return `${obj.kind}:${sorted.join(',')}${edge}`;
+  return `${obj.kind}:${sorted.join(',')}${edge}${shell}${sup}`;
 }
 
 function transformKey(t: Transform): string {
@@ -114,7 +122,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function faceFrameKey(obj: Extract<CadObject, { kind: 'extrude' | 'revolve' }>, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = extrudeLocalMatrix({ schemaVersion: 5, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+  const m = extrudeLocalMatrix({ schemaVersion: 6, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

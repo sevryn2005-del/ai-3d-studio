@@ -30,6 +30,9 @@ export const LIMITS = {
   maxSketchEntities: 100,
   maxPolygonPoints: 64,
   maxSketchConstraints: 300,
+  /** 패턴 한 방향의 개수 상한, 전체 사본 수 상한 */
+  maxPatternCount: 100,
+  maxPatternTotal: 400,
 } as const;
 
 const dimension = z
@@ -112,6 +115,28 @@ export const RevolveParamsSchema = z.strictObject({
   angle: z.number().min(0.1, '회전 각도는 0.1° 이상이어야 합니다').max(360, '회전 각도는 360° 이하여야 합니다'),
 });
 
+/**
+ * 구멍 가공 도구 (형식 v6): 원점 = 바닥면 중심, 축 = 로컬 +Z, 위(z = depth)가 가공 면.
+ * 카운터보어(cboreDiameter > 0): 위에서 cboreDepth 만큼 더 큰 지름. 카운터싱크(csinkDiameter > 0): 위쪽 90° 원뿔.
+ * 둘 다 0 이면 단순 구멍. 빼기의 도구로 쓰인다 (hole 명령).
+ */
+export const HoleParamsSchema = z
+  .strictObject({
+    diameter: dimension,
+    depth: dimension,
+    cboreDiameter: radiusOrZero,
+    cboreDepth: radiusOrZero,
+    csinkDiameter: radiusOrZero,
+  })
+  .superRefine((p, ctx) => {
+    const err = (message: string) => ctx.addIssue({ code: 'custom', message });
+    if (p.cboreDiameter > 0 && p.csinkDiameter > 0) err('카운터보어와 카운터싱크는 함께 쓸 수 없습니다');
+    if (p.cboreDiameter > 0 && p.cboreDiameter <= p.diameter) err('카운터보어 지름은 구멍 지름보다 커야 합니다');
+    if (p.cboreDiameter > 0 && !(p.cboreDepth > 0 && p.cboreDepth < p.depth)) err('카운터보어 깊이는 0보다 크고 구멍 깊이보다 작아야 합니다');
+    if (p.csinkDiameter > 0 && p.csinkDiameter <= p.diameter) err('카운터싱크 지름은 구멍 지름보다 커야 합니다');
+    if (p.csinkDiameter > 0 && (p.csinkDiameter - p.diameter) / 2 >= p.depth) err('카운터싱크가 구멍 깊이보다 깊습니다');
+  });
+
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
 export const PARAMS_SCHEMAS = {
   box: BoxParamsSchema,
@@ -120,10 +145,11 @@ export const PARAMS_SCHEMAS = {
   cone: ConeParamsSchema,
   extrude: ExtrudeParamsSchema,
   revolve: RevolveParamsSchema,
+  hole: HoleParamsSchema,
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
-export type ObjectKind = PrimitiveKind | 'boolean';
+export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern';
 export const PRIMITIVE_KINDS = Object.keys(PARAMS_SCHEMAS) as PrimitiveKind[];
 export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
@@ -232,11 +258,72 @@ export const TransformSchema = z.strictObject({
 });
 export type Transform = z.infer<typeof TransformSchema>;
 
+/** 외관 색 (#rrggbb 소문자) */
+export const ColorSchema = z.string().regex(/^#[0-9a-f]{6}$/, '색은 #rrggbb (소문자 16진수) 형식이어야 합니다');
+
+/**
+ * 모든 객체 공통 (형식 v6 에서 선택 필드 추가 — 생략 = 기본값).
+ * - suppressed: 억제. 형상 계산·표시·내보내기에서 빠진다 (불리언 도구면 그 연산만 빠짐, 기준·원본이면 상위도 빠짐)
+ * - hidden: 숨기기. 화면에만 안 보인다 (계산·내보내기는 그대로)
+ * - color: 외관 색
+ */
 const objectBase = {
   id: ObjectIdSchema,
   name: NameSchema,
   transform: TransformSchema,
+  suppressed: z.boolean().optional(),
+  hidden: z.boolean().optional(),
+  color: ColorSchema.optional(),
 };
+
+/**
+ * 쉘 (속 비우기, 형식 v6): 바깥면에서 안쪽으로 thickness 두께만 남기고 비운다. open = 제거할(열린) 면.
+ * 박스(필렛 없는 것)·원통·돌출에 쓸 수 있다. 돌출의 열린 면은 start·end 만.
+ */
+export const ShellSchema = z.strictObject({
+  thickness: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension / 2),
+  open: z.array(FaceNameSchema).max(6),
+});
+export type Shell = z.infer<typeof ShellSchema>;
+
+export const AxisSchema = z.enum(['x', 'y', 'z']);
+export type Axis = z.infer<typeof AxisSchema>;
+const patternCount = z.number().int().min(1).max(LIMITS.maxPatternCount);
+const patternSpacing = z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension);
+
+/**
+ * 패턴·대칭 (형식 v6). source 를 자식으로 가지며 결과 = 원본 ∪ 사본들. 방향·축·평면은 패턴 객체 좌표계 기준
+ * (만들 때 = 월드, 원점을 지남).
+ * - linear: axis 방향으로 spacing 간격 count 개 (원본 포함). axis2/count2/spacing2 로 두 번째 방향
+ * - circular: axis 둘레로 count 개. angle = 360 이면 360/count 간격, 아니면 angle/(count−1) 간격
+ * - mirror: plane (원점에서 법선 방향 offset) 에 대칭 복사
+ */
+export const PatternDefSchema = z.discriminatedUnion('type', [
+  z.strictObject({
+    type: z.literal('linear'),
+    source: ObjectIdSchema,
+    axis: AxisSchema,
+    count: patternCount,
+    spacing: patternSpacing,
+    axis2: AxisSchema.optional(),
+    count2: patternCount.optional(),
+    spacing2: patternSpacing.optional(),
+  }),
+  z.strictObject({
+    type: z.literal('circular'),
+    source: ObjectIdSchema,
+    axis: AxisSchema,
+    count: patternCount,
+    angle: z.number().min(1).max(360),
+  }),
+  z.strictObject({
+    type: z.literal('mirror'),
+    source: ObjectIdSchema,
+    plane: z.enum(['XY', 'XZ', 'YZ']),
+    offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
+  }),
+]);
+export type PatternDef = z.infer<typeof PatternDefSchema>;
 
 export const BooleanOperationSchema = z.enum(['union', 'cut', 'intersect']);
 export type BooleanOperation = z.infer<typeof BooleanOperationSchema>;
@@ -262,8 +349,14 @@ export const EdgeFeatureSchema = z.strictObject({
 export type EdgeFeature = z.infer<typeof EdgeFeatureSchema>;
 
 export const CadObjectSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ ...objectBase, kind: z.literal('box'), params: BoxParamsSchema, edgeFeature: EdgeFeatureSchema.optional() }),
-  z.strictObject({ ...objectBase, kind: z.literal('cylinder'), params: CylinderParamsSchema }),
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('box'),
+    params: BoxParamsSchema,
+    edgeFeature: EdgeFeatureSchema.optional(),
+    shell: ShellSchema.optional(),
+  }),
+  z.strictObject({ ...objectBase, kind: z.literal('cylinder'), params: CylinderParamsSchema, shell: ShellSchema.optional() }),
   z.strictObject({ ...objectBase, kind: z.literal('sphere'), params: SphereParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('cone'), params: ConeParamsSchema }),
   z.strictObject({
@@ -271,6 +364,7 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('extrude'),
     params: ExtrudeParamsSchema,
     extrude: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
+    shell: ShellSchema.optional(),
   }),
   /**
    * 회전 (형식 v5): 스케치 프로파일을 스케치의 v 축(u = 0 인 직선) 둘레로 angle 만큼 돌린다.
@@ -284,14 +378,17 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     revolve: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
   }),
   z.strictObject({ ...objectBase, kind: z.literal('boolean'), boolean: BooleanDefSchema }),
+  z.strictObject({ ...objectBase, kind: z.literal('hole'), params: HoleParamsSchema }),
+  z.strictObject({ ...objectBase, kind: z.literal('pattern'), pattern: PatternDefSchema }),
 ]);
 export type CadObject = z.infer<typeof CadObjectSchema>;
 export type CadObjectOf<K extends ObjectKind> = Extract<CadObject, { kind: K }>;
 export type PrimitiveObject = Extract<CadObject, { kind: PrimitiveKind }>;
 export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
+export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 5;
+export const MODEL_SCHEMA_VERSION = 6;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -367,6 +464,10 @@ export const SetParamsParamsSchema = z
     radiusTop: radiusOrZero,
     distance: extrudeDistance,
     angle: RevolveParamsSchema.shape.angle,
+    diameter: dimension,
+    cboreDiameter: radiusOrZero,
+    cboreDepth: radiusOrZero,
+    csinkDiameter: radiusOrZero,
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -555,6 +656,63 @@ export const DeleteObjectCommandSchema = z.strictObject({
   target: ObjectIdSchema,
 });
 
+/** 억제 켜기/끄기 (피처를 지우지 않고 잠시 빼 보기) */
+export const SetSuppressedCommandSchema = z.strictObject({
+  type: z.literal('set_suppressed'),
+  target: ObjectIdSchema,
+  suppressed: z.boolean(),
+});
+
+/** 외관: 색 ('default' = 기본색), 숨기기 */
+export const SetAppearanceCommandSchema = z
+  .strictObject({
+    type: z.literal('set_appearance'),
+    target: ObjectIdSchema,
+    color: z.union([ColorSchema, z.literal('default')]).optional(),
+    hidden: z.boolean().optional(),
+  })
+  .refine((c) => c.color !== undefined || c.hidden !== undefined, { message: 'color 또는 hidden 이 필요합니다' });
+
+/** 쉘 (속 비우기). thickness 0 = 쉘 제거. open 생략 = 열린 면 없음 (속이 빈 닫힌 형상) */
+export const ShellCommandSchema = z.strictObject({
+  type: z.literal('shell'),
+  target: ObjectIdSchema,
+  thickness: z.number().min(0).max(LIMITS.maxDimension / 2),
+  open: z.array(FaceNameSchema).max(6).optional(),
+});
+
+/** 패턴·대칭 만들기: source(최상위 객체)를 자식으로 갖는 패턴 객체 */
+export const PatternCommandSchema = z.strictObject({
+  type: z.literal('pattern'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  pattern: PatternDefSchema,
+});
+
+/** 패턴 값 바꾸기 (원본은 바꿀 수 없음) */
+export const SetPatternCommandSchema = z.strictObject({
+  type: z.literal('set_pattern'),
+  target: ObjectIdSchema,
+  pattern: PatternDefSchema,
+});
+
+/**
+ * 구멍 가공: target 의 이름 있는 면(face) 위 점 at = [u, v] (면 좌표, mm) 에서 면 안쪽으로 구멍을 뚫는다.
+ * = 구멍 도구(hole 객체) + 빼기. target 이 이미 빼기 결과면 그 빼기에 도구로 더한다 (중첩이 깊어지지 않음).
+ */
+export const HoleCommandSchema = z.strictObject({
+  type: z.literal('hole'),
+  id: ObjectIdSchema.optional(),
+  target: ObjectIdSchema,
+  face: FaceNameSchema,
+  at: Point2Schema,
+  diameter: dimension,
+  depth: dimension,
+  cboreDiameter: radiusOrZero.optional(),
+  cboreDepth: radiusOrZero.optional(),
+  csinkDiameter: radiusOrZero.optional(),
+});
+
 export const CadCommandSchema = z.discriminatedUnion('type', [
   CreateBoxCommandSchema,
   CreateCylinderCommandSchema,
@@ -587,6 +745,12 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   RenameObjectCommandSchema,
   DuplicateObjectCommandSchema,
   DeleteObjectCommandSchema,
+  SetSuppressedCommandSchema,
+  SetAppearanceCommandSchema,
+  ShellCommandSchema,
+  PatternCommandSchema,
+  SetPatternCommandSchema,
+  HoleCommandSchema,
 ]);
 export type CadCommand = z.infer<typeof CadCommandSchema>;
 export type CreateCommand = Extract<CadCommand, { type: 'create_box' | 'create_cylinder' | 'create_sphere' | 'create_cone' }>;

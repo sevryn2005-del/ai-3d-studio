@@ -14,6 +14,7 @@ import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/
 import { resolveProfile, revolveProfileError } from '../../../cad/sketch';
 import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix } from '../../../cad/sketchPlane';
 import { toMatrix } from '../../../cad/transformMath';
+import { isSuppressed, patternMatrices } from '../../../cad/features';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
 export const DISPLAY_TOLERANCE = 0.05; // mm (서버 DISPLAY_LINEAR_TOLERANCE 와 같음)
@@ -84,7 +85,7 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 5, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 6, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -96,7 +97,20 @@ export function localManifold(
         inPlane = scope.keep(turned.transform(MANIFOLD_REVOLVE_TO_PLANE.elements as unknown as Parameters<Manifold['transform']>[0]));
       } else {
         const d = obj.params.distance;
-        const solid = scope.keep(placed.extrude(Math.abs(d)));
+        let solid = scope.keep(placed.extrude(Math.abs(d)));
+        if (obj.shell) {
+          // 쉘: 단면을 안쪽으로 두께만큼 줄인(모서리는 연장해 만나게 = OCCT intersection) 기둥을 뺀다
+          const t = obj.shell.thickness;
+          const inner = scope.keep(placed.offset(-t, 'Miter', 1000));
+          if (inner.isEmpty()) throw new GeometryError(`'${obj.name}': 쉘 두께가 단면보다 큽니다`);
+          // 양수 거리: start = 아래(z 0), end = 위. 음수 거리는 뒤집혀 end 가 아래
+          const lowOpen = obj.shell.open.includes(d > 0 ? 'start' : 'end');
+          const highOpen = obj.shell.open.includes(d > 0 ? 'end' : 'start');
+          const z0 = lowOpen ? -1 : t;
+          const z1 = highOpen ? Math.abs(d) + 1 : Math.abs(d) - t;
+          const core = scope.keep(scope.keep(inner.extrude(z1 - z0)).translate([0, 0, z0]));
+          solid = scope.keep(solid.subtract(core));
+        }
         inPlane = d < 0 ? scope.keep(solid.translate([0, 0, d])) : solid; // 음수 = 법선 반대쪽
       }
       return scope.keep(inPlane.transform(local.elements as unknown as Parameters<Manifold['transform']>[0]));
@@ -106,6 +120,15 @@ export function localManifold(
       const f = obj.edgeFeature;
       const block = (bw: number, bd: number, bh: number, z0 = 0) =>
         scope.keep(scope.keep(Manifold.cube([bw, bd, bh], false)).translate([-bw / 2, -bd / 2, z0]));
+      if (obj.shell) {
+        // 쉘: 안쪽 상자(열린 면 쪽은 바깥까지 연장)를 뺀다
+        const t = obj.shell.thickness;
+        const o = obj.shell.open;
+        const lo = [o.includes('-X') ? -w / 2 - 1 : -w / 2 + t, o.includes('-Y') ? -d / 2 - 1 : -d / 2 + t, o.includes('bottom') ? -1 : t];
+        const hi = [o.includes('+X') ? w / 2 + 1 : w / 2 - t, o.includes('+Y') ? d / 2 + 1 : d / 2 - t, o.includes('top') ? h + 1 : h - t];
+        const core = scope.keep(scope.keep(Manifold.cube([hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!], false)).translate(lo as [number, number, number]));
+        return scope.keep(block(w, d, h).subtract(core));
+      }
       if (!f) return block(w, d, h);
       // 모서리 처리 = 볼록 껍질(hull). 서버 OCCT 필렛·모따기와 같은 형상임을 측정으로 확인함 (docs/architecture.md)
       const r = f.size;
@@ -125,8 +148,33 @@ export function localManifold(
       }
       return scope.keep(Manifold.hull(parts));
     }
-    case 'cylinder':
-      return scope.keep(Manifold.cylinder(obj.params.height, obj.params.radius, obj.params.radius, circularSegments(obj.params.radius, tol)));
+    case 'cylinder': {
+      const { radius: r, height: h } = obj.params;
+      const n = circularSegments(r, tol);
+      const outer = scope.keep(Manifold.cylinder(h, r, r, n));
+      if (!obj.shell) return outer;
+      const t = obj.shell.thickness;
+      const z0 = obj.shell.open.includes('bottom') ? -1 : t;
+      const z1 = obj.shell.open.includes('top') ? h + 1 : h - t;
+      const core = scope.keep(scope.keep(Manifold.cylinder(z1 - z0, r - t, r - t, n)).translate([0, 0, z0]));
+      return scope.keep(outer.subtract(core));
+    }
+    case 'hole': {
+      // 구멍 도구: 바닥(z 0)부터 depth 까지 지름 diameter, 위쪽에 카운터보어 또는 90° 카운터싱크
+      const p = obj.params;
+      const r = p.diameter / 2;
+      const parts = [scope.keep(Manifold.cylinder(p.depth, r, r, circularSegments(r, tol)))];
+      if (p.cboreDiameter > 0) {
+        const R = p.cboreDiameter / 2;
+        parts.push(scope.keep(scope.keep(Manifold.cylinder(p.cboreDepth, R, R, circularSegments(R, tol))).translate([0, 0, p.depth - p.cboreDepth])));
+      }
+      if (p.csinkDiameter > 0) {
+        const R = p.csinkDiameter / 2;
+        const ch = R - r; // 90°: 높이 = 반지름 차
+        parts.push(scope.keep(scope.keep(Manifold.cylinder(ch, r, R, circularSegments(R, tol))).translate([0, 0, p.depth - ch])));
+      }
+      return parts.length === 1 ? parts[0]! : scope.keep(Manifold.union(parts));
+    }
     case 'cone': {
       const { radiusBottom: r1, radiusTop: r2, height: h } = obj.params;
       return scope.keep(Manifold.cylinder(h, r1, r2, circularSegments(Math.max(r1, r2), tol)));
@@ -144,6 +192,8 @@ export function localManifold(
       };
       let result = placed(obj.boolean.base);
       for (const toolId of obj.boolean.tools) {
+        const toolObj = index.get(toolId);
+        if (toolObj && isSuppressed(toolObj, index)) continue; // 억제된 도구는 이 연산에서만 빠진다
         const tool = placed(toolId);
         const op = obj.boolean.operation;
         result = scope.keep(op === 'cut' ? result.subtract(tool) : op === 'union' ? result.add(tool) : result.intersect(tool));
@@ -151,6 +201,17 @@ export function localManifold(
       const label = OPERATION_LABEL[obj.boolean.operation];
       if (result.status() !== 'NoError') throw new GeometryError(`'${obj.name}': ${label} 결과 형상이 올바르지 않습니다`);
       if (result.isEmpty()) throw new GeometryError(`'${obj.name}': ${label} 결과가 비어 있습니다 (겹치는 부분이 없습니다)`);
+      return result;
+    }
+    case 'pattern': {
+      const src = index.get(obj.pattern.source);
+      if (!src) throw new GeometryError(`존재하지 않는 객체입니다: ${obj.pattern.source}`);
+      const placedSrc = scope.keep(
+        localManifold(wasm, src, index, tol, scope, sketches).transform(toMatrix(src.transform).elements as unknown as Parameters<Manifold['transform']>[0]),
+      );
+      const copies = patternMatrices(obj.pattern).map((m) => scope.keep(placedSrc.transform(m.elements as unknown as Parameters<Manifold['transform']>[0])));
+      const result = scope.keep(Manifold.union(copies));
+      if (result.status() !== 'NoError') throw new GeometryError(`'${obj.name}': 패턴 결과 형상이 올바르지 않습니다`);
       return result;
     }
   }
@@ -190,7 +251,7 @@ export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, t
   const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
-    return topLevelObjects(model).map((obj) => ({
+    return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index)).map((obj) => ({
       objectId: obj.id,
       ...toPlainMesh(localManifold(wasm, obj, index, tol, scope, sketches)),
     }));
@@ -205,7 +266,7 @@ export function worldMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol 
   const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
-    return topLevelObjects(model).map((obj) => ({
+    return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index)).map((obj) => ({
       name: obj.name,
       ...toPlainMesh(worldManifold(wasm, obj, index, tol, scope, sketches)),
     }));

@@ -1,0 +1,1023 @@
+{
+  "shell-box-open-top": {
+    "volume": 7152,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 30,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box",
+          "shell": {
+            "thickness": 2,
+            "open": [
+              "top"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "shell-box-closed": {
+    "volume": 9024,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 30,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box",
+          "shell": {
+            "thickness": 2,
+            "open": []
+          }
+        }
+      ]
+    }
+  },
+  "shell-box-two-sides": {
+    "volume": 7360,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 30,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box",
+          "shell": {
+            "thickness": 2,
+            "open": [
+              "+X",
+              "-X"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "shell-cylinder-cup": {
+    "volume": 2664.0705702441446,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 10,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder",
+          "shell": {
+            "thickness": 2,
+            "open": [
+              "top"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "shell-extrude-l": {
+    "volume": 2792,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "p",
+              "type": "polygon",
+              "points": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  30,
+                  0
+                ],
+                [
+                  30,
+                  10
+                ],
+                [
+                  10,
+                  10
+                ],
+                [
+                  10,
+                  30
+                ],
+                [
+                  0,
+                  30
+                ]
+              ]
+            }
+          ],
+          "dimensions": [],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": 10
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "p"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "shell": {
+            "thickness": 2,
+            "open": [
+              "end"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "shell-extrude-negative": {
+    "volume": 2672,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "r",
+              "type": "rectangle",
+              "center": [
+                0,
+                0
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "r.width",
+              "entity": "r",
+              "kind": "width",
+              "value": 30
+            },
+            {
+              "id": "r.height",
+              "entity": "r",
+              "kind": "height",
+              "value": 20
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": -10
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "r"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "shell": {
+            "thickness": 2,
+            "open": [
+              "end"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "hole-simple-twice": {
+    "volume": 15434.513322353838,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 40,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "h1",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              -10,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "h1",
+              "h2"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "h2",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              10,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "hole-counterbore": {
+    "volume": 15450.221285621787,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 40,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "hole_1",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 11,
+            "cboreDepth": 4,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "hole_1"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "hole-countersink-side": {
+    "volume": 15604.159325647686,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 40,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "hole_1",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 12
+          },
+          "transform": {
+            "position": [
+              10,
+              0,
+              5
+            ],
+            "rotation": [
+              90,
+              90,
+              0
+            ]
+          }
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "hole_1"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "pattern-linear-2d": {
+    "volume": 6000,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "pattern_1",
+          "name": "선형 패턴 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "linear",
+            "source": "b",
+            "axis": "x",
+            "count": 3,
+            "spacing": 20,
+            "axis2": "y",
+            "count2": 2,
+            "spacing2": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "pattern-linear-overlap": {
+    "volume": 2000,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "pattern_1",
+          "name": "선형 패턴 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "linear",
+            "source": "b",
+            "axis": "x",
+            "count": 3,
+            "spacing": 5
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "pattern-circular": {
+    "volume": 3392.9200658769764,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 6,
+            "height": 5
+          },
+          "transform": {
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder"
+        },
+        {
+          "id": "pattern_1",
+          "name": "원형 패턴 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "circular",
+            "source": "c",
+            "axis": "z",
+            "count": 6,
+            "angle": 360
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "mirror-offset-touching": {
+    "volume": 2000,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              5,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "pattern_1",
+          "name": "대칭 복사 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "mirror",
+            "source": "b",
+            "plane": "YZ",
+            "offset": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "mirror-of-hole-plate": {
+    "volume": 31434.513322353836,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 40,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "hole_1",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              5,
+              5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "hole_1"
+            ]
+          },
+          "transform": {
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "pattern_1",
+          "name": "대칭 복사 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "mirror",
+            "source": "cut_1",
+            "plane": "YZ",
+            "offset": 0
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "suppressed-tool-and-root": {
+    "volume": 16000,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 6,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 40,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box",
+          "color": "#e5534b",
+          "hidden": true
+        },
+        {
+          "id": "h1",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 10,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "suppressed": true
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "h1"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "x",
+          "name": "박스 2",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              100,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box",
+          "suppressed": true
+        }
+      ]
+    }
+  }
+}

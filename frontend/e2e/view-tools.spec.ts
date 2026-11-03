@@ -1,0 +1,49 @@
+/** 보기·분석 도구: 표시 모드, 단면, 측정, 질량 특성, 이미지 저장 (설계 원본은 바뀌지 않는다) */
+import { expect, test, type Page } from '@playwright/test';
+
+const scene = (page: Page) => page.evaluate(() => window.__AI3D_DEV__!.scene());
+const at = (page: Page, x: number, y: number, z: number) => page.evaluate(([x, y, z]) => window.__AI3D_DEV__!.project(x!, y!, z!), [x, y, z]);
+
+test('표시 모드·단면·측정·질량 특성·이미지 저장', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await expect.poll(async () => (await page.evaluate(() => window.__AI3D_DEV__!.meshSources())).box_1?.source, { timeout: 20_000 }).toBe('server');
+  const before = await scene(page);
+  await page.getByRole('tab', { name: '보기' }).click();
+
+  for (const id of ['shaded', 'wireframe', 'xray', 'shadedEdges']) {
+    await page.getByTestId(`display-${id}`).click();
+    await expect(page.getByTestId(`display-${id}`)).toHaveAttribute('aria-pressed', 'true');
+  }
+
+  // 질량 특성: 기본 큐브 20×20×20 = 8000 mm³, PLA 1.24 → 9.92 g
+  await page.getByTestId('cmd-mass').click();
+  await expect(page.getByTestId('mass-volume')).toHaveText('8000 mm³');
+  await expect(page.getByTestId('mass-grams')).toHaveText('9.92 g');
+  await page.getByLabel('재료').selectOption('al');
+  await expect(page.getByTestId('mass-grams')).toHaveText('21.6 g');
+  await page.getByTestId('cmd-mass').click();
+
+  // 단면: 켜고 위치를 바꾸고 끈다
+  await page.getByTestId('cmd-section').click();
+  await expect(page.getByRole('group', { name: '단면 보기' })).toBeVisible();
+  await page.getByTestId('section-offset').fill('5');
+  await page.getByTestId('cmd-section').click();
+  await expect(page.getByRole('group', { name: '단면 보기' })).toBeHidden();
+
+  // 측정: 윗면 두 점 클릭 → 거리
+  await page.getByTestId('cmd-measure').click();
+  for (const [x, y] of [[-6, -6], [6, -6]] as const) {
+    const p = await at(page, x, y, 20);
+    await page.mouse.click(p.x, p.y);
+  }
+  await expect(page.getByTestId('measure-readout')).toContainText(/거리 1[12]\.\d* mm|거리 12 mm/);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('measure-readout')).toBeHidden();
+
+  // 이미지 저장 (PNG 다운로드)
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('cmd-screenshot').click()]);
+  expect(download.suggestedFilename()).toMatch(/\.png$/);
+
+  expect((await scene(page)).revision).toBe(before.revision);
+});

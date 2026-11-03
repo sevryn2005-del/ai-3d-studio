@@ -21,7 +21,7 @@ export function SketchOutlines() {
       {visible.map(({ sketch, frame, highlighted, dof }) => (
         <group key={sketch.id} matrixAutoUpdate={false} matrix={frame} userData={{ sketchId: sketch.id }}>
           {sketch.entities.map((e) => (
-            <EntityOutline key={e.id} sketch={sketch} entity={e} color={highlighted ? (dof > 0 ? '#1f5fd6' : '#141414') : '#7f8ea6'} />
+            <EntityOutline key={e.id} sketch={sketch} entity={e} color={highlighted ? (dof > 0 ? '#6fb0ff' : '#f2f4f7') : '#7f8ea6'} />
           ))}
         </group>
       ))}
@@ -38,7 +38,7 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
       if (sketch.id !== activeSketch && used) return null;
       // 스케치 좌표 → 월드: (돌출 객체의 월드 변환) ∘ (평면)
       const frame = sketchWorldMatrix(model, sketch, selectedObj?.id);
-      // 솔리드웍스 관례: 선택한 스케치는 덜 정의되면 파랑, 완전 정의(자유도 0)면 검정
+      // 솔리드웍스 관례: 선택한 스케치는 덜 정의되면 파랑, 완전 정의(자유도 0)면 흰색 (어두운 배경용, 솔리드웍스의 검정에 해당)
       const highlighted = sketch.id === activeSketch;
       return frame ? { sketch, frame, highlighted, dof: highlighted ? degreesOfFreedom(sketch) : 0 } : null;
     })

@@ -10,6 +10,8 @@ import { formatMm } from '../../cad/units';
 import { usePrintCheck } from '../../features/print/usePrintCheck';
 import { ExtrudeFields, FaceSketchAction, SketchProperties } from './SketchFields';
 import { PropertyManager } from './PropertyManager';
+import { AppearanceFields, HoleActions, PatternActions, PatternFields, ShellFields } from './FeatureFields';
+import { isSuppressed } from '../../cad/features';
 import { useEditorStore } from '../../features/selection/editorStore';
 
 /** 원점 기준 평면 (Z-up: 윗면 = XY, 정면 = XZ, 우측면 = YZ) */
@@ -107,9 +109,12 @@ function ObjectTreeItem({ object, index, depth }: { object: CadObject; index: Ma
           onClick={() => select(object.id)}
           data-object-id={object.id}
         >
-          <span>
+          <span className={isSuppressed(object, index) ? 'suppressed' : object.hidden ? 'hidden-obj' : ''}>
             {depth > 0 && <span className="muted">↳ </span>}
+            {object.color && <span className="color-dot" style={{ background: object.color }} aria-hidden="true" />}
             {object.name}
+            {object.suppressed && <span className="muted small"> (억제)</span>}
+            {object.hidden && <span className="muted small"> (숨김)</span>}
           </span>
           <span className="muted">{sizeSummary(object, model)}</span>
         </button>
@@ -160,6 +165,8 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
 
       {object.kind === 'boolean' ? (
         <BooleanInfo object={object} model={model} />
+      ) : object.kind === 'pattern' ? (
+        <PatternFields object={object} />
       ) : (
         <fieldset>
           <legend>치수</legend>
@@ -176,7 +183,10 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
         </fieldset>
       )}
 
-      {object.kind === 'box' && <EdgeFeatureFields object={object} />}
+      {object.kind === 'box' && !object.shell && <EdgeFeatureFields object={object} />}
+      {(object.kind === 'box' || object.kind === 'cylinder' || object.kind === 'extrude') && !(object.kind === 'box' && object.edgeFeature) && (
+        <ShellFields object={object} />
+      )}
       {(object.kind === 'extrude' || object.kind === 'revolve') && <ExtrudeFields object={object} model={model} />}
       <FaceSketchAction key={`face-${object.id}`} object={object} model={model} />
 
@@ -197,6 +207,9 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
       {!parent && <DropToBed object={object} />}
 
       {!parent && <BooleanActions object={object} model={model} />}
+      {!parent && <HoleActions key={`hole-${object.id}`} object={object} model={model} />}
+      {!parent && <PatternActions object={object} />}
+      <AppearanceFields object={object} />
 
       <div className="row">
         <button

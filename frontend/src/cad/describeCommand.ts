@@ -6,6 +6,7 @@ import { formatMm } from './units';
 
 const PARAM_LABEL: Record<string, string> = {
   width: '너비', depth: '깊이', height: '높이', radius: '반지름', radiusBottom: '아래 반지름', radiusTop: '위 반지름',
+  diameter: '지름', cboreDiameter: '카운터보어 지름', cboreDepth: '카운터보어 깊이', csinkDiameter: '카운터싱크 지름',
 };
 
 const vec = (v: readonly number[]) => `(${v.map(formatMm).join(', ')})`;
@@ -82,6 +83,30 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${name(cmd.target)} 복제`;
     case 'delete_object':
       return `${name(cmd.target)} 삭제`;
+    case 'set_suppressed':
+      return `${name(cmd.target)} ${cmd.suppressed ? '억제' : '억제 해제'}`;
+    case 'set_appearance':
+      return [
+        cmd.color && `${name(cmd.target)} 색 → ${cmd.color === 'default' ? '기본' : cmd.color}`,
+        cmd.hidden !== undefined && `${name(cmd.target)} ${cmd.hidden ? '숨기기' : '보이기'}`,
+      ].filter(Boolean).join(', ');
+    case 'shell':
+      return cmd.thickness === 0
+        ? `${name(cmd.target)} 쉘 제거`
+        : `${name(cmd.target)} 쉘 두께 ${formatMm(cmd.thickness)}mm${cmd.open?.length ? ` (열린 면 ${cmd.open.join(', ')})` : ''}`;
+    case 'pattern':
+    case 'set_pattern': {
+      const p = cmd.pattern;
+      const what =
+        p.type === 'mirror' ? `대칭 복사 (${p.plane} 평면${p.offset ? ` ${formatMm(p.offset)}mm` : ''})`
+        : p.type === 'circular' ? `원형 패턴 ${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`
+        : `선형 패턴 ${p.axis.toUpperCase()} ${p.count}개 × ${formatMm(p.spacing)}mm${p.axis2 ? `, ${p.axis2.toUpperCase()} ${p.count2}개 × ${formatMm(p.spacing2 ?? 0)}mm` : ''}`;
+      return `${name(p.source)} ${what}`;
+    }
+    case 'hole': {
+      const extra = cmd.cboreDiameter ? ` 카운터보어 Ø${formatMm(cmd.cboreDiameter)}` : cmd.csinkDiameter ? ` 카운터싱크 Ø${formatMm(cmd.csinkDiameter)}` : '';
+      return `${name(cmd.target)} ${cmd.face} 면에 구멍 Ø${formatMm(cmd.diameter)} × ${formatMm(cmd.depth)}mm${extra}`;
+    }
   }
 }
 

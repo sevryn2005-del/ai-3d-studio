@@ -66,6 +66,7 @@ export function useKeyboardShortcuts() {
         if (editor.pending) cancelPending();
         else if (editor.pickingPlane) editor.setPickingPlane(false);
         else if (editor.drawTool) editor.setDrawTool(null); // 먼저 그리기만 끝내고 선택은 유지
+        else if (editor.measuring) editor.toggleMeasure();
         else {
           editor.selectPlane(null);
           s.select(null);

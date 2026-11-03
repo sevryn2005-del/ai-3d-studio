@@ -7,6 +7,8 @@ import { nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { resolveProfile, revolveProfileError } from '../../cad/sketch';
 import { facesOf } from '../../cad/sketchPlane';
+import { childIds } from '../../cad/modelGraph';
+import { localSize } from '../../cad/objectKinds';
 import { useEditorStore, type PendingFeature } from './editorStore';
 
 export function pendingCommand(p: PendingFeature): CadCommand {
@@ -88,4 +90,64 @@ export function startFeature(kind: PendingFeature['kind']) {
   );
   // 스케치에 수직인 보기에서는 두께가 안 보인다 → 등각 보기로 미리보기 전체를 보여 준다 (솔리드웍스와 같은 동작)
   useEditorStore.getState().requestView('iso');
+}
+
+// ---- 피처 탭 빠른 명령 (선택한 최상위 객체에 기본값으로 적용 → 속성에서 값 조정) ----
+
+function selectedRoot(action: string) {
+  const scene = useSceneStore.getState();
+  const obj = selectSelectedObject(scene);
+  const model = selectModel(scene);
+  if (!obj) {
+    scene.reportError(`${action}: 먼저 객체를 선택하세요`);
+    return null;
+  }
+  if (model.objects.some((o) => childIds(o).includes(obj.id))) {
+    scene.reportError(`${action}: '${obj.name}'은(는) 다른 객체에 포함되어 있습니다. 상위 객체를 선택하세요`);
+    return null;
+  }
+  return { scene, obj, model };
+}
+
+/** 쉘: 가장 얇은 치수의 1/5 (최대 2mm), 윗면(돌출은 끝면) 열기 */
+export function quickShell() {
+  const s = selectedRoot('쉘');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  if (obj.kind !== 'box' && obj.kind !== 'cylinder' && obj.kind !== 'extrude') {
+    scene.reportError('쉘은 박스·원통·돌출에만 할 수 있습니다');
+    return;
+  }
+  const size = localSize(obj, model);
+  const t = Math.max(0.4, Math.min(2, Math.round((Math.min(...size.map(Math.abs).filter((v) => v > 0)) / 5) * 10) / 10));
+  scene.submitNow({ type: 'shell', target: obj.id, thickness: t, open: [obj.kind === 'extrude' ? 'end' : 'top'] });
+}
+
+/** 패턴·대칭: 선형 = X 방향 3개 (크기 + 5mm 간격), 원형 = Z축 6개, 대칭 = YZ 평면 */
+export function quickPattern(type: 'linear' | 'circular' | 'mirror') {
+  const s = selectedRoot(type === 'mirror' ? '대칭 복사' : '패턴');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const step = Math.round(Math.abs(localSize(obj, model)[0]) + 5);
+  const pattern =
+    type === 'linear'
+      ? ({ type, source: obj.id, axis: 'x', count: 3, spacing: step } as const)
+      : type === 'circular'
+        ? ({ type, source: obj.id, axis: 'z', count: 6, angle: 360 } as const)
+        : ({ type, source: obj.id, plane: 'YZ', offset: 0 } as const);
+  scene.submitNow({ type: 'pattern', pattern });
+}
+
+/** 구멍: 첫 면(윗면) 중심에 지름 5mm, 객체 높이만큼 (관통) */
+export function quickHole() {
+  const s = selectedRoot('구멍 가공');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const face = facesOf(model, obj)[0];
+  if (!face) {
+    scene.reportError(`구멍 가공: '${obj.name}'에는 구멍을 낼 수 있는 평평한 면이 없습니다`);
+    return;
+  }
+  const depth = Math.max(1, Math.round(Math.abs(localSize(obj, model)[2]) * 10) / 10);
+  scene.submitNow({ type: 'hole', target: obj.id, face, at: [0, 0], diameter: 5, depth });
 }

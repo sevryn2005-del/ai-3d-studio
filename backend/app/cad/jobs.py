@@ -12,7 +12,7 @@ from typing import Any, Callable
 from app.cad.commands import ModelDefinition
 from app.cad.exporter import FORMATS, NamedShape, export_shapes
 from app.cad.primitives import GeometryError, apply_transform, build_solid
-from app.cad.validation import top_level_ids
+from app.cad.validation import active_top_level_ids
 from app.cad.mesh import encode_mesh, tessellate
 
 USER_ERRORS = (GeometryError,)
@@ -32,7 +32,7 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
     model = ModelDefinition.model_validate(payload)
     index = {o.id: o for o in model.objects}
     meshes = []
-    for oid in top_level_ids(model):
+    for oid in active_top_level_ids(model):
         obj = index[oid]
         try:
             solid = build_solid(obj, index, {sk.id: sk for sk in model.sketches})
@@ -55,7 +55,7 @@ def export_file(payload: dict[str, Any]) -> bytes:
     model = ModelDefinition.model_validate(payload["model"])
     index = {o.id: o for o in model.objects}
     objects = []
-    for oid in top_level_ids(model):
+    for oid in active_top_level_ids(model):
         obj = index[oid]
         try:
             objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform)))

@@ -19,11 +19,13 @@ from app.cad.commands import (
     FacePlane,
     Limits,
     ModelDefinition,
+    PatternObject,
     Sketch,
     max_edge_size,
     resolve_profile,
 )
 from app.cad.constraints import constraint_errors
+from app.cad.features import is_suppressed, pattern_error, shell_error
 from app.cad.frames import dependency_cycle, faces_of
 
 
@@ -110,6 +112,10 @@ def check_model(model: ModelDefinition) -> list[Issue]:
             if obj.edgeFeature.size >= limit:
                 issues.append(Issue(path=f"objects.{i}.edgeFeature.size",
                                     message=f"{obj.id}: 모서리 크기 {obj.edgeFeature.size:g}mm 가 너무 큽니다 ({limit:g}mm 보다 작아야 합니다)"))
+        if getattr(obj, "shell", None) is not None and (err := shell_error(obj, obj.shell, model)):
+            issues.append(Issue(path=f"objects.{i}.shell", message=f"{obj.id}: {err}"))
+        if isinstance(obj, PatternObject) and (err := pattern_error(obj.pattern)):
+            issues.append(Issue(path=f"objects.{i}.pattern", message=f"{obj.id}: {err}"))
 
     object_ids = {o.id for o in model.objects}
     seen_sketches: set[str] = set()
@@ -149,10 +155,10 @@ def check_model(model: ModelDefinition) -> list[Issue]:
     index = {o.id: o for o in model.objects}
     parent_of: dict[str, str] = {}
     for i, obj in enumerate(model.objects):
-        if not isinstance(obj, BooleanObject):
-            continue
         ids = obj.child_ids
-        path = f"objects.{i}.boolean"
+        if not ids:
+            continue
+        path = f"objects.{i}.{obj.kind if obj.kind == 'pattern' else 'boolean'}"
         if len(set(ids)) != len(ids):
             issues.append(Issue(path=path, message=f"{obj.id}: 같은 객체가 두 번 이상 참조되었습니다"))
         for c in ids:
@@ -161,7 +167,7 @@ def check_model(model: ModelDefinition) -> list[Issue]:
             elif c not in index:
                 issues.append(Issue(path=path, message=f"{obj.id}: 존재하지 않는 객체를 참조합니다: {c}"))
             elif c in parent_of and parent_of[c] != obj.id:
-                issues.append(Issue(path=path, message=f"{c}: 두 개 이상의 불리언에서 사용되었습니다"))
+                issues.append(Issue(path=path, message=f"{c}: 두 개 이상의 불리언·패턴에서 사용되었습니다"))
             else:
                 parent_of[c] = obj.id
 
@@ -217,11 +223,17 @@ def sketch_errors(sk: Sketch) -> list[str]:
 
 def depth_of(oid: str, index: dict) -> int:
     obj = index.get(oid)
-    if not isinstance(obj, BooleanObject):
+    if obj is None or not obj.child_ids:
         return 0
     return 1 + max(depth_of(c, index) for c in obj.child_ids)
 
 
 def top_level_ids(model: ModelDefinition) -> list[str]:
-    children = {c for o in model.objects if isinstance(o, BooleanObject) for c in o.child_ids}
+    children = {c for o in model.objects for c in o.child_ids}
     return [o.id for o in model.objects if o.id not in children]
+
+
+def active_top_level_ids(model: ModelDefinition) -> list[str]:
+    """계산·내보내기 대상: 억제되지 않은 최상위 객체 (브라우저 엔진 evaluateMeshes 와 같은 규칙)"""
+    index = {o.id: o for o in model.objects}
+    return [oid for oid in top_level_ids(model) if not is_suppressed(index[oid], index)]

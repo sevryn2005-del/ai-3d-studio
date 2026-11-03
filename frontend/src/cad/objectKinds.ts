@@ -46,7 +46,20 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
   extrude: { label: '돌출', params: [{ key: 'distance', label: '돌출 거리' }] },
   revolve: { label: '회전', params: [{ key: 'angle', label: '회전 각도', unit: '°' }] },
   boolean: { label: '불리언', params: [] },
+  hole: {
+    label: '구멍',
+    params: [
+      { key: 'diameter', label: '지름' },
+      { key: 'depth', label: '깊이' },
+      { key: 'cboreDiameter', label: '카운터보어 지름 (0 = 없음)' },
+      { key: 'cboreDepth', label: '카운터보어 깊이' },
+      { key: 'csinkDiameter', label: '카운터싱크 지름 (0 = 없음)' },
+    ],
+  },
+  pattern: { label: '패턴', params: [] },
 };
+
+export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', mirror: '대칭 복사' } as const;
 
 export const OPERATION_INFO: Record<BooleanOperation, { label: string; symbol: string; verb: string }> = {
   union: { label: '합치기', symbol: '∪', verb: '합치기' },
@@ -55,7 +68,9 @@ export const OPERATION_INFO: Record<BooleanOperation, { label: string; symbol: s
 };
 
 export function kindLabel(obj: CadObject): string {
-  return obj.kind === 'boolean' ? OPERATION_INFO[obj.boolean.operation].label : KIND_INFO[obj.kind].label;
+  if (obj.kind === 'boolean') return OPERATION_INFO[obj.boolean.operation].label;
+  if (obj.kind === 'pattern') return PATTERN_LABEL[obj.pattern.type];
+  return KIND_INFO[obj.kind].label;
 }
 
 /** 회전 전 로컬 바운딩 박스 크기 [X, Y, Z] (mm). 불리언은 기준(base) 객체 크기로 근사한다. */
@@ -92,6 +107,14 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
     case 'boolean': {
       const base = model.objects.find((o) => o.id === obj.boolean.base);
       return base ? localSize(base, model) : [0, 0, 0];
+    }
+    case 'pattern': {
+      const src = model.objects.find((o) => o.id === obj.pattern.source);
+      return src ? localSize(src, model) : [0, 0, 0];
+    }
+    case 'hole': {
+      const d = Math.max(obj.params.diameter, obj.params.cboreDiameter, obj.params.csinkDiameter);
+      return [d, d, obj.params.depth];
     }
   }
 }
@@ -131,6 +154,17 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
     case 'boolean': {
       const n = obj.boolean.tools.length;
       return `${OPERATION_INFO[obj.boolean.operation].symbol} ${n}개`;
+    }
+    case 'hole': {
+      const p = obj.params;
+      const extra = p.cboreDiameter > 0 ? ` 카운터보어 Ø${formatMm(p.cboreDiameter)}` : p.csinkDiameter > 0 ? ` 카운터싱크 Ø${formatMm(p.csinkDiameter)}` : '';
+      return `Ø${formatMm(p.diameter)}×${formatMm(p.depth)}${extra}`;
+    }
+    case 'pattern': {
+      const p = obj.pattern;
+      if (p.type === 'mirror') return `${p.plane} 평면`;
+      if (p.type === 'circular') return `${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`;
+      return p.axis2 ? `${p.count}×${p.count2 ?? 1}개` : `${p.axis.toUpperCase()} ${p.count}개 간격 ${formatMm(p.spacing)}`;
     }
   }
 }

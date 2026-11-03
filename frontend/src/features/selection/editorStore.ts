@@ -18,6 +18,16 @@ export type MouseScheme = 'solidworks' | 'simple';
 /** 표준 보기 (솔리드웍스 단축키 Ctrl+1~7, Ctrl+8 = 선택한 스케치에 수직) */
 export type ViewName = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso' | 'normal';
 
+/** 표시 모드: 음영+모서리(기본) · 음영 · 와이어프레임 · 투명(X-ray) */
+export type DisplayMode = 'shadedEdges' | 'shaded' | 'wireframe' | 'xray';
+/** 단면 보기: axis 에 수직인 평면(위치 offset)으로 잘라 한쪽만 보여 준다 (flip = 반대쪽) */
+export interface SectionView {
+  axis: 'x' | 'y' | 'z';
+  offset: number;
+  flip: boolean;
+}
+export type Point3 = [number, number, number];
+
 /**
  * 속성 관리자에서 확인(✓)을 기다리는 피처. 확정 전에는 뷰포트에 미리보기만 (설계 원본 그대로).
  */
@@ -40,7 +50,20 @@ interface EditorState {
   /** "스케치" 를 눌렀는데 평면이 없을 때: 뷰포트에 기준 평면을 띄워 고르게 한다 */
   pickingPlane: boolean;
   pending: PendingFeature | null;
+  displayMode: DisplayMode;
+  section: SectionView | null;
+  /** 측정 도구: 켜져 있으면 모델 클릭 = 측정 점 (최근 2개) */
+  measuring: boolean;
+  measurePoints: Point3[];
+  massOpen: boolean;
+  screenshotRequest: number;
 
+  setDisplayMode: (m: DisplayMode) => void;
+  setSection: (s: SectionView | null) => void;
+  toggleMeasure: () => void;
+  addMeasurePoint: (p: Point3) => void;
+  toggleMass: () => void;
+  requestScreenshot: () => void;
   setDrawTool: (t: DrawTool) => void;
   setTransformMode: (m: TransformMode) => void;
   toggleSnap: () => void;
@@ -81,7 +104,22 @@ export const useEditorStore = create<EditorState>((set) => ({
   selectedPlane: null,
   pickingPlane: false,
   pending: null,
+  displayMode: loadPref('ai3d.displayMode', ['shadedEdges', 'shaded', 'wireframe', 'xray'] as const, 'shadedEdges'),
+  section: null,
+  measuring: false,
+  measurePoints: [],
+  massOpen: false,
+  screenshotRequest: 0,
 
+  setDisplayMode: (displayMode) => {
+    savePref('ai3d.displayMode', displayMode);
+    set({ displayMode });
+  },
+  setSection: (section) => set({ section }),
+  toggleMeasure: () => set((s) => ({ measuring: !s.measuring, measurePoints: [] })),
+  addMeasurePoint: (p) => set((s) => ({ measurePoints: [...s.measurePoints, p].slice(-2) })),
+  toggleMass: () => set((s) => ({ massOpen: !s.massOpen })),
+  requestScreenshot: () => set((s) => ({ screenshotRequest: s.screenshotRequest + 1 })),
   setDrawTool: (drawTool) => set({ drawTool }),
   setTransformMode: (transformMode) => set({ transformMode }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),

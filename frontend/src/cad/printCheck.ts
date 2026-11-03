@@ -97,14 +97,14 @@ export function checkPrintability(
 
     // 얇은 치수: 객체와 그 하위 도형 (빼기의 도구는 홈·구멍이므로 제외)
     const visit = (o: CadObject, isCutTool: boolean) => {
-      if (o.kind === 'boolean') {
+      if (o.kind === 'boolean' || o.kind === 'pattern') {
         childIds(o).forEach((id, i) => {
           const child = byId.get(id);
-          if (child) visit(child, o.boolean.operation === 'cut' && i > 0);
+          if (child) visit(child, o.kind === 'boolean' && o.boolean.operation === 'cut' && i > 0);
         });
         return;
       }
-      if (isCutTool) return;
+      if (isCutTool || o.kind === 'hole') return;
       for (const [k, v] of Object.entries(o.params as Record<string, number>)) {
         const dim = k.startsWith('radius') ? v * 2 : v;
         // 원뿔 꼭짓점(반지름 0)은 의도된 형상

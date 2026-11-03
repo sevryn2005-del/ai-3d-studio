@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from app.cad.commands import (
     BooleanObject,
+    PatternObject,
     CadCommandAdapter,
     ExtrudeObject,
     sketch_feature_ref,
@@ -92,6 +93,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     # 면 위 스케치: 스케치 → 붙은 객체, 불리언 → 기준 객체 (면 이름은 기준 객체 종류로 정한다)
     anchors: dict[str, str] = {sk.id: sk.plane.object for sk in model.sketches if isinstance(sk.plane, FacePlane)}
     bases: dict[str, str] = {o.id: o.boolean.base for o in model.objects if isinstance(o, BooleanObject)}
+    bases.update({o.id: o.pattern.source for o in model.objects if isinstance(o, PatternObject)})
 
     def allowed_faces(oid: str, depth: int = 0) -> list[str]:
         kind = kinds.get(oid)
@@ -103,7 +105,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             sid, eid = extrude_refs.get(oid, ("", ""))
             rect = sketches.get(sid, {}).get(eid) == "rectangle"
             return ["end", "start", "+u", "-u", "+v", "-v"] if rect else ["end", "start"]
-        if kind == "boolean" and oid in bases and depth < 16:
+        if kind in ("boolean", "pattern") and oid in bases and depth < 16:
             return allowed_faces(bases[oid], depth + 1)
         return []
 
@@ -142,9 +144,8 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         return f"{prefix}{n}"
     parent: dict[str, str] = {}
     for o in model.objects:
-        if isinstance(o, BooleanObject):
-            for c in o.child_ids:
-                parent[c] = o.id
+        for c in o.child_ids:
+            parent[c] = o.id
 
     def exists(i: int, oid: str, role: str) -> bool:
         if oid in kinds:
@@ -277,6 +278,35 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if bad:
                     hint = ", ".join(sorted(allowed)) or "none (edit its child objects instead)"
                     errors.append(f"commands[{i}].params: {kind} '{c['target']}' has no parameter {', '.join(bad)} (allowed: {hint})")
+        elif t in ("set_suppressed", "set_appearance"):
+            exists(i, c["target"], "target")
+        elif t == "shell":
+            if exists(i, c["target"], "target") and kinds[c["target"]] not in ("box", "cylinder", "extrude"):
+                errors.append(f"commands[{i}].target: shell only works on box, cylinder or extrude; '{c['target']}' is a {kinds[c['target']]}")
+        elif t in ("pattern", "set_pattern"):
+            src = c["pattern"]["source"]
+            if t == "set_pattern" and exists(i, c["target"], "target") and kinds[c["target"]] != "pattern":
+                errors.append(f"commands[{i}].target: '{c['target']}' is not a pattern")
+            if t == "pattern" and exists(i, src, "pattern.source"):
+                if src in parent:
+                    errors.append(f"commands[{i}].pattern.source: '{src}' is already inside '{parent[src]}'; use '{parent[src]}' instead")
+                new_id = c.get("id")
+                if new_id is not None:
+                    if id_used(new_id):
+                        errors.append(f"commands[{i}].id: id '{new_id}' is already used")
+                    kinds[new_id] = "pattern"
+                    bases[new_id] = src
+                    parent[src] = new_id
+        elif t == "hole":
+            if exists(i, c["target"], "target"):
+                if c["target"] in parent:
+                    errors.append(f"commands[{i}].target: '{c['target']}' is inside '{parent[c['target']]}'; drill the parent instead")
+                elif c["face"] not in (faces := allowed_faces(c["target"])):
+                    errors.append(f"commands[{i}].face: '{c['target']}' has no face '{c['face']}' (faces: {', '.join(faces) or 'none'})")
+            if c.get("id") is not None:
+                if id_used(c["id"]):
+                    errors.append(f"commands[{i}].id: id '{c['id']}' is already used")
+                kinds[c["id"]] = "hole"
         elif t in ("fillet", "chamfer"):
             if exists(i, c["target"], "target") and kinds[c["target"]] != "box":
                 errors.append(f"commands[{i}].target: fillet/chamfer only works on boxes; '{c['target']}' is a {kinds[c['target']]}")

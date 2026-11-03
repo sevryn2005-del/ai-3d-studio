@@ -171,7 +171,7 @@ function PolylinePreview({ points, count }: { points: Point2[]; count: number })
   const line = useMemo(() => {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0.03]), 3));
-    const l = new Line(g, new LineBasicMaterial({ color: '#1c232e', depthTest: false }));
+    const l = new Line(g, new LineBasicMaterial({ color: '#ffd166', depthTest: false }));
     l.raycast = () => {};
     return l;
   }, [points]);

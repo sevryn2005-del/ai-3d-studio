@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
-import { startFeature, startSketch } from '../../features/selection/featureFlow';
+import { quickHole, quickPattern, quickShell, startFeature, startSketch } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
 import { useIsDirty, useProjectStore } from '../../features/projects/projectStore';
@@ -42,6 +42,10 @@ export function Toolbar() {
     if (pending) setTab('feature');
   }, [pending]);
   const chatOpen = useEditorStore((s) => s.chatOpen);
+  const displayMode = useEditorStore((s) => s.displayMode);
+  const section = useEditorStore((s) => s.section);
+  const measuring = useEditorStore((s) => s.measuring);
+  const massOpen = useEditorStore((s) => s.massOpen);
   const editor = useEditorStore.getState();
   const draw = (t: 'rectangle' | 'circle' | 'polygon') => editor.setDrawTool(drawTool === t ? null : t);
 
@@ -91,6 +95,12 @@ export function Toolbar() {
             <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓)" onClick={() => startFeature('extrude')} />
             <Cmd icon="revolve" label="회전 보스/베이스" title="선택한 스케치를 v 축 둘레로 회전" onClick={() => startFeature('revolve')} />
             <span className="sep" />
+            <Cmd icon="hole" label="구멍 가공" title="선택한 객체의 윗면 중심에 구멍 (속성에서 위치·종류 조정)" onClick={quickHole} testId="cmd-hole" />
+            <Cmd icon="shell" label="쉘" title="선택한 박스·원통·돌출의 속을 비움 (윗면 열림)" onClick={quickShell} testId="cmd-shell" />
+            <Cmd icon="linear" label="선형 패턴" title="선택한 객체를 X 방향으로 반복" onClick={() => quickPattern('linear')} testId="cmd-linear" />
+            <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />
+            <Cmd icon="mirror" label="대칭 복사" title="선택한 객체를 YZ 평면에 대칭 복사" onClick={() => quickPattern('mirror')} testId="cmd-mirror" />
+            <span className="sep" />
             <span className="cmd-group-label">기본 도형</span>
             {PRIMITIVES.map((p) => (
               <button key={p.label} className="cmd small" onClick={() => add(p)}>
@@ -123,6 +133,16 @@ export function Toolbar() {
             {VIEWS.map((v) => (
               <Cmd key={v.name} icon={v.icon as IconName} label={v.label} title={`${v.label} (Ctrl+${v.key})`} onClick={() => editor.requestView(v.name)} />
             ))}
+            <span className="sep" />
+            {DISPLAY_MODES.map((d) => (
+              <Cmd key={d.id} icon={d.icon} label={d.label} title={d.title} pressed={displayMode === d.id} onClick={() => editor.setDisplayMode(d.id)} testId={`display-${d.id}`} />
+            ))}
+            <span className="sep" />
+            <Cmd icon="section" label="단면 보기" title="모델을 평면으로 잘라 안쪽을 봅니다" pressed={!!section} onClick={() => editor.setSection(section ? null : { axis: 'x', offset: 0, flip: false })} testId="cmd-section" />
+            <Cmd icon="measure" label="측정" title="모델 위 두 점 사이 거리" pressed={measuring} onClick={editor.toggleMeasure} testId="cmd-measure" />
+            <Cmd icon="mass" label="질량 특성" title="부피·겉넓이·무게 중심·질량(재료별)" pressed={massOpen} onClick={editor.toggleMass} testId="cmd-mass" />
+            <Cmd icon="camera" label="이미지 저장" title="현재 화면을 PNG 로 저장" onClick={editor.requestScreenshot} testId="cmd-screenshot" />
+            <span className="sep" />
             <Cmd icon="fit" label="화면 맞춤" shortcut="F" title="화면 맞춤 (F)" onClick={editor.requestFit} />
           </>
         )}
@@ -130,6 +150,13 @@ export function Toolbar() {
     </header>
   );
 }
+
+const DISPLAY_MODES = [
+  { id: 'shadedEdges', label: '음영+모서리', icon: 'shadedEdges', title: '음영과 모서리 선' },
+  { id: 'shaded', label: '음영', icon: 'shaded', title: '모서리 선 없이 음영만' },
+  { id: 'wireframe', label: '와이어프레임', icon: 'wireframe', title: '삼각형 선만' },
+  { id: 'xray', label: '투명', icon: 'xray', title: '반투명 (안쪽 구조 보기, 블렌더 X-ray)' },
+] as const;
 
 type Tab = 'feature' | 'sketch' | 'view';
 const TABS: { id: Tab; label: string }[] = [

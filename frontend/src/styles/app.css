@@ -1,21 +1,21 @@
-/* 밝은 작업 화면 (솔리드웍스류 CAD 의 관례: 밝은 패널 + 밝은 그라디언트 그래픽 영역) */
+/* 어두운 작업 화면 (눈부심 없이 오래 작업. 모델은 밝은 회색으로 대비) */
 :root {
-  --bg: #e6e9ee;
-  --panel: #f5f6f8;
-  --panel-2: #ffffff;
-  --border: #c7cdd6;
-  --text: #1c232e;
-  --muted: #5d6877;
-  --accent: #1f6fd1;
-  --accent-soft: rgba(31, 111, 209, 0.12);
-  --danger: #c4352b;
-  --ok: #2c8a3b;
+  --bg: #16191e;
+  --panel: #1f2329;
+  --panel-2: #2a2f37;
+  --border: #3a414c;
+  --text: #e3e7ed;
+  --muted: #98a2b0;
+  --accent: #4c9aff;
+  --accent-soft: rgba(76, 154, 255, 0.18);
+  --danger: #ef6b5f;
+  --ok: #5cc26e;
   --radius: 6px;
   font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -96,7 +96,7 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .composer button { align-self: flex-end; background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ---- 뷰포트 ---- */
-.viewport { position: relative; background: linear-gradient(180deg, #c9d4e2 0%, #eef2f7 70%, #f8fafc 100%); }
+.viewport { position: relative; background: linear-gradient(180deg, #2b313b 0%, #1d2127 60%, #15181c 100%); }
 .viewport-hint {
   position: absolute; left: 10px; bottom: 8px;
   color: var(--muted); font-size: 11px; pointer-events: none;
@@ -141,7 +141,7 @@ legend { color: var(--muted); padding: 0 4px; font-size: 11px; }
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 4px;
   padding: 4px; border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92); border: 1px solid var(--border);
+  background: rgba(31, 35, 41, 0.92); border: 1px solid var(--border);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   width: max-content; max-width: calc(100% - 20px); white-space: nowrap; flex-wrap: wrap; justify-content: center;
 }
@@ -326,9 +326,33 @@ label.check input { width: auto; }
 .confirm-corner button { font-size: 18px; width: 40px; height: 36px; background: var(--panel-2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
 .confirm-hint { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; }
 .sketch-full { color: var(--text); font-weight: 600; }
-.sketch-under { color: #1f5fd6; }
-.plane-label { display: inline-block; transform: translate(4px, 4px); background: rgba(255, 255, 255, 0.9); border: 1px solid var(--border);
+.sketch-under { color: #6fb0ff; }
+.plane-label { display: inline-block; transform: translate(4px, 4px); background: rgba(31, 35, 41, 0.9); border: 1px solid var(--border);
   border-radius: 4px; padding: 1px 6px; font-size: 12px; white-space: nowrap; color: var(--text); }
 .plane-label.hover { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .cmd-label kbd { margin-left: 4px; }
 .cmd-icon svg { display: block; }
+/* ---- 외관·억제 ---- */
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.swatch { width: 20px; height: 20px; padding: 0; border-radius: 4px; border: 1px solid var(--border); }
+.swatch.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.swatches input[type='color'] { width: 28px; height: 22px; padding: 0; border: 1px solid var(--border); background: none; }
+.color-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.suppressed { opacity: 0.45; text-decoration: line-through; }
+.hidden-obj { opacity: 0.6; font-style: italic; }
+.face-toggles { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+label.check.small { font-size: 12px; }
+/* ---- 보기·분석 패널 ---- */
+.view-panel { position: absolute; left: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: rgba(31, 35, 41, 0.94); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; z-index: 5; max-width: calc(100% - 20px); }
+.view-panel button { padding: 3px 8px; }
+.view-panel button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.section-panel { bottom: 40px; }
+.section-panel input[type='range'] { width: 160px; }
+.measure-panel { bottom: 84px; }
+.mass-panel { top: 54px; flex-direction: column; align-items: stretch; width: 270px; }
+.mass-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 4px 0 0; }
+.mass-panel dt { color: var(--muted); }
+.mass-panel dd { margin: 0; font-variant-numeric: tabular-nums; }
+.measure-label { background: rgba(20, 22, 26, 0.9); color: #ffd166; border: 1px solid #ffd166; border-radius: 4px; padding: 1px 6px; font-size: 12px; white-space: nowrap; }

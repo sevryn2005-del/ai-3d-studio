@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Euler, Matrix4, Quaternion, Shape, Vector2, Vector3, type BufferGeometry } from 'three';
+import { DoubleSide, Euler, FrontSide, Matrix4, Quaternion, Shape, Vector2, Vector3, type BufferGeometry } from 'three';
 import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
@@ -10,6 +10,8 @@ import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
 import { useBackendStore } from '../../features/backend/backendStore';
 import { geometryKey } from '../../features/backend/renderMesh';
+import { isSuppressed, patternMatrices } from '../../cad/features';
+import { toMatrix } from '../../cad/transformMath';
 
 type Index = Map<ObjectId, CadObject>;
 
@@ -25,7 +27,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 5, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 6, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -37,13 +39,18 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
   const { position, rotation } = object.transform;
 
   let body: ReactNode = null;
-  if (mode === 'solid') {
+  const off = isSuppressed(object, index) || object.hidden;
+  if (mode === 'solid' && off) {
+    // 억제·숨김: 그리지 않는다 (선택하면 위치만 유령으로)
+    body = selected ? <PreviewBody object={object} index={index} selectId={object.id} variant="ghost" /> : null;
+  } else if (mode === 'solid') {
     body = serverGeometry ? (
       <ObjectMesh
         key="engine"
         selectId={object.id}
         geometry={serverGeometry}
         variant="solid"
+        baseColor={object.color}
         source={serverGeometry.userData.engine === 'browser' ? 'browser' : 'server'}
       />
     ) : (
@@ -85,6 +92,27 @@ export function PreviewBody({
 }) {
   const sketches = useSketches();
   const model = useSceneStore(selectModel);
+  if (object.kind === 'pattern') {
+    // 패턴 미리보기: 원본을 사본 위치마다 (대칭은 음의 배율로 뒤집힘)
+    const src = index.get(object.pattern.source);
+    if (!src) return null;
+    return (
+      <>
+        {patternMatrices(object.pattern).map((m, k) => {
+          const full = m.clone().multiply(toMatrix(src.transform));
+          const pos = new Vector3();
+          const q = new Quaternion();
+          const scl = new Vector3();
+          full.decompose(pos, q, scl);
+          return (
+            <group key={k} position={pos} quaternion={q} scale={scl}>
+              <PreviewBody object={src} index={index} selectId={selectId} variant={variant === 'ghost' ? 'ghost' : 'translucent'} />
+            </group>
+          );
+        })}
+      </>
+    );
+  }
   if (object.kind !== 'boolean') {
     let profile: Profile | null = null;
     let local: Matrix4 | null = null;
@@ -96,7 +124,7 @@ export function PreviewBody({
       if (!profile || !local) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
     }
     return (
-      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} local={local} variant={variant} source={variant === 'ghost' ? 'ghost' : 'preview'} />
+      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} local={local} variant={variant} baseColor={object.color} source={variant === 'ghost' ? 'ghost' : 'preview'} />
     );
   }
   return (
@@ -123,7 +151,10 @@ function ObjectMesh({
   local,
   variant,
   source,
+  baseColor,
 }: {
+  /** 외관 색 (없으면 기본 회색) */
+  baseColor?: string;
   selectId: ObjectId;
   geometry?: BufferGeometry;
   primitive?: PrimitiveObject;
@@ -139,8 +170,11 @@ function ObjectMesh({
   const [hovered, setHovered] = useState(false);
 
   // 밝은 배경용: 기본 회청색, 선택은 옅은 파랑, 미리보기(유령)는 반투명 파랑
-  const color = variant === 'ghost' ? '#3f86e6' : selected ? '#8fbaf0' : hovered ? '#c3cbd6' : '#b4bcc8';
-  const transparent = variant !== 'solid';
+  const displayMode = useEditorStore((s) => s.displayMode);
+  const sectioned = useEditorStore((s) => !!s.section);
+  const color = variant === 'ghost' ? '#4c9aff' : selected ? '#7fb6ff' : hovered ? '#c9d0da' : (baseColor ?? '#aeb6c2');
+  const xray = displayMode === 'xray' && variant === 'solid';
+  const transparent = variant !== 'solid' || xray;
 
   return (
     <mesh
@@ -148,8 +182,13 @@ function ObjectMesh({
       geometry={geometry}
       userData={{ source }}
       onClick={(e) => {
-        if (useEditorStore.getState().drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
+        const ed = useEditorStore.getState();
+        if (ed.drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
         e.stopPropagation();
+        if (ed.measuring) {
+          ed.addMeasurePoint(e.point.toArray() as [number, number, number]);
+          return;
+        }
         select(selectId);
       }}
       onPointerOver={(e) => {
@@ -168,11 +207,15 @@ function ObjectMesh({
         roughness={0.55}
         metalness={0.05}
         transparent={transparent}
-        opacity={variant === 'ghost' ? 0.18 : variant === 'translucent' ? 0.4 : 1}
+        opacity={variant === 'ghost' ? 0.18 : variant === 'translucent' ? 0.4 : xray ? 0.3 : 1}
         depthWrite={!transparent}
+        wireframe={displayMode === 'wireframe' && variant === 'solid'}
+        side={sectioned ? DoubleSide : FrontSide}
       />
-      {/* 곡면의 분할선은 숨기고 실제 모서리(평면 경계)만 표시 */}
-      <Edges threshold={20} color={variant === 'ghost' ? '#1f5fd6' : selected ? '#1f5fd6' : '#2a2f36'} />
+      {/* 곡면의 분할선은 숨기고 실제 모서리(평면 경계)만 표시. 음영 모드·와이어프레임에서는 생략 */}
+      {(displayMode === 'shadedEdges' || displayMode === 'xray' || variant !== 'solid') && (
+        <Edges threshold={20} color={variant === 'ghost' ? '#8cc0ff' : selected ? '#cfe3ff' : xray ? '#9fb4cc' : '#1a1d22'} />
+      )}
     </mesh>
   );
 }
@@ -193,6 +236,8 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
     case 'cylinder':
     case 'cone':
       return { position: [0, 0, o.params.height / 2], rotation: [Math.PI / 2, 0, 0] };
+    case 'hole':
+      return { position: [0, 0, o.params.depth / 2], rotation: [Math.PI / 2, 0, 0] };
     case 'sphere':
       return { position: [0, 0, o.params.radius] };
     case 'extrude': {
@@ -261,5 +306,7 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
       return <boxGeometry args={[profile?.width ?? 1, profile?.height ?? 1, Math.abs(o.params.distance)]} />;
     case 'revolve':
       return profile ? <latheGeometry args={[profileOutline(profile), SEGMENTS, 0, (o.params.angle * Math.PI) / 180]} /> : null;
+    case 'hole':
+      return <cylinderGeometry args={[o.params.diameter / 2, o.params.diameter / 2, o.params.depth, SEGMENTS]} />;
   }
 }

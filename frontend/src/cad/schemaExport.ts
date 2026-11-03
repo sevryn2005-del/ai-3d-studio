@@ -227,6 +227,112 @@ export const SURVEY_CASES: Record<string, { volume: number; commands: unknown[] 
   },
 };
 
+const PI = Math.PI;
+const box = (id: string, w: number, d: number, h: number, position?: number[]) => ({ type: 'create_box', id, width: w, depth: d, height: h, ...(position ? { position } : {}) });
+/**
+ * 형식 v6 피처 (쉘·구멍·패턴·대칭·억제). 두 엔진 모두 닫힌 메시·같은 부피(해석값)여야 한다:
+ * 브라우저 features.test.ts, 서버 test_features.py. roots = 계산되는(억제 안 된) 최상위 객체 수
+ */
+export const FEATURE_CASES: Record<string, { volume: number; roots: number; commands: unknown[] }> = {
+  'shell-box-open-top': { volume: 24000 - 36 * 26 * 18, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['top'] }] },
+  'shell-box-closed': { volume: 24000 - 36 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2 }] },
+  'shell-box-two-sides': { volume: 24000 - 40 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['+X', '-X'] }] },
+  'shell-cylinder-cup': {
+    volume: PI * (100 * 20 - 64 * 18),
+    roots: 1,
+    commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 20 }, { type: 'shell', target: 'c', thickness: 2, open: ['top'] }],
+  },
+  'shell-extrude-l': {
+    volume: 500 * 10 - (26 * 6 + 6 * 20) * 8,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[0, 0], [30, 0], [30, 10], [10, 10], [10, 30], [0, 30]] },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 10 },
+      { type: 'shell', target: 'e', thickness: 2, open: ['end'] },
+    ],
+  },
+  'shell-extrude-negative': {
+    volume: 6000 - 26 * 16 * 8,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 30, height: 20 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: -10 },
+      { type: 'shell', target: 'e', thickness: 2, open: ['end'] },
+    ],
+  },
+  'hole-simple-twice': {
+    volume: 16000 - 2 * PI * 9 * 10,
+    roots: 1,
+    commands: [
+      box('b', 40, 40, 10),
+      { type: 'hole', id: 'h1', target: 'b', face: 'top', at: [-10, 0], diameter: 6, depth: 10 },
+      { type: 'hole', id: 'h2', target: 'cut_1', face: 'top', at: [10, 0], diameter: 6, depth: 10 },
+    ],
+  },
+  'hole-counterbore': {
+    volume: 16000 - (PI * 9 * 6 + PI * 30.25 * 4),
+    roots: 1,
+    commands: [box('b', 40, 40, 10), { type: 'hole', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 10, cboreDiameter: 11, cboreDepth: 4 }],
+  },
+  'hole-countersink-side': {
+    volume: 16000 - (PI * 9 * 7 + PI * 63),
+    roots: 1,
+    commands: [box('b', 40, 40, 10), { type: 'hole', target: 'b', face: '+X', at: [0, 0], diameter: 6, depth: 10, csinkDiameter: 12 }],
+  },
+  'pattern-linear-2d': {
+    volume: 6 * 1000,
+    roots: 1,
+    commands: [box('b', 10, 10, 10), { type: 'pattern', pattern: { type: 'linear', source: 'b', axis: 'x', count: 3, spacing: 20, axis2: 'y', count2: 2, spacing2: 20 } }],
+  },
+  'pattern-linear-overlap': {
+    volume: 10 * 10 * 20,
+    roots: 1,
+    commands: [box('b', 10, 10, 10), { type: 'pattern', pattern: { type: 'linear', source: 'b', axis: 'x', count: 3, spacing: 5 } }],
+  },
+  'pattern-circular': {
+    volume: 6 * PI * 36 * 5,
+    roots: 1,
+    commands: [
+      { type: 'create_cylinder', id: 'c', radius: 6, height: 5, position: [30, 0, 0] },
+      { type: 'pattern', pattern: { type: 'circular', source: 'c', axis: 'z', count: 6, angle: 360 } },
+    ],
+  },
+  'mirror-offset-touching': {
+    volume: 2000,
+    roots: 1,
+    commands: [box('b', 10, 10, 10, [5, 0, 0]), { type: 'pattern', pattern: { type: 'mirror', source: 'b', plane: 'YZ', offset: 10 } }],
+  },
+  'mirror-of-hole-plate': {
+    volume: 2 * (16000 - PI * 9 * 10),
+    roots: 1,
+    commands: [
+      box('b', 40, 40, 10, [30, 0, 0]),
+      { type: 'hole', target: 'b', face: 'top', at: [5, 5], diameter: 6, depth: 10 },
+      { type: 'pattern', pattern: { type: 'mirror', source: 'cut_1', plane: 'YZ', offset: 0 } },
+    ],
+  },
+  'suppressed-tool-and-root': {
+    volume: 16000,
+    roots: 1,
+    commands: [
+      box('b', 40, 40, 10),
+      { type: 'hole', id: 'h1', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 10 },
+      { type: 'set_suppressed', target: 'h1', suppressed: true },
+      box('x', 10, 10, 10, [100, 0, 0]),
+      { type: 'set_suppressed', target: 'x', suppressed: true },
+      { type: 'set_appearance', target: 'b', color: '#e5534b', hidden: true },
+    ],
+  },
+};
+
+export function buildFeatureFixture() {
+  return Object.fromEntries(
+    Object.entries(FEATURE_CASES).map(([name, c]) => [name, { volume: c.volume, roots: c.roots, model: buildSketchPlateFixture(c.commands) }]),
+  );
+}
+
 export function buildSurveyFixture() {
   return Object.fromEntries(
     Object.entries(SURVEY_CASES).map(([name, c]) => [name, { volume: c.volume, model: buildSketchPlateFixture(c.commands) }]),
@@ -243,6 +349,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
     'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
     'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
+    'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

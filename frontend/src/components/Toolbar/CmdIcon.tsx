@@ -15,6 +15,19 @@ const PATHS: Record<string, string> = {
   iso: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5',
   normal: 'M5 19h14M12 19V5m0 0l-3 3m3-3l3 3',
   fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5M9 9h6v6H9z',
+  hole: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M9 9a3 1.6 0 1 0 6 0a3 1.6 0 1 0-6 0M9 9v4M15 9v4',
+  shell: 'M3 8l9-5 9 5v8l-9 5-9-5zM6 9.5l6-3.3 6 3.3v5l-6 3.3-6-3.3z',
+  linear: 'M3 8h5v8H3zM10 8h5v8h-5zM17 8h4v8h-4',
+  circular: 'M12 3a2 2 0 1 0 0 .1M19.8 16.5a2 2 0 1 0 0 .1M4.2 16.5a2 2 0 1 0 0 .1M7 6.5a8 8 0 0 0-3 7M17 6.5a8 8 0 0 1 3 7M8 20a8 8 0 0 0 8 0',
+  mirror: 'M12 2v20M4 7h5v10H4zM15 7h5v10h-5z',
+  shadedEdges: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5',
+  shaded: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z',
+  wireframe: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5M4 7.5l16 9M20 7.5L4 16.5M12 3v18',
+  xray: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10',
+  section: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M2 13h20',
+  measure: 'M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
+  mass: 'M6 8h12l2 13H4zM9 8a3 3 0 0 1 6 0',
+  camera: 'M3 8h4l2-3h6l2 3h4v12H3zM12 10a4 4 0 1 0 0 8a4 4 0 1 0 0-8',
 };
 
 export type IconName = keyof typeof PATHS;

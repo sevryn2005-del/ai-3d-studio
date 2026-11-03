@@ -1156,6 +1156,26 @@
               "type": "number",
               "minimum": 0.1,
               "maximum": 360
+            },
+            "diameter": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "cboreDiameter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500
+            },
+            "cboreDepth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500
+            },
+            "csinkDiameter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500
             }
           },
           "additionalProperties": false,
@@ -1422,6 +1442,501 @@
       "required": [
         "type",
         "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_suppressed"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "suppressed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "suppressed"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_appearance"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^#[0-9a-f]{6}$"
+            },
+            {
+              "type": "string",
+              "const": "default"
+            }
+          ]
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "shell"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "open": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "+X",
+              "-X",
+              "+Y",
+              "-Y",
+              "start",
+              "end",
+              "+u",
+              "-u",
+              "+v",
+              "-v"
+            ]
+          }
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "thickness"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "pattern"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "pattern": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "linear"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "spacing": {
+                  "type": "number",
+                  "minimum": -1000,
+                  "maximum": 1000
+                },
+                "axis2": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count2": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "spacing2": {
+                  "type": "number",
+                  "minimum": -1000,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "axis",
+                "count",
+                "spacing"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "circular"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 360
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "axis",
+                "count",
+                "angle"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "mirror"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "plane": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "plane",
+                "offset"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "pattern"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_pattern"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "pattern": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "linear"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "spacing": {
+                  "type": "number",
+                  "minimum": -1000,
+                  "maximum": 1000
+                },
+                "axis2": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count2": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "spacing2": {
+                  "type": "number",
+                  "minimum": -1000,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "axis",
+                "count",
+                "spacing"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "circular"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y",
+                    "z"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 360
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "axis",
+                "count",
+                "angle"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "mirror"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "plane": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "plane",
+                "offset"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "pattern"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "hole"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "face": {
+          "type": "string",
+          "enum": [
+            "top",
+            "bottom",
+            "+X",
+            "-X",
+            "+Y",
+            "-Y",
+            "start",
+            "end",
+            "+u",
+            "-u",
+            "+v",
+            "-v"
+          ]
+        },
+        "at": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "diameter": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "cboreDiameter": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "cboreDepth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "csinkDiameter": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "face",
+        "at",
+        "diameter",
+        "depth"
       ],
       "additionalProperties": false
     }
