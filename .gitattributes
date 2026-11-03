@@ -1,0 +1,7 @@
+# 모든 운영체제에서 텍스트 파일은 LF 로 체크아웃한다.
+# (Windows 의 core.autocrlf 로 생성 파일 shared/schemas 가 CRLF 가 되면 스키마 동기화 검사가 실패한다)
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+*.icns binary
