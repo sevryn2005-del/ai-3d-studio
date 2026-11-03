@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 5,
+  "units": "mm",
+  "sketches": [
+    {
+      "id": "sk_cup",
+      "name": "컵 단면",
+      "plane": {
+        "type": "XZ",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "p1",
+          "type": "polygon",
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              40
+            ],
+            [
+              27,
+              40
+            ],
+            [
+              27,
+              3
+            ],
+            [
+              0,
+              3
+            ]
+          ]
+        }
+      ],
+      "dimensions": [],
+      "constraints": []
+    },
+    {
+      "id": "sk_ring",
+      "name": "고리 단면",
+      "plane": {
+        "type": "XZ",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "r1",
+          "type": "rectangle",
+          "center": [
+            15,
+            2.5
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "r1.width",
+          "entity": "r1",
+          "kind": "width",
+          "value": 10
+        },
+        {
+          "id": "r1.height",
+          "entity": "r1",
+          "kind": "height",
+          "value": 5
+        }
+      ],
+      "constraints": []
+    }
+  ],
+  "objects": [
+    {
+      "id": "cup",
+      "name": "컵",
+      "kind": "revolve",
+      "params": {
+        "angle": 360
+      },
+      "revolve": {
+        "sketch": "sk_cup",
+        "profile": "p1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "ring",
+      "name": "1/4 고리",
+      "kind": "revolve",
+      "params": {
+        "angle": 90
+      },
+      "revolve": {
+        "sketch": "sk_ring",
+        "profile": "r1"
+      },
+      "transform": {
+        "position": [
+          80,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

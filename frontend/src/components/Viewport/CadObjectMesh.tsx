@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Euler, Matrix4, Quaternion, Shape, Vector2, Vector3, type BufferGeometry } from 'three';
-import { extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
+import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
@@ -25,7 +25,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 4, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 5, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -88,9 +88,10 @@ function PreviewBody({
   if (object.kind !== 'boolean') {
     let profile: Profile | null = null;
     let local: Matrix4 | null = null;
-    if (object.kind === 'extrude') {
-      const sk = sketches.get(object.extrude.sketch);
-      profile = sk ? resolveProfile(sk, object.extrude.profile) : null;
+    if (object.kind === 'extrude' || object.kind === 'revolve') {
+      const ref = object.kind === 'extrude' ? object.extrude : object.revolve;
+      const sk = sketches.get(ref.sketch);
+      profile = sk ? resolveProfile(sk, ref.profile) : null;
       local = extrudeLocalMatrix(model, object);
       if (!profile || !local) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
     }
@@ -207,7 +208,33 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
       const e = new Euler().setFromQuaternion(q, 'XYZ');
       return { position: [pos.x, pos.y, pos.z], rotation: [e.x, e.y, e.z] };
     }
+    case 'revolve': {
+      // 회전: LatheGeometry(Y 축 둘레) → 스케치 평면 좌표(엔진과 같은 회전 방향) → 객체 로컬
+      if (!local) return { position: [0, 0, 0] };
+      const m = local.clone().multiply(LATHE_TO_PLANE);
+      const pos = new Vector3();
+      const q = new Quaternion();
+      m.decompose(pos, q, new Vector3());
+      const e = new Euler().setFromQuaternion(q, 'XYZ');
+      return { position: [pos.x, pos.y, pos.z], rotation: [e.x, e.y, e.z] };
+    }
   }
+}
+
+/** 회전 미리보기용 단면 윤곽 (스케치 평면 u·v, 닫힌 선) */
+function profileOutline(p: Profile): Vector2[] {
+  if (p.type === 'polygon') return [...p.points, p.points[0]!].map(([x, y]) => new Vector2(x, y));
+  if (p.type === 'rectangle') {
+    const [cx, cy] = p.center;
+    const [w, h] = [p.width / 2, p.height / 2];
+    return [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h], [cx - w, cy - h]].map(([x, y]) => new Vector2(x, y));
+  }
+  const pts: Vector2[] = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    pts.push(new Vector2(p.center[0] + (p.diameter / 2) * Math.cos(a), p.center[1] + (p.diameter / 2) * Math.sin(a)));
+  }
+  return pts;
 }
 
 function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; profile: Profile | null }) {
@@ -231,5 +258,7 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
         return <cylinderGeometry args={[r, r, Math.abs(o.params.distance), SEGMENTS]} />;
       }
       return <boxGeometry args={[profile?.width ?? 1, profile?.height ?? 1, Math.abs(o.params.distance)]} />;
+    case 'revolve':
+      return profile ? <latheGeometry args={[profileOutline(profile), SEGMENTS, 0, (o.params.angle * Math.PI) / 180]} /> : null;
   }
 }

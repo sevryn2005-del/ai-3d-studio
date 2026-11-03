@@ -11,8 +11,8 @@
  */
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
-import { resolveProfile } from '../../../cad/sketch';
-import { extrudeLocalMatrix } from '../../../cad/sketchPlane';
+import { resolveProfile, revolveProfileError } from '../../../cad/sketch';
+import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix } from '../../../cad/sketchPlane';
 import { toMatrix } from '../../../cad/transformMath';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
@@ -63,10 +63,12 @@ export function localManifold(
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
   switch (obj.kind) {
-    case 'extrude': {
-      // 서버 CadQuery: 평면 좌표에서 rect·circle·polyline 을 돌출한 뒤 같은 행렬로 옮긴 형상
-      const sk = sketches.get(obj.extrude.sketch);
-      const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+    case 'extrude':
+    case 'revolve': {
+      // 서버 CadQuery: 평면 좌표에서 rect·circle·polyline 단면을 만들어 돌출(또는 v 축 둘레 회전)한 뒤 같은 행렬로 옮긴 형상
+      const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
+      const sk = sketches.get(ref.sketch);
+      const p = sk ? resolveProfile(sk, ref.profile) : null;
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
       // 다각형은 꼭짓점 좌표 그대로 (구속 해석기가 푼 값). 감김 방향과 무관하게 채우도록 NonZero
       const placed =
@@ -81,15 +83,23 @@ export function localManifold(
                 )
                 .translate(p.center),
             );
-      // 평면 좌표(u, v, 법선) → 객체 로컬 (서버 cq.Plane.named 와 같은 기저). 열 우선 4×4.
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 4, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 5, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
-      const d = obj.params.distance;
-      const solid = scope.keep(placed.extrude(Math.abs(d)));
-      const signed = d < 0 ? scope.keep(solid.translate([0, 0, d])) : solid; // 음수 = 법선 반대쪽
-      const m = local.elements;
-      return scope.keep(signed.transform(m as unknown as Parameters<Manifold['transform']>[0]));
+      let inPlane: Manifold;
+      if (obj.kind === 'revolve') {
+        const err = revolveProfileError(p);
+        if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+        const rMax = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
+        const segs = Math.max(8, Math.ceil((circularSegments(rMax, tol) * obj.params.angle) / 360));
+        const turned = scope.keep(placed.revolve(segs, obj.params.angle));
+        inPlane = scope.keep(turned.transform(MANIFOLD_REVOLVE_TO_PLANE.elements as unknown as Parameters<Manifold['transform']>[0]));
+      } else {
+        const d = obj.params.distance;
+        const solid = scope.keep(placed.extrude(Math.abs(d)));
+        inPlane = d < 0 ? scope.keep(solid.translate([0, 0, d])) : solid; // 음수 = 법선 반대쪽
+      }
+      return scope.keep(inPlane.transform(local.elements as unknown as Parameters<Manifold['transform']>[0]));
     }
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;

@@ -3,6 +3,7 @@ import plateFixture from '../../../../../shared/schemas/examples/model-sketch-pl
 import planesFixture from '../../../../../shared/schemas/examples/model-sketch-planes.json';
 import faceFixture from '../../../../../shared/schemas/examples/model-face-sketch.json';
 import bracketFixture from '../../../../../shared/schemas/examples/model-constraint-bracket.json';
+import revolveFixture from '../../../../../shared/schemas/examples/model-revolve.json';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema, type ModelDefinition } from '../../../cad/commandTypes';
@@ -231,6 +232,26 @@ describe('스케치 돌출 (공유 픽스처: 서버 test_sketch_extrude.py 와 
     expect(p.inside([10, 30, 2.5])).toBe(true);
     expect(p.inside([55, 10, 2.5])).toBe(true);
     p.dispose();
+  });
+
+  it('회전: 컵(360°)·1/4 고리(90°, 방향) — 서버 test_revolve.py 와 같은 기대값', () => {
+    const model = ModelDefinitionSchema.parse(revolveFixture);
+    expect(validateGraph(model)).toEqual([]);
+    const [cup, ring] = worldMeshes(wasm, model).map((m) => bbox(m.positions));
+    cup!.min.forEach((v, k) => expect(v).toBeCloseTo([-30, -30, 0][k]!, 1));
+    cup!.max.forEach((v, k) => expect(v).toBeCloseTo([30, 30, 40][k]!, 1));
+    ring!.min.forEach((v, k) => expect(v).toBeCloseTo([80, 0, 0][k]!, 1)); // +Y 쪽으로 돌았다
+    ring!.max.forEach((v, k) => expect(v).toBeCloseTo([100, 20, 5][k]!, 1));
+    const c = probe(model, 'cup');
+    // 회전체 다각형 근사: 부피 상대 오차 ≤ 0.1%
+    expect(Math.abs(c.volume - Math.PI * 9027) / (Math.PI * 9027)).toBeLessThan(1e-3);
+    expect(c.inside([0, 0, 20])).toBe(false); // 컵 안쪽 빈 공간
+    expect(c.inside([28.5, 0, 20])).toBe(true); // 벽
+    expect(c.inside([0, 0, 1.5])).toBe(true); // 바닥
+    c.dispose();
+    const r = probe(model, 'ring');
+    expect(Math.abs(r.volume - 375 * Math.PI) / (375 * Math.PI)).toBeLessThan(1e-3);
+    r.dispose();
   });
 
   it('스케치가 없으면 형상 오류', () => {

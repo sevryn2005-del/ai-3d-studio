@@ -107,6 +107,11 @@ export const ExtrudeParamsSchema = z.strictObject({
   distance: extrudeDistance,
 });
 
+/** 회전 객체의 파라미터: 회전 각도(°). 360 = 한 바퀴 */
+export const RevolveParamsSchema = z.strictObject({
+  angle: z.number().min(0.1, '회전 각도는 0.1° 이상이어야 합니다').max(360, '회전 각도는 360° 이하여야 합니다'),
+});
+
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
 export const PARAMS_SCHEMAS = {
   box: BoxParamsSchema,
@@ -114,6 +119,7 @@ export const PARAMS_SCHEMAS = {
   sphere: SphereParamsSchema,
   cone: ConeParamsSchema,
   extrude: ExtrudeParamsSchema,
+  revolve: RevolveParamsSchema,
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
@@ -266,6 +272,17 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     params: ExtrudeParamsSchema,
     extrude: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
   }),
+  /**
+   * 회전 (형식 v5): 스케치 프로파일을 스케치의 v 축(u = 0 인 직선) 둘레로 angle 만큼 돌린다.
+   * 양의 각도는 +u 쪽 점이 −w(법선 반대) 쪽으로 돈다 (CadQuery revolve 와 같은 오른손 규칙).
+   * 프로파일은 축의 한쪽(u ≥ 0)에 있어야 한다.
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('revolve'),
+    params: RevolveParamsSchema,
+    revolve: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
+  }),
   z.strictObject({ ...objectBase, kind: z.literal('boolean'), boolean: BooleanDefSchema }),
 ]);
 export type CadObject = z.infer<typeof CadObjectSchema>;
@@ -274,7 +291,7 @@ export type PrimitiveObject = Extract<CadObject, { kind: PrimitiveKind }>;
 export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 
-export const MODEL_SCHEMA_VERSION = 4;
+export const MODEL_SCHEMA_VERSION = 5;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -349,6 +366,7 @@ export const SetParamsParamsSchema = z
     radiusBottom: radiusOrZero,
     radiusTop: radiusOrZero,
     distance: extrudeDistance,
+    angle: RevolveParamsSchema.shape.angle,
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -468,6 +486,17 @@ export const DeleteSketchCommandSchema = z.strictObject({
   sketch: ObjectIdSchema,
 });
 
+/** 스케치 프로파일을 스케치 v 축(u = 0) 둘레로 angle(기본 360°) 만큼 회전해 새 객체를 만든다 */
+export const RevolveCommandSchema = z.strictObject({
+  type: z.literal('revolve'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  sketch: ObjectIdSchema,
+  profile: ObjectIdSchema,
+  angle: RevolveParamsSchema.shape.angle.optional(),
+  position: Vec3Schema.optional(),
+});
+
 /** 스케치 프로파일(사각형·원)을 평면 법선 방향으로 distance 만큼 돌출해 새 객체를 만든다 */
 export const ExtrudeCommandSchema = z.strictObject({
   type: z.literal('extrude'),
@@ -546,6 +575,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   RenameSketchCommandSchema,
   DeleteSketchCommandSchema,
   ExtrudeCommandSchema,
+  RevolveCommandSchema,
   CutCommandSchema,
   UnionCommandSchema,
   IntersectCommandSchema,

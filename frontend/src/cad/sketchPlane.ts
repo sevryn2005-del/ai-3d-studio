@@ -13,7 +13,7 @@
 import { Matrix4, Vector3 } from 'three';
 import type { CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
 import type { Profile } from './sketch';
-import { findSketch, resolveProfile } from './sketch';
+import { findSketch, resolveProfile, sketchFeatureRef } from './sketch';
 import { toMatrix } from './transformMath';
 
 const BASES: Record<StandardPlane['type'], [Vector3, Vector3, Vector3]> = {
@@ -88,6 +88,7 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
     case 'cone':
       return ['top', 'bottom'];
     case 'sphere':
+    case 'revolve': // 회전 결과의 이름 있는 면은 아직 없음
       return [];
     case 'extrude': {
       const sk = findSketch(model, obj.extrude.sketch);
@@ -123,6 +124,7 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
       return face === 'top' ? frame([0, 0, h], [0, 0, 1], [1, 0, 0]) : frame([0, 0, 0], [0, 0, -1], [1, 0, 0]);
     }
     case 'sphere':
+    case 'revolve':
       return null;
     case 'extrude': {
       const sk = findSketch(model, obj.extrude.sketch);
@@ -163,9 +165,9 @@ function faceWorldMatrix(model: ModelDefinition, plane: Extract<SketchPlane, { t
 }
 
 /** 돌출 객체: 스케치 평면 좌표 → 돌출 객체 로컬. 참조가 깨졌거나 순환이면 null */
-export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObject, { kind: 'extrude' }>, depth = 0): Matrix4 | null {
+export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObject, { kind: 'extrude' | 'revolve' }>, depth = 0): Matrix4 | null {
   if (depth > MAX_DEPTH) return null;
-  const sk = findSketch(model, obj.extrude.sketch);
+  const sk = findSketch(model, (obj.kind === 'extrude' ? obj.extrude : obj.revolve).sketch);
   if (!sk) return null;
   if (sk.plane.type !== 'face') return planeMatrix(sk.plane);
   const world = faceWorldMatrix(model, sk.plane, depth);
@@ -178,7 +180,7 @@ export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObjec
  */
 export function sketchWorldMatrix(model: ModelDefinition, sketch: Sketch, preferred?: ObjectId): Matrix4 | null {
   if (sketch.plane.type === 'face') return faceWorldMatrix(model, sketch.plane, 0);
-  const users = model.objects.filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
+  const users = model.objects.filter((o) => sketchFeatureRef(o)?.sketch === sketch.id);
   const user = users.find((o) => o.id === preferred) ?? users[0];
   const base = user ? objectWorldMatrix(model, user.id) : new Matrix4();
   return base.multiply(planeMatrix(sketch.plane));
@@ -220,3 +222,15 @@ export function extrudeLocalSize(local: Matrix4, [su, sv, sn]: [number, number, 
 export function sketchAnchor(sketch: Sketch): ObjectId | null {
   return sketch.plane.type === 'face' ? sketch.plane.object : null;
 }
+
+/**
+ * 회전 결과 좌표 → 스케치 평면 좌표. manifold 의 revolve 는 2D 단면을 Y 축 둘레로 돌리고 Y 를 Z 로 놓는다:
+ * (x, y) → (x·cosθ, x·sinθ, y). 이를 u = X, v = Z, w = −Y 로 옮기면 +u 점이 −w 쪽으로 돈다 (CadQuery revolve 와 같음).
+ */
+export const MANIFOLD_REVOLVE_TO_PLANE = new Matrix4().makeBasis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+
+/**
+ * Three.js LatheGeometry 좌표 → 스케치 평면 좌표 (미리보기). Lathe 는 (x, y) 를 Y 축 둘레로 돌려 (x·sinφ, y, x·cosφ) 를 만든다
+ * → u = Z, v = Y, w = −X 로 옮기면 φ 가 커질 때 −w 쪽으로 돈다 (엔진과 같은 방향).
+ */
+export const LATHE_TO_PLANE = new Matrix4().makeBasis(new Vector3(0, 0, -1), new Vector3(0, 1, 0), new Vector3(1, 0, 0));

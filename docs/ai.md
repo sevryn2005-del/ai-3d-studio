@@ -16,7 +16,7 @@
 - 명령 스키마는 `shared/schemas/cad-command.schema.json` 을 그대로 도구 입력 스키마로 사용 (단일 출처).
 - AI 는 명령만 "제안"하고, 실제 적용은 직접 편집과 같은 실행기가 한다. 임의 코드 실행 경로 없음.
 - 스케치·돌출: 평판처럼 원본 치수를 나중에 고칠 물체는 `create_sketch` → `add_rectangle`/`add_circle` → `extrude`,
-  윤곽 치수 변경은 `set_dimension`, 위치는 `set_entity_center`, 평면은 XY·XZ·YZ 또는 기존 객체의 이름 있는 면(`face`), 음수 거리 = 안쪽으로. 사각형이 아닌 판은 `add_polygon` + `add_constraint`(앱이 풀어 좌표를 저장). 서버 검증기가 스케치·요소·치수 참조를 따라가며 확인한다 (`app/ai/validator.py`).
+  윤곽 치수 변경은 `set_dimension`, 위치는 `set_entity_center`, 평면은 XY·XZ·YZ 또는 기존 객체의 이름 있는 면(`face`), 음수 거리 = 안쪽으로. 사각형이 아닌 판은 `add_polygon` + `add_constraint`(앱이 풀어 좌표를 저장). 컵·노브 같은 축대칭 물체는 XZ 평면 반단면 + `revolve`. 서버 검증기가 스케치·요소·치수 참조를 따라가며 확인한다 (`app/ai/validator.py`).
 - 정보가 부족하면 `ask_user` 로 질문하고 선택지를 버튼으로 보여준다. 선택지를 누르면 그 문장이 답변으로 전송된다.
 - 모델: 기본 Claude Opus 5.5 (설정에서 Sonnet 5.5 / Haiku 5.5 선택 가능), effort `medium`.
   안전 분류기가 거절하면 서버 측 대체(`fallbacks: "default"`)가 권장 모델로 다시 시도한다 (Opus·Sonnet).

@@ -924,6 +924,67 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "revolve"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "profile": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "angle": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 360
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "cut"
         },
         "id": {
@@ -1090,6 +1151,11 @@
                   "maximum": -0.1
                 }
               ]
+            },
+            "angle": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 360
             }
           },
           "additionalProperties": false,

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { dimensionValue } from '../../cad/sketch';
+import { dimensionValue, sketchFeatureRef } from '../../cad/sketch';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 
 /**
@@ -30,10 +30,10 @@ export function SketchOutlines() {
 
 function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
   const selectedObj = model.objects.find((o) => o.id === selectedId);
-  const activeSketch = selectedObj?.kind === 'extrude' ? selectedObj.extrude.sketch : selectedId;
+  const activeSketch = (selectedObj && sketchFeatureRef(selectedObj)?.sketch) || selectedId;
   return model.sketches
     .map((sketch) => {
-      const used = model.objects.some((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
+      const used = model.objects.some((o) => sketchFeatureRef(o)?.sketch === sketch.id);
       if (sketch.id !== activeSketch && used) return null;
       // 스케치 좌표 → 월드: (돌출 객체의 월드 변환) ∘ (평면)
       const frame = sketchWorldMatrix(model, sketch, selectedObj?.id);

@@ -145,6 +145,20 @@ export const CONSTRAINT_BRACKET_COMMANDS: unknown[] = [
   { type: 'cut', id: 'bracket_holed', name: '구멍 뚫린 브래킷', base: 'bracket', tools: ['hole'] },
 ];
 
+/**
+ * 회전 (언어 간 계약 픽스처). XZ 평면(u = X, v = Z, 법선 −Y) 스케치를 v 축(= 월드 Z) 둘레로 돌린다.
+ * - cup: 다각형 단면 (0,0)(30,0)(30,40)(27,40)(27,3)(0,3) 360° → 바깥 Ø60×40, 벽·바닥 3mm. 부피 π·(30²·3 + (30²−27²)·37)
+ * - ring: 사각형 u 10..20, v 0..5 를 90° → +u 가 −w(= 월드 +Y) 쪽으로 → 위치 (80,0,0) 에서 월드 X 80..100, Y 0..20, Z 0..5. 부피 π·(20²−10²)·5/4
+ */
+export const REVOLVE_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 'sk_cup', name: '컵 단면', plane: { type: 'XZ', offset: 0 } },
+  { type: 'add_polygon', sketch: 'sk_cup', id: 'p1', points: [[0, 0], [30, 0], [30, 40], [27, 40], [27, 3], [0, 3]] },
+  { type: 'revolve', id: 'cup', name: '컵', sketch: 'sk_cup', profile: 'p1' },
+  { type: 'create_sketch', id: 'sk_ring', name: '고리 단면', plane: { type: 'XZ', offset: 0 } },
+  { type: 'add_rectangle', sketch: 'sk_ring', id: 'r1', center: [15, 2.5], width: 10, height: 5 },
+  { type: 'revolve', id: 'ring', name: '1/4 고리', sketch: 'sk_ring', profile: 'r1', angle: 90, position: [80, 0, 0] },
+];
+
 export function buildSketchPlateFixture(commands: unknown[] = SKETCH_PLATE_COMMANDS) {
   let model = emptyModel();
   for (const cmd of commands) {
@@ -163,6 +177,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-sketch-planes.json': JSON.stringify(buildSketchPlateFixture(SKETCH_PLANES_COMMANDS), null, 2) + '\n',
     'examples/model-face-sketch.json': JSON.stringify(buildSketchPlateFixture(FACE_SKETCH_COMMANDS), null, 2) + '\n',
     'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
+    'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

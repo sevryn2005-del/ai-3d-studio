@@ -111,12 +111,20 @@ class ExtrudeParams(Strict):
     distance: ExtrudeDistance
 
 
+RevolveAngle = Annotated[float, _num(0.1, 360)]
+
+
+class RevolveParams(Strict):
+    angle: RevolveAngle
+
+
 PARAMS_MODELS: dict[str, type[Strict]] = {
     "box": BoxParams,
     "cylinder": CylinderParams,
     "sphere": SphereParams,
     "cone": ConeParams,
     "extrude": ExtrudeParams,
+    "revolve": RevolveParams,
 }
 
 
@@ -206,6 +214,19 @@ class Sketch(Strict):
 REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": ()}
 
 
+def revolve_profile_error(p: dict) -> str | None:
+    """회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지 (frontend sketch.ts revolveProfileError 와 같음)."""
+    if p["type"] == "polygon":
+        min_u = min(q[0] for q in p["points"])
+    elif p["type"] == "circle":
+        min_u = p["center"][0] - p["diameter"] / 2
+    else:
+        min_u = p["center"][0] - p["width"] / 2
+    if min_u < -1e-9:
+        return f"회전 프로파일은 회전축(스케치 v 축, u = 0)의 한쪽(u ≥ 0)에 있어야 합니다 (지금 u 최소 {round(min_u, 3)})"
+    return None
+
+
 def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     """돌출 단면 (프론트엔드 cad/sketch.ts 의 resolveProfile 과 같은 규칙)."""
     e = next((x for x in sketch.entities if x.id == entity_id), None)
@@ -292,6 +313,23 @@ class ExtrudeObject(_ObjectBase):
     extrude: ExtrudeRef
 
 
+class RevolveObject(_ObjectBase):
+    """회전 (형식 v5): 스케치 프로파일을 스케치 v 축(u = 0) 둘레로 angle 만큼. +u 점이 −w 쪽으로 (CadQuery revolve 와 같음)."""
+
+    kind: Literal["revolve"]
+    params: RevolveParams
+    revolve: ExtrudeRef
+
+
+def sketch_feature_ref(obj) -> ExtrudeRef | None:
+    """스케치를 참조하는 피처(돌출·회전)의 참조."""
+    if isinstance(obj, ExtrudeObject):
+        return obj.extrude
+    if isinstance(obj, RevolveObject):
+        return obj.revolve
+    return None
+
+
 class BooleanDef(Strict):
     operation: BooleanOperation
     base: ObjectId
@@ -307,16 +345,19 @@ class BooleanObject(_ObjectBase):
         return [self.boolean.base, *self.boolean.tools]
 
 
-PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject]
-OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, BooleanObject)
+PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject]
+OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
+    BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject,
+)
 
 CadObject = Annotated[
-    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, BooleanObject], Field(discriminator="kind")
+    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject],
+    Field(discriminator="kind"),
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[4]
+    schemaVersion: Literal[5]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -453,6 +494,16 @@ class DeleteSketch(Strict):
     sketch: ObjectId
 
 
+class Revolve(Strict):
+    type: Literal["revolve"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    sketch: ObjectId
+    profile: ObjectId
+    angle: RevolveAngle | None = None
+    position: Vec3 | None = None
+
+
 class Extrude(Strict):
     type: Literal["extrude"]
     id: ObjectId | None = None
@@ -490,6 +541,7 @@ class SetParamsParams(Strict):
     radiusBottom: RadiusOrZero | None = None
     radiusTop: RadiusOrZero | None = None
     distance: ExtrudeDistance | None = None
+    angle: RevolveAngle | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:
@@ -570,6 +622,7 @@ CadCommand = Annotated[
         RenameSketch,
         DeleteSketch,
         Extrude,
+        Revolve,
         Cut,
         Union_,
         Intersect,
@@ -607,6 +660,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     RenameSketch,
     DeleteSketch,
     Extrude,
+    Revolve,
     Cut,
     Union_,
     Intersect,

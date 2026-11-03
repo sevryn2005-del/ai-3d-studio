@@ -65,7 +65,7 @@ describe('geometryKey', () => {
 
 describe('geometryKey: 스케치 돌출', () => {
   const build = (...cmds: unknown[]) => {
-    let m: ModelDefinition = { schemaVersion: 4, units: 'mm', sketches: [], objects: [] };
+    let m: ModelDefinition = { schemaVersion: 5, units: 'mm', sketches: [], objects: [] };
     for (const c of cmds) {
       const r = executeCommand(m, c);
       if (!r.ok) throw new Error(r.error);

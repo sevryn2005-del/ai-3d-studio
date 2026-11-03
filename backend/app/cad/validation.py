@@ -13,6 +13,9 @@ from app.cad.commands import (
     BooleanObject,
     BoxObject,
     ExtrudeObject,
+    RevolveObject,
+    revolve_profile_error,
+    sketch_feature_ref,
     FacePlane,
     Limits,
     ModelDefinition,
@@ -117,13 +120,17 @@ def check_model(model: ModelDefinition) -> list[Issue]:
         issues.extend(Issue(path=f"sketches.{i}", message=m) for m in sketch_errors(sk))
     sketches = {sk.id: sk for sk in model.sketches}
     for i, obj in enumerate(model.objects):
-        if isinstance(obj, ExtrudeObject):
-            sk = sketches.get(obj.extrude.sketch)
+        if ref := sketch_feature_ref(obj):
+            field = obj.kind  # "extrude" | "revolve"
+            sk = sketches.get(ref.sketch)
+            prof = resolve_profile(sk, ref.profile) if sk else None
             if sk is None:
-                issues.append(Issue(path=f"objects.{i}.extrude.sketch", message=f"{obj.id}: 존재하지 않는 스케치를 참조합니다: {obj.extrude.sketch}"))
-            elif resolve_profile(sk, obj.extrude.profile) is None:
-                issues.append(Issue(path=f"objects.{i}.extrude.profile",
-                                    message=f"{obj.id}: 스케치 {sk.id} 에 사용할 수 있는 프로파일 {obj.extrude.profile} 이(가) 없습니다"))
+                issues.append(Issue(path=f"objects.{i}.{field}.sketch", message=f"{obj.id}: 존재하지 않는 스케치를 참조합니다: {ref.sketch}"))
+            elif prof is None:
+                issues.append(Issue(path=f"objects.{i}.{field}.profile",
+                                    message=f"{obj.id}: 스케치 {sk.id} 에 사용할 수 있는 프로파일 {ref.profile} 이(가) 없습니다"))
+            elif isinstance(obj, RevolveObject) and (err := revolve_profile_error(prof)):
+                issues.append(Issue(path=f"objects.{i}.revolve.profile", message=f"{obj.id}: {err}"))
 
     # 면 평면: 붙은 객체·면 이름·순환 (프론트엔드 modelGraph.validateGraph 와 같은 규칙)
     by_id = {o.id: o for o in model.objects}

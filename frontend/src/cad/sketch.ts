@@ -2,7 +2,7 @@
  * 스케치 조회·검증 헬퍼 (실행기·그래프 검증·CAD 엔진·UI 공용).
  * 치수는 이름 붙은 파라미터: 사각형 → `ID.width`, `ID.height`, 원 → `ID.diameter`.
  */
-import type { DimensionKind, ModelDefinition, ObjectId, Point2, Sketch, SketchEntity, SketchPlane } from './commandTypes';
+import type { CadObject, DimensionKind, ModelDefinition, ObjectId, Point2, Sketch, SketchEntity, SketchPlane } from './commandTypes';
 import { CHECK_TOLERANCE, constraintError, constraintResiduals, polygonError } from './solver';
 
 export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> = {
@@ -86,4 +86,22 @@ export function sketchErrors(sketch: Sketch): string[] {
     }
   }
   return errors;
+}
+
+/** 스케치를 참조하는 피처(돌출·회전)의 참조. 다른 종류면 null */
+export function sketchFeatureRef(obj: CadObject): { sketch: ObjectId; profile: ObjectId } | null {
+  if (obj.kind === 'extrude') return obj.extrude;
+  if (obj.kind === 'revolve') return obj.revolve;
+  return null;
+}
+
+/** 회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지. 문제가 없으면 null */
+export function revolveProfileError(p: Profile): string | null {
+  const minU =
+    p.type === 'polygon'
+      ? Math.min(...p.points.map((q) => q[0]))
+      : p.type === 'circle'
+        ? p.center[0] - p.diameter / 2
+        : p.center[0] - p.width / 2;
+  return minU < -1e-9 ? `회전 프로파일은 회전축(스케치 v 축, u = 0)의 한쪽(u ≥ 0)에 있어야 합니다 (지금 u 최소 ${Math.round(minU * 1000) / 1000})` : null;
 }

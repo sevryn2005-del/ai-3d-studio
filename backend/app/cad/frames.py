@@ -21,6 +21,8 @@ from app.cad.commands import (
     ConeObject,
     CylinderObject,
     ExtrudeObject,
+    RevolveObject,
+    sketch_feature_ref,
     FacePlane,
     ModelDefinition,
     Sketch,
@@ -85,8 +87,9 @@ def object_world_matrix(model: ModelDefinition, oid: str) -> np.ndarray:
 
 
 def _profile(model: ModelDefinition, obj: ExtrudeObject) -> dict | None:
-    sk = next((s for s in model.sketches if s.id == obj.extrude.sketch), None)
-    return resolve_profile(sk, obj.extrude.profile) if sk else None
+    ref = sketch_feature_ref(obj)
+    sk = next((s for s in model.sketches if s.id == ref.sketch), None)
+    return resolve_profile(sk, ref.profile) if sk else None
 
 
 def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str]:
@@ -159,11 +162,11 @@ def _face_world_matrix(model: ModelDefinition, plane: FacePlane, depth: int) -> 
     return object_world_matrix(model, anchor.id) @ f @ translation(0, 0, plane.offset)
 
 
-def extrude_local_matrix(model: ModelDefinition, obj: ExtrudeObject, depth: int = 0) -> np.ndarray | None:
+def extrude_local_matrix(model: ModelDefinition, obj: ExtrudeObject | RevolveObject, depth: int = 0) -> np.ndarray | None:
     """스케치 평면 좌표 → 돌출 객체 로컬. 참조가 깨졌거나 순환이면 None."""
     if depth > MAX_DEPTH:
         return None
-    sk: Sketch | None = next((s for s in model.sketches if s.id == obj.extrude.sketch), None)
+    sk: Sketch | None = next((s for s in model.sketches if s.id == sketch_feature_ref(obj).sketch), None)
     if sk is None:
         return None
     if isinstance(sk.plane, StandardPlane):
@@ -176,8 +179,8 @@ def dependency_cycle(model: ModelDefinition) -> str | None:
     """돌출 → 스케치, 스케치(면 평면) → 붙은 객체, 불리언 → 자식 의존에 순환이 있으면 사용자 메시지."""
     edges: dict[str, list[str]] = {}
     for o in model.objects:
-        if isinstance(o, ExtrudeObject):
-            edges.setdefault(f"o:{o.id}", []).append(f"s:{o.extrude.sketch}")
+        if ref := sketch_feature_ref(o):
+            edges.setdefault(f"o:{o.id}", []).append(f"s:{ref.sketch}")
         if isinstance(o, BooleanObject):
             edges.setdefault(f"o:{o.id}", []).extend(f"o:{c}" for c in o.child_ids)
     for sk in model.sketches:

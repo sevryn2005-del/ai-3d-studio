@@ -6,7 +6,7 @@ import { facesOf } from './sketchPlane';
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
-import { resolveProfile, sketchErrors } from './sketch';
+import { resolveProfile, sketchErrors, sketchFeatureRef, revolveProfileError } from './sketch';
 
 export function childIds(obj: CadObject): ObjectId[] {
   return obj.kind === 'boolean' ? [obj.boolean.base, ...obj.boolean.tools] : [];
@@ -72,10 +72,16 @@ export function validateGraph(model: ModelDefinition): string[] {
     errors.push(...sketchErrors(sk));
   }
   for (const o of model.objects) {
-    if (o.kind !== 'extrude') continue;
-    const sk = model.sketches.find((x) => x.id === o.extrude.sketch);
-    if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${o.extrude.sketch}`);
-    else if (!resolveProfile(sk, o.extrude.profile)) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${o.extrude.profile} 이(가) 없습니다`);
+    const ref = sketchFeatureRef(o);
+    if (!ref) continue;
+    const sk = model.sketches.find((x) => x.id === ref.sketch);
+    const prof = sk ? resolveProfile(sk, ref.profile) : null;
+    if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${ref.sketch}`);
+    else if (!prof) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${ref.profile} 이(가) 없습니다`);
+    else if (o.kind === 'revolve') {
+      const err = revolveProfileError(prof);
+      if (err) errors.push(`${o.id}: ${err}`);
+    }
   }
   // 면 평면: 붙은 객체와 면 이름 (docs/design-face-sketch.md)
   for (const sk of model.sketches) {
@@ -135,7 +141,8 @@ export function dependencyCycle(model: ModelDefinition): string | null {
   const edges = new Map<string, string[]>();
   const add = (from: string, to: string) => edges.set(from, [...(edges.get(from) ?? []), to]);
   for (const o of model.objects) {
-    if (o.kind === 'extrude') add(`o:${o.id}`, `s:${o.extrude.sketch}`);
+    const ref = sketchFeatureRef(o);
+    if (ref) add(`o:${o.id}`, `s:${ref.sketch}`);
     if (o.kind === 'boolean') for (const c of childIds(o)) add(`o:${o.id}`, `o:${c}`);
   }
   for (const sk of model.sketches) if (sk.plane.type === 'face') add(`s:${sk.id}`, `o:${sk.plane.object}`);

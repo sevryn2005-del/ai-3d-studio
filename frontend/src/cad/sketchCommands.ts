@@ -4,7 +4,7 @@
 import type { CadCommand, CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
-import { findSketch, resolveProfile } from './sketch';
+import { findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from './sketch';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
 import { CONSTRAINT_LABEL, constraintError, polygonError, refKind, solveSketch } from './solver';
@@ -12,7 +12,7 @@ import { CONSTRAINT_LABEL, constraintError, polygonError, refKind, solveSketch }
 const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
-  'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint',
+  'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -57,6 +57,13 @@ function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, aff
     const err = polygonError(e.points);
     if (err) return fail(`${e.id}: ${err}`);
   }
+  // 회전 피처가 쓰는 프로파일은 회전축(u = 0)을 넘으면 안 된다
+  for (const o of model.objects) {
+    if (o.kind !== 'revolve' || o.revolve.sketch !== next.id) continue;
+    const prof = resolveProfile(solved.sketch, o.revolve.profile);
+    const err = prof ? revolveProfileError(prof) : null;
+    if (err) return fail(`${o.name}: ${err}`);
+  }
   return ok(replaceSketch(model, solved.sketch), cmd, affectedId);
 }
 
@@ -79,7 +86,10 @@ function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
 /** 스케치(또는 그 요소)를 참조하는 돌출 객체 이름 */
 function extrudeUsers(model: ModelDefinition, sketchId: ObjectId, entityId?: ObjectId): string[] {
   return model.objects
-    .filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketchId && (entityId === undefined || o.extrude.profile === entityId))
+    .filter((o) => {
+      const ref = sketchFeatureRef(o);
+      return ref !== null && ref.sketch === sketchId && (entityId === undefined || ref.profile === entityId);
+    })
     .map((o) => o.name);
 }
 
@@ -279,6 +289,31 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         kind: 'extrude',
         params: { distance: cmd.distance },
         extrude: { sketch: sketch.id, profile: cmd.profile },
+        transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return ok({ ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+
+    case 'revolve': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (!sketch.entities.some((e) => e.id === cmd.profile)) {
+        const names = sketch.entities.map((e) => e.id).join(', ') || '없음';
+        return fail(`'${sketch.name}'에 프로파일 ${cmd.profile} 이(가) 없습니다 (있는 요소: ${names})`);
+      }
+      const prof = resolveProfile(sketch, cmd.profile);
+      if (!prof) return fail(`프로파일 ${cmd.profile} 의 치수가 완전하지 않습니다`);
+      const axisErr = revolveProfileError(prof);
+      if (axisErr) return fail(axisErr);
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'revolve');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `회전 ${model.objects.filter((o) => o.kind === 'revolve').length + 1}`,
+        kind: 'revolve',
+        params: { angle: cmd.angle ?? 360 },
+        revolve: { sketch: sketch.id, profile: cmd.profile },
         transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
       };
       return ok({ ...model, objects: [...model.objects, obj] }, cmd, id);

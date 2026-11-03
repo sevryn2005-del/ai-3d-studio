@@ -41,6 +41,7 @@ describe('shared/schemas 동기화', () => {
       'rename_sketch',
       'delete_sketch',
       'extrude',
+      'revolve',
       'cut',
       'union',
       'intersect',

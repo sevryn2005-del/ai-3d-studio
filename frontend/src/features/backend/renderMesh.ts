@@ -29,16 +29,17 @@ export function geometryKey(
     });
     return `${obj.boolean.operation}(${parts.join(';')})`;
   }
-  if (obj.kind === 'extrude') {
-    const sk = sketches.get(obj.extrude.sketch);
-    const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+  if (obj.kind === 'extrude' || obj.kind === 'revolve') {
+    const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
+    const sk = sketches.get(ref.sketch);
+    const p = sk ? resolveProfile(sk, ref.profile) : null;
     const prof = !p ? 'missing'
       : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`
       : p.type === 'polygon' ? `poly:${p.points.map((q) => q.join(',')).join(';')}@${p.z}${planeTag(p.plane)}`
       : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`;
     // 면 위 스케치: 붙은 면의 좌표계(돌출 객체 로컬 기준)를 키에 넣는다 → 붙은 객체가 바뀌거나 움직이면 다시 계산
     const frame = sk?.plane.type === 'face' ? `|frame:${faceFrameKey(obj, index, sketches)}` : '';
-    return `extrude:${prof}|d=${obj.params.distance}${frame}`;
+    return obj.kind === 'revolve' ? `revolve:${prof}|a=${obj.params.angle}${frame}` : `extrude:${prof}|d=${obj.params.distance}${frame}`;
   }
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)
@@ -112,8 +113,8 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 }
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
-function faceFrameKey(obj: Extract<CadObject, { kind: 'extrude' }>, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = extrudeLocalMatrix({ schemaVersion: 4, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+function faceFrameKey(obj: Extract<CadObject, { kind: 'extrude' | 'revolve' }>, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
+  const m = extrudeLocalMatrix({ schemaVersion: 5, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

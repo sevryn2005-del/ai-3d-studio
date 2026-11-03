@@ -39,7 +39,7 @@ Three.js 뷰포트 ◀───────────────────�
 - 범위: 치수 0.1–1000mm, 반지름 0.05–500mm(원뿔은 0 허용), 좌표 ±10000mm, 회전 ±360°.
 - 명령 객체는 strict: 정의되지 않은 필드가 있으면 거부.
 
-## 스케치와 돌출 (형식 v2~v4, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
+## 스케치와 돌출·회전 (형식 v2~v5, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
 
 - `model.sketches[]`: 평면 위 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).
 - 평면 `plane: {type, offset}` — CadQuery 이름 평면과 같은 규약 (원점 = 법선 × offset, 돌출 방향 = 법선):
@@ -68,7 +68,10 @@ Three.js 뷰포트 ◀───────────────────�
 - 돌출 거리는 음수 가능 (= 법선 반대쪽, 면 안쪽으로 홈·구멍). 의존 순환(돌출 → 스케치 → 붙은 객체 → …)과 스케치가 붙은 객체의 삭제는 거부.
 - **구속 (형식 v4)**: 다각형(`polygon`) + `sketch.constraints`. 해석기(`cad/solver.ts`)는 편집 명령을 실행할 때만 돌고 **풀린 좌표를 저장**한다
   → CAD 엔진은 좌표만 읽고, 백엔드는 같은 잔차 식(`app/cad/constraints.py`)으로 만족 여부만 검사. 상세: `docs/review-constraint-solver.md` 7장.
-- 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1~v3 파일은 열 때 v4 로 마이그레이션 (v1 은 `sketches: []`, v3 이하 스케치는 `constraints: []` 추가), 저장은 항상 v4.
+- **회전 (형식 v5)**: `kind: "revolve"` — 스케치 프로파일을 스케치 v 축(u = 0) 둘레로 `params.angle`° (+u 점이 −w 쪽, CadQuery 오른손 규칙).
+  프로파일은 u ≥ 0 쪽만 (`revolveProfileError`). 브라우저 manifold `CrossSection.revolve` 결과를 `MANIFOLD_REVOLVE_TO_PLANE` 로, 서버는 CadQuery
+  `revolve(angle, (0,0,0), (0,1,0))` — 공유 픽스처 `model-revolve.json`(컵 360°, 1/4 고리 90° 방향)으로 교차 검증. 회전 결과의 이름 있는 면은 아직 없다.
+- 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1~v4 파일은 열 때 v5 로 마이그레이션 (v1 은 `sketches: []`, v3 이하 스케치는 `constraints: []` 추가), 저장은 항상 v5.
 
 ## 불리언 트리
 

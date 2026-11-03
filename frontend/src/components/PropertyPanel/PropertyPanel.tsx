@@ -131,7 +131,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
             <NumberField
               key={f.key}
               label={f.label}
-              unit="mm"
+              unit={f.unit ?? 'mm'}
               value={(object.params as Record<string, number>)[f.key]!}
               onCommit={(v) => submit({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
               testId={`param-${f.key}`}
@@ -141,7 +141,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
       )}
 
       {object.kind === 'box' && <EdgeFeatureFields object={object} />}
-      {object.kind === 'extrude' && <ExtrudeFields object={object} model={model} />}
+      {(object.kind === 'extrude' || object.kind === 'revolve') && <ExtrudeFields object={object} model={model} />}
       <FaceSketchAction key={`face-${object.id}`} object={object} model={model} />
 
       <fieldset>

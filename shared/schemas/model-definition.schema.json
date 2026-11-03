@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 4
+      "const": 5
     },
     "units": {
       "type": "string",
@@ -891,6 +891,122 @@
               "kind",
               "params",
               "extrude"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "\\S"
+              },
+              "transform": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "rotation": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "position",
+                  "rotation"
+                ],
+                "additionalProperties": false
+              },
+              "kind": {
+                "type": "string",
+                "const": "revolve"
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "angle": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 360
+                  }
+                },
+                "required": [
+                  "angle"
+                ],
+                "additionalProperties": false
+              },
+              "revolve": {
+                "type": "object",
+                "properties": {
+                  "sketch": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  }
+                },
+                "required": [
+                  "sketch",
+                  "profile"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "transform",
+              "kind",
+              "params",
+              "revolve"
             ],
             "additionalProperties": false
           },

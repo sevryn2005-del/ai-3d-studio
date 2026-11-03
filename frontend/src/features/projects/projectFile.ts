@@ -15,9 +15,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 2: + 스케치(model.sketches)와 돌출 객체. model.schemaVersion 2
  * - 3: + 면 위 스케치(plane.type 'face'), 반대 방향 돌출(음수 거리). model.schemaVersion 3. v2 내용은 그대로 유효
  * - 4: + 스케치 다각형(polygon)과 기하 구속(sketch.constraints). model.schemaVersion 4
- * 읽기는 1~4 모두, 쓰기는 항상 최신(4). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 5: + 회전 객체(kind 'revolve'). model.schemaVersion 5. v4 내용은 그대로 유효
+ * 읽기는 1~5 모두, 쓰기는 항상 최신(5). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 4;
+export const PROJECT_FORMAT_VERSION = 5;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -96,13 +97,19 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
       model && typeof model === 'object' && model.schemaVersion === 3
         ? {
             ...model,
-            schemaVersion: MODEL_SCHEMA_VERSION,
+            schemaVersion: 4,
             sketches: Array.isArray(model.sketches)
               ? model.sketches.map((sk: unknown) => (sk && typeof sk === 'object' ? { ...sk, constraints: (sk as { constraints?: unknown }).constraints ?? [] } : sk))
               : model.sketches,
           }
         : model;
     file = { ...file, formatVersion: 4, model: migrated };
+  }
+  if ((file.formatVersion as number) < 5) {
+    // v4 → v5: 새 객체 종류(회전)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 4 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 5, model: migrated };
   }
   return file;
 }

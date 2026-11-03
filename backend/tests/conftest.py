@@ -28,7 +28,7 @@ def client():
 @pytest.fixture
 def default_model() -> dict:
     return {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "units": "mm",
         "sketches": [],
         "objects": [

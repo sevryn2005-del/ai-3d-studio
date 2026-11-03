@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultModel } from '../../cad/defaultModel';
 import { executeCommand } from '../../cad/commandExecutor';
-import { nameFromFileName, parseProject, serializeProject } from './projectFile';
+import { PROJECT_FORMAT_VERSION, nameFromFileName, parseProject, serializeProject } from './projectFile';
+import { MODEL_SCHEMA_VERSION } from '../../cad/commandTypes';
 
 describe('프로젝트 파일', () => {
   it('저장 → 불러오기 왕복 (불리언 트리 포함)', () => {
@@ -73,8 +74,8 @@ describe('구버전 프로젝트 샘플 (e0ac5e7)', () => {
     // v1 → v2 마이그레이션: 객체는 그대로, 형식만 v2 (스케치 없음)
     const v1 = JSON.parse(legacyV1).model;
     expect(v1.schemaVersion).toBe(1);
-    expect(first.project.model).toEqual({ ...v1, schemaVersion: 4, sketches: [] });
-    expect(JSON.parse(serializeProject('x', first.project.model)).formatVersion).toBe(4);
+    expect(first.project.model).toEqual({ ...v1, schemaVersion: MODEL_SCHEMA_VERSION, sketches: [] });
+    expect(JSON.parse(serializeProject('x', first.project.model)).formatVersion).toBe(PROJECT_FORMAT_VERSION);
     expect(legacyV1).toBe(legacyV1Copy); // 열기는 원본 문자열을 바꾸지 않는다
   });
 });
@@ -85,7 +86,7 @@ describe('형식 v1 → v2 마이그레이션 경계', () => {
     expect(parseProject(bad).ok).toBe(false);
   });
   it('v2 파일인데 스케치 참조가 깨졌으면 거부 (현재 작업 유지)', () => {
-    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 4, units: 'mm', sketches: [], objects: [] }));
+    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 5, units: 'mm', sketches: [], objects: [] }));
     v2.model.objects.push({
       id: 'plate', name: '판', kind: 'extrude', params: { distance: 4 }, extrude: { sketch: 'sk1', profile: 'r1' },
       transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
@@ -94,8 +95,8 @@ describe('형식 v1 → v2 마이그레이션 경계', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('존재하지 않는 스케치');
   });
-  it('형식 5 는 새 버전으로 안내', () => {
-    const r = parseProject('{"format":"ai3d-project","formatVersion":5}');
+  it('현재보다 새 형식은 새 버전으로 안내', () => {
+    const r = parseProject(`{"format":"ai3d-project","formatVersion":${PROJECT_FORMAT_VERSION + 1}}`);
     expect(!r.ok && r.error).toContain('더 새로운 버전');
   });
 });
@@ -112,7 +113,7 @@ describe('v2 기준 판 샘플 (v2 → v3 마이그레이션)', () => {
     expect(r.project.model.objects.map((o) => [o.id, o.kind])).toEqual([['plate', 'extrude'], ['hole', 'extrude'], ['plate_holed', 'boolean']]);
     const v2 = JSON.parse(plateV2).model;
     // v2 → v3 → v4: 내용 그대로, 스케치마다 빈 구속 목록
-    expect(r.project.model).toEqual({ ...v2, schemaVersion: 4, sketches: v2.sketches.map((s: object) => ({ ...s, constraints: [] })) });
+    expect(r.project.model).toEqual({ ...v2, schemaVersion: MODEL_SCHEMA_VERSION, sketches: v2.sketches.map((s: object) => ({ ...s, constraints: [] })) });
     const again = parseProject(serializeProject(r.project.name, r.project.model));
     expect(again.ok && again.project.model).toEqual(r.project.model);
   });

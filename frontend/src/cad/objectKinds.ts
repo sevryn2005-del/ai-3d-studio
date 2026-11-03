@@ -11,6 +11,8 @@ import { extrudeLocalMatrix, extrudeLocalSize } from './sketchPlane';
 export interface ParamField {
   key: string;
   label: string;
+  /** 기본 mm */
+  unit?: 'mm' | '°';
 }
 
 export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[] }> = {
@@ -42,6 +44,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
     ],
   },
   extrude: { label: '돌출', params: [{ key: 'distance', label: '돌출 거리' }] },
+  revolve: { label: '회전', params: [{ key: 'angle', label: '회전 각도', unit: '°' }] },
   boolean: { label: '불리언', params: [] },
 };
 
@@ -76,6 +79,16 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const size: [number, number, number] = p.type === 'circle' ? [p.diameter, p.diameter, Math.abs(d)] : [p.width, p.height, Math.abs(d)];
       return local ? extrudeLocalSize(local, size) : size;
     }
+    case 'revolve': {
+      // 프로파일을 v 축 둘레로 돌린 바운딩 크기 (각도와 무관하게 한 바퀴 기준 근사): 평면 (2R, v 폭, 2R)
+      const sk = findSketch(model, obj.revolve.sketch);
+      const p = sk ? resolveProfile(sk, obj.revolve.profile) : null;
+      if (!p) return [0, 0, 0];
+      const r = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
+      const h = p.type === 'circle' ? p.diameter : p.height;
+      const local = extrudeLocalMatrix(model, obj);
+      return local ? extrudeLocalSize(local, [2 * r, h, 2 * r]) : [2 * r, h, 2 * r];
+    }
     case 'boolean': {
       const base = model.objects.find((o) => o.id === obj.boolean.base);
       return base ? localSize(base, model) : [0, 0, 0];
@@ -106,6 +119,14 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       const d = formatMm(obj.params.distance);
       if (!p) return `돌출 ${d}`;
       return p.type === 'circle' ? `Ø${formatMm(p.diameter)}×${d}` : `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
+    }
+    case 'revolve': {
+      const sk = model ? findSketch(model, obj.revolve.sketch) : undefined;
+      const p = sk ? resolveProfile(sk, obj.revolve.profile) : null;
+      const a = `${formatMm(obj.params.angle)}°`;
+      if (!p) return `회전 ${a}`;
+      const r = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
+      return `Ø${formatMm(2 * r)}×${formatMm(p.type === 'circle' ? p.diameter : p.height)} ${a}`;
     }
     case 'boolean': {
       const n = obj.boolean.tools.length;

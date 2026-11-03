@@ -15,6 +15,7 @@ from app.cad.commands import (
     BooleanObject,
     CadCommandAdapter,
     ExtrudeObject,
+    sketch_feature_ref,
     FacePlane,
     ModelDefinition,
     PARAMS_MODELS,
@@ -85,7 +86,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             errors.append(f"commands[{i}].value: {ctype} takes no value")
     # 돌출 객체 id → (스케치, 프로파일): 참조 중인 스케치·요소 삭제를 막기 위해
     extrude_refs: dict[str, tuple[str, str]] = {
-        o.id: (o.extrude.sketch, o.extrude.profile) for o in model.objects if isinstance(o, ExtrudeObject)
+        o.id: (ref.sketch, ref.profile) for o in model.objects if (ref := sketch_feature_ref(o))
     }
 
     # 면 위 스케치: 스케치 → 붙은 객체, 불리언 → 기준 객체 (면 이름은 기준 객체 종류로 정한다)
@@ -243,7 +244,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(f"commands[{i}].sketch: sketch '{c['sketch']}' is used by extrude {', '.join(users)}; delete those objects first")
                 else:
                     sketches.pop(c["sketch"])
-        elif t == "extrude":
+        elif t in ("extrude", "revolve"):
             if sketch_exists(i, c["sketch"]) and c["profile"] not in sketches[c["sketch"]]:
                 existing = ", ".join(sorted(sketches[c["sketch"]])) or "none"
                 errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no element '{c['profile']}' (existing: {existing})")
@@ -251,7 +252,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             if new_id is not None:
                 if id_used(new_id):
                     errors.append(f"commands[{i}].id: id '{new_id}' is already used")
-                kinds[new_id] = "extrude"
+                kinds[new_id] = t
                 extrude_refs[new_id] = (c["sketch"], c["profile"])
         elif t in ("cut", "union", "intersect"):
             ids = [c["base"], *c["tools"]]

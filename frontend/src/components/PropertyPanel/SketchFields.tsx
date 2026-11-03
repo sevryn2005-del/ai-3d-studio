@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
-import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile } from '../../cad/sketch';
+import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
 import { ConstraintPanel, PolygonFields } from './ConstraintFields';
@@ -46,10 +46,10 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
 export function SketchProperties({ sketch, model }: { sketch: Sketch; model: ModelDefinition }) {
   const select = useSceneStore((s) => s.select);
   const submitNow = useSceneStore((s) => s.submitNow);
-  const users = model.objects.filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
+  const users = model.objects.filter((o) => sketchFeatureRef(o)?.sketch === sketch.id);
   const [name, setName] = useState(sketch.name);
   useEffect(() => setName(sketch.name), [sketch.name]);
-  const usersOf = (entityId: string) => users.filter((o) => o.kind === 'extrude' && o.extrude.profile === entityId);
+  const usersOf = (entityId: string) => users.filter((o) => sketchFeatureRef(o)?.profile === entityId);
   const nextEntity = (prefix: string) => {
     let n = 1;
     while (sketch.entities.some((e) => e.id === `${prefix}${n}`)) n++;
@@ -121,7 +121,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
             className="danger"
             data-testid={`delete-entity-${e.id}`}
             disabled={usersOf(e.id).length > 0}
-            title={usersOf(e.id).length ? `돌출(${usersOf(e.id).map((o) => o.name).join(', ')})이 쓰고 있어 지울 수 없습니다` : undefined}
+            title={usersOf(e.id).length ? `${usersOf(e.id).map((o) => o.name).join(', ')}이(가) 쓰고 있어 지울 수 없습니다` : undefined}
             onClick={() => submitNow({ type: 'delete_sketch_entity', sketch: sketch.id, entity: e.id })}
           >
             {ENTITY_LABEL[e.type]} 삭제
@@ -159,7 +159,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
         className="danger"
         data-testid="delete-sketch"
         disabled={users.length > 0}
-        title={users.length ? '이 스케치를 쓰는 돌출 객체를 먼저 삭제하세요' : undefined}
+        title={users.length ? '이 스케치를 쓰는 돌출·회전 객체를 먼저 삭제하세요' : undefined}
         onClick={() => submitNow({ type: 'delete_sketch', sketch: sketch.id })}
       >
         스케치 삭제
@@ -181,16 +181,39 @@ function ExtrudeAction({ sketch, entityId }: { sketch: Sketch; entityId: string 
       >
         돌출
       </button>
+      <RevolveAction sketch={sketch} entityId={entityId} />
+    </>
+  );
+}
+
+/** 스케치 v 축(u = 0) 둘레로 회전 — 컵·손잡이·노브처럼 축대칭인 물체. 프로파일은 u ≥ 0 쪽에 있어야 한다 */
+function RevolveAction({ sketch, entityId }: { sketch: Sketch; entityId: string }) {
+  const submitNow = useSceneStore((s) => s.submitNow);
+  const [angle, setAngle] = useState(360);
+  const prof = resolveProfile(sketch, entityId);
+  const axisErr = prof ? revolveProfileError(prof) : null;
+  return (
+    <>
+      <NumberField label="회전 각도" unit="°" value={angle} onCommit={setAngle} testId={`revolve-angle-${entityId}`} />
+      <button
+        data-testid={`revolve-${entityId}`}
+        disabled={!prof || !!axisErr}
+        title={axisErr ?? '스케치 v 축(u = 0) 둘레로 회전'}
+        onClick={() => submitNow({ type: 'revolve', sketch: sketch.id, profile: entityId, angle })}
+      >
+        회전 (v 축 둘레)
+      </button>
     </>
   );
 }
 
 /** 돌출 객체: 원본 스케치 윤곽 치수(직접 수정) + 관통 구멍 */
-export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { kind: 'extrude' }>; model: ModelDefinition }) {
+export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { kind: 'extrude' | 'revolve' }>; model: ModelDefinition }) {
   const select = useSceneStore((s) => s.select);
-  const sketch = findSketch(model, object.extrude.sketch);
-  const entity = sketch?.entities.find((e) => e.id === object.extrude.profile);
-  if (!sketch || !entity) return <p className="muted small">원본 스케치를 찾을 수 없습니다: {object.extrude.sketch}</p>;
+  const ref = object.kind === 'extrude' ? object.extrude : object.revolve;
+  const sketch = findSketch(model, ref.sketch);
+  const entity = sketch?.entities.find((e) => e.id === ref.profile);
+  if (!sketch || !entity) return <p className="muted small">원본 스케치를 찾을 수 없습니다: {ref.sketch}</p>;
   return (
     <>
       <fieldset>
@@ -200,7 +223,7 @@ export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { 
           스케치 열기
         </button>
       </fieldset>
-      <HoleAction object={object} model={model} />
+      {object.kind === 'extrude' && <HoleAction object={object} model={model} />}
     </>
   );
 }

@@ -56,6 +56,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `스케치 이름 → ${cmd.name}`;
     case 'delete_sketch':
       return `스케치 ${sketchName(cmd.sketch)} 삭제`;
+    case 'revolve':
+      return `${sketchName(cmd.sketch)}의 ${cmd.profile} 을(를) ${formatMm(cmd.angle ?? 360)}° 회전`;
     case 'extrude':
       return `${sketchName(cmd.sketch)}의 ${cmd.profile} 을(를) ${formatMm(cmd.distance)}mm 돌출`;
     case 'fillet':

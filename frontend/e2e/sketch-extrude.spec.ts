@@ -100,7 +100,7 @@ test('사각형 스케치 → 4mm 돌출 → 폭 80 → 구멍 → 저장·다�
   // 5. 저장 (v2): 스케치·돌출·구멍이 원본 형태로 들어 있다 (메시는 저장하지 않음)
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(4);
+  expect(saved.formatVersion).toBe(5);
   expect(saved.model.sketches.map((s: { id: string }) => s.id)).toEqual(['sketch_1', 'sk_hole_1']);
   expect(saved.model.sketches[0].dimensions[0]).toEqual({ id: 'r1.width', entity: 'r1', kind: 'width', value: 80 });
   expect(JSON.stringify(saved)).not.toMatch(/positions|indices|revision|commandId/);
@@ -300,7 +300,7 @@ test('면 위 스케치: 판 윗면에 기둥 → 판 두께 변경을 따라감
   // 저장(v3) → 새 프로젝트 → 다시 열기: 면 참조가 그대로
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(4);
+  expect(saved.formatVersion).toBe(5);
   expect(saved.model.sketches[1].plane).toEqual({ type: 'face', object: 'extrude_1', face: 'end', offset: 0 });
   const file = info.outputPath('면 스케치.ai3d');
   writeFileSync(file, JSON.stringify(saved));
@@ -364,7 +364,7 @@ test('구속 해석기: 다각형 그리기 → 고정·수평·수직·길이�
   // 5. 저장(v4) → 다시 열기: 구속과 풀린 좌표가 그대로
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(4);
+  expect(saved.formatVersion).toBe(5);
   expect(saved.model.sketches[0].constraints).toHaveLength(7);
   expect(saved.model.sketches[0].entities[0].points).toEqual([[0, 0], [50, 0], [50, 20], [0, 20]]);
   const file = info.outputPath('구속 판.ai3d');
@@ -374,4 +374,24 @@ test('구속 해석기: 다각형 그리기 → 고정·수평·수직·길이�
   await expectMesh(page, 'extrude_1', [0, 0, 0], [50, 20, 4]);
   await page.locator('[data-sketch-id="sketch_1"]').click();
   await expect(page.getByTestId('sketch-dof')).toHaveText('자유도 0 · 완전 구속');
+});
+
+test('회전: 축을 넘는 프로파일은 회전 불가 → XZ 평면 사각형을 v 축 둘레 360° → 각도 180° 로 반쪽', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await page.getByRole('button', { name: '+ 사각형 스케치' }).click();
+  await page.getByTestId('sketch-plane').selectOption('XZ');
+  await expect(page.getByTestId('revolve-r1')).toBeDisabled(); // u −30..30 → 축(u = 0)을 넘음
+  await setField(page, 'center-r1-x', '40'); // u 10..70
+  await setField(page, 'center-r1-y', '20'); // v(= Z) 0..40
+  await expect(page.getByTestId('revolve-r1')).toBeEnabled();
+  await page.getByTestId('revolve-r1').click(); // revolve_1, 360°
+  await expectMeshNear(page, 'revolve_1', [-70, -70, 0], [70, 70, 40], 0.1);
+  await expect(page.locator('[data-object-id="revolve_1"]')).toContainText('Ø140×40 360°');
+
+  // 각도 180°: +u 가 −w(XZ 평면의 법선 −Y 의 반대 = +Y) 쪽으로 → Y ≥ 0 반쪽
+  await setField(page, 'param-angle', '180');
+  await expectMeshNear(page, 'revolve_1', [-70, 0, 0], [70, 70, 40], 0.1);
+  await expect(page.getByTestId('print-check')).toHaveText('출력 검사 ✓', { timeout: 20_000 });
 });

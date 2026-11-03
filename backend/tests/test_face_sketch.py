@@ -68,7 +68,7 @@ def test_frame_math_matches_frontend_table():
     r = transform_matrix(Transform(position=(10, 0, 0), rotation=(0, 0, 90)))
     assert (r @ np.array([1, 0, 0, 1]))[:3] == pytest.approx([10, 1, 0])
     # 박스 면 (sketchPlane.test.ts 와 같은 표)
-    m = ModelDefinition.model_validate({"schemaVersion": 4, "units": "mm", "sketches": [], "objects": [
+    m = ModelDefinition.model_validate({"schemaVersion": 5, "units": "mm", "sketches": [], "objects": [
         {"id": "b", "name": "b", "kind": "box", "params": {"width": 30, "depth": 20, "height": 10},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}]})
     b = m.objects[0]
@@ -96,9 +96,9 @@ class TestValidation:
         assert any("'top' 면이 없습니다" in msg for msg in messages)
         assert any("존재하지 않는 객체의 면" in msg for msg in messages)
 
-    def test_v3_model_is_rejected_by_v4_schema(self):
+    def test_older_model_version_is_rejected(self):
         data = copy.deepcopy(fixture())
-        data["schemaVersion"] = 3
+        data["schemaVersion"] = 4
         with pytest.raises(Exception):
             ModelDefinition.model_validate(data)
 

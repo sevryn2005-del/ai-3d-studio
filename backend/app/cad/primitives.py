@@ -21,6 +21,9 @@ from OCP.gp import gp_Trsf
 
 from app.cad.commands import (
     ExtrudeObject,
+    RevolveObject,
+    revolve_profile_error,
+    sketch_feature_ref,
     Sketch,
     resolve_profile,
     BooleanObject,
@@ -65,7 +68,7 @@ def local_solid(obj: CadObject) -> cq.Shape:
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
-        case BooleanObject() | ExtrudeObject():
+        case BooleanObject() | ExtrudeObject() | RevolveObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -88,27 +91,34 @@ def world_solid(obj: CadObject) -> cq.Shape:
 _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"}
 
 
-def extrude_solid(obj: ExtrudeObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
-    """스케치 프로파일 돌출 (객체 로컬 좌표). 평면 좌표에서 만든 뒤 frames.extrude_local_matrix 로 옮긴다
+def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
+    """스케치 피처 (객체 로컬 좌표). 평면 좌표에서 단면을 돌출(또는 v 축 둘레 회전)한 뒤 frames.extrude_local_matrix 로 옮긴다
     — 기준 평면·면 평면 모두 브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 행렬.
-    음수 거리는 평면 법선 반대쪽."""
-    sk = sketches.get(obj.extrude.sketch)
-    p = resolve_profile(sk, obj.extrude.profile) if sk else None
+    음수 거리는 평면 법선 반대쪽. 회전은 Y(= v) 축 둘레 오른손 규칙: +u 점이 −w 쪽으로."""
+    ref = sketch_feature_ref(obj)
+    sk = sketches.get(ref.sketch)
+    p = resolve_profile(sk, ref.profile) if sk else None
     if p is None:
         raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
     model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
     local = extrude_local_matrix(model, obj)  # type: ignore[arg-type]
     if local is None:
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
-    d = obj.params.distance
     if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
         wp = cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
     else:
-        wp = cq.Workplane("XY").center(*p["center"])
+        # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
+        wp = cq.Workplane("XY").pushPoints([tuple(p["center"])])
         wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
-    solid = wp.extrude(abs(d)).val()
-    if d < 0:
-        solid = solid.translate(cq.Vector(0, 0, d))
+    if isinstance(obj, RevolveObject):
+        if err := revolve_profile_error(p):
+            raise GeometryError(f"'{obj.name}': {err}")
+        solid = wp.revolve(obj.params.angle, (0, 0, 0), (0, 1, 0)).val()
+    else:
+        d = obj.params.distance
+        solid = wp.extrude(abs(d)).val()
+        if d < 0:
+            solid = solid.translate(cq.Vector(0, 0, d))
     # 강체 변환(회전+이동)으로 굽는다. cq.Matrix 는 일반 행렬(gp_GTrsf)이라 OCCT 가 거부하므로 gp_Trsf 를 직접 만든다
     trsf = gp_Trsf()
     trsf.SetValues(*local[:3, :4].ravel().tolist())
@@ -118,7 +128,7 @@ def extrude_solid(obj: ExtrudeObject, index: dict[str, CadObject], sketches: dic
 def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """객체의 로컬 좌표계 솔리드. 불리언은 자식들을 (부모 기준 변환을 적용해) 재귀적으로 결합한다."""
     sketches = sketches or {}
-    if isinstance(obj, ExtrudeObject):
+    if isinstance(obj, (ExtrudeObject, RevolveObject)):
         return extrude_solid(obj, index, sketches)
     if not isinstance(obj, BooleanObject):
         return local_solid(obj)
