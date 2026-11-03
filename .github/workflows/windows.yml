@@ -14,6 +14,7 @@ on:
       - desktop/**
       - shared/**
       - .github/workflows/windows.yml
+      - .gitattributes
 
 concurrency:
   group: windows-${{ github.ref }}

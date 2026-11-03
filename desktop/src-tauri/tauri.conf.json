@@ -24,8 +24,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.png"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
     "resources": {
       "../../backend/dist/ai3d-engine/": "engine/"
     },
@@ -33,7 +42,20 @@
     "shortDescription": "AI 3D Studio",
     "longDescription": "자연어와 직접 편집으로 3D 프린팅용 모델을 만드는 로컬 CAD",
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "wix": {
+        "language": [
+          "ko-KR"
+        ]
+      },
+      "nsis": {
+        "languages": [
+          "Korean"
+        ],
+        "installMode": "currentUser"
+      }
     }
   }
 }
