@@ -5,7 +5,7 @@ import { useBackendStore } from './backendStore';
 import { buildGeometry, geometryKey } from './renderMesh';
 import type { ModelDefinition } from '../../cad/commandTypes';
 import { byId } from '../../cad/modelGraph';
-import type { EngineEvaluation } from '../engine/types';
+import type { CadEngine, EngineEvaluation } from '../engine/types';
 import { getActiveEngine, useActiveEngineId } from '../engine/engines';
 import { appConfig } from '../../api/config';
 
@@ -53,22 +53,36 @@ export function useBackendSync() {
     const { setEvaluation } = useBackendStore.getState();
     const controller = new AbortController();
     setEvaluation({ status: 'pending' });
-    const timer = setTimeout(async () => {
-      try {
-        const result = await engine.evaluate(model, controller.signal);
-        if (controller.signal.aborted) return;
-        storeMeshes(model, result);
-        setEvaluation({ status: 'done', result });
-      } catch (e) {
-        if (controller.signal.aborted) return;
-        setEvaluation({ status: 'failed', error: e instanceof Error ? e.message : String(e) });
-      }
-    }, EVALUATE_DEBOUNCE_MS);
+    const timer = setTimeout(() => void runEvaluation(engine, model, controller.signal), EVALUATE_DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
   }, [model, engineId]);
+}
+
+/**
+ * 한 번의 형상 계산. 설계 원본(모델·이력)은 절대 바꾸지 않는다 — 결과는 형상 키 캐시와 표시 상태에만 들어간다.
+ * - 계산 중 모델이 바뀌면(signal 취소) 늦게 온 결과·오류는 버린다 → 오래된 결과가 최신 화면을 덮지 않음
+ * - 결과 메시는 "보낸 모델"의 형상 키로 저장 → 다른 형상에 잘못 붙지 않음
+ */
+export async function runEvaluation(
+  engine: Pick<CadEngine, 'evaluate'>,
+  model: ModelDefinition,
+  signal: AbortSignal,
+): Promise<'done' | 'failed' | 'discarded'> {
+  const { setEvaluation } = useBackendStore.getState();
+  try {
+    const result = await engine.evaluate(model, signal);
+    if (signal.aborted) return 'discarded';
+    storeMeshes(model, result);
+    setEvaluation({ status: 'done', result });
+    return 'done';
+  } catch (e) {
+    if (signal.aborted) return 'discarded';
+    setEvaluation({ status: 'failed', error: e instanceof Error ? e.message : String(e) });
+    return 'failed';
+  }
 }
 
 /** 응답 메시를 "요청에 보낸 모델" 기준의 형상 키로 캐시에 넣는다. */

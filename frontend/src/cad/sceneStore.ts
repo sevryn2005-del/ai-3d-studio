@@ -1,14 +1,16 @@
 /**
  * 전역 편집기 상태 (Zustand).
  *
- * 모델 변경은 반드시 dispatch(command) 를 통해서만 일어난다.
+ * 모델 변경은 반드시 dispatch(command) / submit(봉투) 를 통해서만 일어난다.
  * UI 컴포넌트가 objects 를 직접 수정하지 않는다.
+ * submit 은 명령 ID·기준 리비전을 검사하는 경로다 (commandEnvelope.ts). 첫 적용 경로: 이동 기즈모.
  */
 import { create } from 'zustand';
 import type { CadCommand, ModelDefinition, ObjectId } from './commandTypes';
 import { executeBatch, executeCommand, type BatchResult, type ExecuteResult } from './commandExecutor';
 import { canRedo, canUndo, createHistory, pushHistory, redo, undo, type HistoryState } from './history';
 import { createDefaultModel } from './defaultModel';
+import { CommandEnvelopeSchema, type SubmitResult } from './commandEnvelope';
 
 interface SceneState {
   history: HistoryState;
@@ -16,6 +18,8 @@ interface SceneState {
   lastError: string | null;
 
   dispatch: (command: CadCommand | unknown) => ExecuteResult;
+  /** 명령 봉투 적용: 중복 → 오래된 리비전 → 검증 순으로 거른 뒤 이력 1건으로 커밋 */
+  submit: (envelope: unknown) => SubmitResult;
   /** 여러 명령을 한 단계로 적용 (전부 성공해야 적용, 실행 취소 1번으로 되돌림) */
   dispatchBatch: (commands: unknown[], source?: 'user' | 'ai') => BatchResult;
   select: (id: ObjectId | null) => void;
@@ -48,6 +52,37 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           : (result.affectedId ?? s.selectedId),
     }));
     return result;
+  },
+
+  submit: (raw) => {
+    const env = CommandEnvelopeSchema.safeParse(raw);
+    if (!env.success) {
+      const error = '잘못된 명령 봉투입니다';
+      set({ lastError: error });
+      return { status: 'rejected', error };
+    }
+    const { commandId, baseRevision, command } = env.data;
+    const { history } = get();
+    const current = history.present.revision;
+
+    if (history.appliedCommandIds.includes(commandId)) return { status: 'duplicate', revision: current };
+    if (baseRevision !== current) {
+      const error = '편집하는 동안 다른 변경이 먼저 적용되어 이 편집을 반영하지 않았습니다';
+      set({ lastError: error });
+      return { status: 'stale', error, baseRevision, currentRevision: current };
+    }
+    const result = executeCommand(history.present.model, command);
+    if (!result.ok) {
+      set({ lastError: result.error });
+      return { status: 'rejected', error: result.error };
+    }
+    const next = pushHistory(history, result.command, result.model, { commandId });
+    set((s) => ({
+      history: next,
+      lastError: null,
+      selectedId: result.command.type === 'delete_object' && s.selectedId === result.command.target ? null : (result.affectedId ?? s.selectedId),
+    }));
+    return { status: 'applied', revision: next.present.revision, affectedId: result.affectedId };
   },
 
   dispatchBatch: (commands, source = 'user') => {
@@ -97,6 +132,7 @@ function keepSelection(h: HistoryState, id: ObjectId | null): ObjectId | null {
 
 // ---- 셀렉터 ---------------------------------------------------------------
 export const selectModel = (s: SceneState) => s.history.present.model;
+export const selectRevision = (s: SceneState) => s.history.present.revision;
 export const selectCanUndo = (s: SceneState) => canUndo(s.history);
 export const selectCanRedo = (s: SceneState) => canRedo(s.history);
 export const selectSelectedObject = (s: SceneState) =>

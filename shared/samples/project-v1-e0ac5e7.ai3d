@@ -1,0 +1,103 @@
+{
+  "format": "ai3d-project",
+  "formatVersion": 1,
+  "app": {
+    "name": "AI 3D Studio",
+    "version": "0.1.0"
+  },
+  "name": "기준 판 v1",
+  "savedAt": "2026-11-03T06:00:00.000Z",
+  "model": {
+    "schemaVersion": 1,
+    "units": "mm",
+    "objects": [
+      {
+        "id": "plate",
+        "name": "기준 판",
+        "params": {
+          "width": 60,
+          "depth": 40,
+          "height": 8
+        },
+        "transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "kind": "box"
+      },
+      {
+        "id": "hole",
+        "name": "구멍",
+        "params": {
+          "radius": 3,
+          "height": 10
+        },
+        "transform": {
+          "position": [
+            18,
+            0,
+            -1
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "kind": "cylinder"
+      },
+      {
+        "id": "plate_holed",
+        "name": "구멍 뚫린 판",
+        "kind": "boolean",
+        "boolean": {
+          "operation": "cut",
+          "base": "plate",
+          "tools": [
+            "hole"
+          ]
+        },
+        "transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "knob",
+        "name": "손잡이",
+        "params": {
+          "radius": 6
+        },
+        "transform": {
+          "position": [
+            60,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            30
+          ]
+        },
+        "kind": "sphere"
+      }
+    ]
+  }
+}

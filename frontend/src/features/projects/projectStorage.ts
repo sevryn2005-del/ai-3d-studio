@@ -37,9 +37,16 @@ export async function saveTextFile(
       }
     }
     if (handle) {
+      // 쓰기는 임시 사본에 하고 close() 때 원본과 교체된다 (File System Access API).
+      // 실패하면 abort() 로 임시 사본을 버려 기존 파일이 그대로 남게 한다.
       const writable = await handle.createWritable();
-      await writable.write(text);
-      await writable.close();
+      try {
+        await writable.write(text);
+        await writable.close();
+      } catch (e) {
+        await writable.abort().catch(() => undefined);
+        throw e;
+      }
       return { fileName: handle.name, handle };
     }
   }

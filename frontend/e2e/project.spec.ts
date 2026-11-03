@@ -106,3 +106,49 @@ test('File System Access API: 처음 한 번만 위치를 묻고 이후 같은 �
   expect(pickerCalls).toBe(1);
   expect(writes.map((t) => JSON.parse(t).model.objects[0].params.height)).toEqual([30, 35]);
 });
+
+test('저장 중 쓰기가 실패하면 기존 파일은 그대로, 미저장 상태 유지 (임시 사본 폐기)', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __file: string; __aborted: number; __failNext: boolean };
+    w.__file = 'ORIGINAL';
+    w.__aborted = 0;
+    w.__failNext = false;
+    const handle = {
+      name: '받침.ai3d',
+      // File System Access API 처럼: 임시 사본에 쓰고 close() 때만 원본과 교체
+      createWritable: async () => {
+        let pending = '';
+        return {
+          write: async (t: string) => {
+            if (w.__failNext) throw new DOMException('디스크 공간 부족', 'QuotaExceededError');
+            pending = t;
+          },
+          close: async () => void (w.__file = pending),
+          abort: async () => void w.__aborted++,
+        };
+      },
+    };
+    window.showSaveFilePicker = (async () => handle) as unknown as typeof window.showSaveFilePicker;
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '저장' }).click(); // 첫 저장 성공
+  await expect(page.getByTestId('project-name')).toHaveText('받침');
+  const firstSave = await page.evaluate(() => (window as unknown as { __file: string }).__file);
+  expect(JSON.parse(firstSave).model.objects[0].params.height).toBe(20);
+
+  const h = page.getByTestId('param-height');
+  await h.fill('50');
+  await h.press('Enter');
+  await page.evaluate(() => ((window as unknown as { __failNext: boolean }).__failNext = true));
+  await page.keyboard.press('Control+s');
+
+  await expect(page.getByRole('alert')).toContainText('저장 실패');
+  await expect(page.getByTestId('project-name')).toHaveText('받침 •'); // 여전히 미저장
+  const state = await page.evaluate(() => {
+    const w = window as unknown as { __file: string; __aborted: number };
+    return { file: w.__file, aborted: w.__aborted };
+  });
+  expect(state.file).toBe(firstSave); // 기존 파일 내용 그대로
+  expect(state.aborted).toBe(1); // 임시 사본 폐기
+  await expect(page.locator('.object-list')).toContainText('20×20×50'); // 편집 내용은 화면에 남아 다시 저장 가능
+});

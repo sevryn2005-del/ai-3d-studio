@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Box3, Mesh, Vector3 } from 'three';
+import { useSceneStore } from '../../cad/sceneStore';
 
 
 /**
@@ -36,6 +37,20 @@ export function DevProbe() {
         });
         return out;
       },
+      scene: () => {
+        const h = useSceneStore.getState().history;
+        return {
+          revision: h.present.revision,
+          past: h.past.length,
+          future: h.future.length,
+          commandId: h.present.commandId ?? null,
+          baseRevision: h.past.at(-1)?.revision ?? null,
+          command: h.present.command,
+          objects: h.present.model.objects.map((o) => ({ id: o.id, position: [...o.transform.position], rotation: [...o.transform.rotation] })),
+        };
+      },
+      submit: (envelope) => useSceneStore.getState().submit(envelope),
+      dispatch: (command) => useSceneStore.getState().dispatch(command),
     };
     return () => {
       delete window.__AI3D_DEV__;

@@ -55,3 +55,19 @@ describe('프로젝트 파일', () => {
     expect(nameFromFileName('a.AI3D.json')).toBe('a');
   });
 });
+
+// 커밋 e0ac5e7 의 코드가 실제로 만든 저장 파일 (shared/samples/README.md)
+import legacyV1 from '../../../../shared/samples/project-v1-e0ac5e7.ai3d?raw';
+
+describe('구버전 프로젝트 샘플 (e0ac5e7)', () => {
+  it('열기 → 다시 저장 → 다시 열기: 설계 원본이 그대로', () => {
+    const first = parseProject(legacyV1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.project.name).toBe('기준 판 v1');
+    expect(first.project.model.objects.map((o) => o.id)).toEqual(['plate', 'hole', 'plate_holed', 'knob']);
+    const again = parseProject(serializeProject(first.project.name, first.project.model));
+    expect(again.ok && again.project.model).toEqual(first.project.model);
+    expect(again.ok && again.project.model).toEqual(JSON.parse(legacyV1).model);
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useThree } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import type { Object3D } from 'three';
@@ -6,14 +6,18 @@ import { findObject } from '../../cad/commandExecutor';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { transformFromObject3D, transformsEqual } from '../../cad/transformUtils';
 import { DEG2RAD } from '../../cad/units';
+import { newCommandId } from '../../cad/commandEnvelope';
 import { selectSnap, useEditorStore } from '../../features/selection/editorStore';
 
 /**
  * 선택된 객체에 이동/회전 기즈모를 붙인다.
  *
- * 드래그 중에는 Three.js 객체만 움직이고(빠른 미리보기),
- * 드래그가 끝날 때 set_transform 명령을 "한 번" 발행한다 → 드래그 1회 = 히스토리 1단계.
- * 명령이 거부되면 Three.js 객체를 설계 원본 값으로 되돌린다.
+ * 미리보기와 커밋의 분리
+ * - 드래그 시작: 명령 ID 를 만들고, 그 순간의 리비전을 기준 리비전으로 기록한다.
+ * - 드래그 중: Three.js 객체만 움직인다 (설계 원본·이력·리비전은 그대로).
+ * - 드래그 끝: set_transform 봉투를 submit 한다 → 드래그 1회 = 이력 1건.
+ *   중복(같은 ID)·오래된 리비전(드래그 중 다른 변경)·잘못된 대상이면 원본을 바꾸지 않고,
+ *   화면의 객체를 최신 설계 원본 값으로 되돌린다.
  */
 export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> }) {
   const scene = useThree((s) => s.scene);
@@ -22,6 +26,8 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
   const mode = useEditorStore((s) => s.transformMode);
   const snap = useEditorStore(selectSnap);
   const [target, setTarget] = useState<Object3D | null>(null);
+  /** 진행 중인 드래그의 명령 ID 와 기준 리비전 */
+  const dragRef = useRef<{ commandId: string; baseRevision: number; objectId: string } | null>(null);
 
   // 객체 그룹은 같은 커밋에서 마운트되므로 effect 시점에는 씬에 존재한다.
   useEffect(() => {
@@ -31,21 +37,26 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
   if (!target || !selectedId) return null;
 
   const commit = () => {
-    const current = findObject(useSceneStore.getState().history.present.model, selectedId);
-    if (!current) return;
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag) return;
+    const store = useSceneStore.getState();
+    const current = findObject(store.history.present.model, drag.objectId);
+    if (!current) return; // 드래그 중 객체가 사라짐: 되돌릴 대상도 없음
     const next = transformFromObject3D(target.position, target.rotation, snap);
     if (transformsEqual(next, current.transform)) {
-      applyTransform(target, current.transform); // 반올림 잔여값 정리
+      applyTransform(target, current.transform); // 움직이지 않음(클릭만) 또는 반올림 잔여값 정리
       return;
     }
-    const result = useSceneStore.getState().dispatch({
-      type: 'set_transform',
-      target: selectedId,
-      position: next.position,
-      rotation: next.rotation,
+    const result = store.submit({
+      commandId: drag.commandId,
+      baseRevision: drag.baseRevision,
+      command: { type: 'set_transform', target: drag.objectId, position: next.position, rotation: next.rotation },
     });
-    // 성공 시에도 반올림된 값으로 맞춘다 (React props 가 같으면 R3F 가 다시 적용하지 않으므로)
-    applyTransform(target, result.ok ? next : current.transform);
+    // 적용되면 반올림된 값으로, 아니면 최신 설계 원본 값으로 맞춘다
+    // (React props 가 같으면 R3F 가 다시 적용하지 않으므로 직접 설정)
+    const latest = findObject(useSceneStore.getState().history.present.model, drag.objectId);
+    applyTransform(target, result.status === 'applied' ? next : (latest ?? current).transform);
   };
 
   return (
@@ -56,7 +67,14 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
       size={0.9}
       translationSnap={snap.translation}
       rotationSnap={snap.rotation === null ? null : snap.rotation * DEG2RAD}
-      onMouseDown={() => (activeRef.current = true)}
+      onMouseDown={() => {
+        activeRef.current = true;
+        dragRef.current = {
+          commandId: newCommandId(),
+          baseRevision: useSceneStore.getState().history.present.revision,
+          objectId: selectedId,
+        };
+      }}
       onMouseUp={() => {
         commit();
         // R3F 의 pointerup 처리(onPointerMissed)가 이 이벤트보다 늦게 올 수 있으므로 한 틱 뒤에 해제
