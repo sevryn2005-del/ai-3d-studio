@@ -92,6 +92,31 @@ export const SKETCH_PLANES_COMMANDS: unknown[] = [
   { type: 'set_transform', target: 'front_moved', rotation: [0, 0, 90] },
 ];
 
+/**
+ * 면 위 스케치 (언어 간 계약 픽스처, docs/design-face-sketch.md). 판 80×40×4 를 (10,0,0) 에 Z 90° 회전.
+ * - boss: 판 윗면(end)의 원 Ø10 @ (5,0) → 6mm 기둥     → 월드 X 5..15, Y 0..10, Z 4..10
+ * - pocket: 판 윗면의 사각형 10×6 → −3mm (안쪽) 홈      → 월드 X 7..13, Y −5..5, Z 1..4 (빈 공간)
+ * - peg: 판 −u 옆면의 원 Ø6 @ (0,1) → 5mm 돌기          → 월드 X 7..13, Y −45..−40, Z 0..6
+ * - part = (판 − 홈) ∪ 기둥 ∪ 돌기. 판이 불리언 안에 있어도 면은 기준 객체로 위임된다.
+ * 전체: X −10..30, Y −45..40, Z 0..10, 부피 = 80·40·4 − 10·6·3 + π·25·6 + π·9·5
+ */
+export const FACE_SKETCH_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 'sk_plate', name: '판 윤곽' },
+  { type: 'add_rectangle', sketch: 'sk_plate', id: 'r1', width: 80, height: 40 },
+  { type: 'extrude', id: 'plate', name: '판', sketch: 'sk_plate', profile: 'r1', distance: 4, position: [10, 0, 0] },
+  { type: 'set_transform', target: 'plate', rotation: [0, 0, 90] },
+  { type: 'create_sketch', id: 'sk_top', name: '윗면', plane: { type: 'face', object: 'plate', face: 'end', offset: 0 } },
+  { type: 'add_circle', sketch: 'sk_top', id: 'c1', center: [5, 0], diameter: 10 },
+  { type: 'add_rectangle', sketch: 'sk_top', id: 'r1', center: [0, 0], width: 10, height: 6 },
+  { type: 'extrude', id: 'boss', name: '기둥', sketch: 'sk_top', profile: 'c1', distance: 6 },
+  { type: 'extrude', id: 'pocket', name: '홈', sketch: 'sk_top', profile: 'r1', distance: -3 },
+  { type: 'create_sketch', id: 'sk_side', name: '옆면', plane: { type: 'face', object: 'plate', face: '-u', offset: 0 } },
+  { type: 'add_circle', sketch: 'sk_side', id: 'c1', center: [0, 1], diameter: 6 },
+  { type: 'extrude', id: 'peg', name: '돌기', sketch: 'sk_side', profile: 'c1', distance: 5 },
+  { type: 'cut', id: 'plate_cut', name: '홈 판', base: 'plate', tools: ['pocket'] },
+  { type: 'union', id: 'part', name: '부품', base: 'plate_cut', tools: ['boss', 'peg'] },
+];
+
 export function buildSketchPlateFixture(commands: unknown[] = SKETCH_PLATE_COMMANDS) {
   let model = emptyModel();
   for (const cmd of commands) {
@@ -108,6 +133,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-cut-rotated.json': JSON.stringify(buildBooleanFixture(), null, 2) + '\n',
     'examples/model-sketch-plate.json': JSON.stringify(buildSketchPlateFixture(), null, 2) + '\n',
     'examples/model-sketch-planes.json': JSON.stringify(buildSketchPlateFixture(SKETCH_PLANES_COMMANDS), null, 2) + '\n',
+    'examples/model-face-sketch.json': JSON.stringify(buildSketchPlateFixture(FACE_SKETCH_COMMANDS), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

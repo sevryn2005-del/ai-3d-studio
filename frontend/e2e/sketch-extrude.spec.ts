@@ -23,6 +23,18 @@ async function expectMesh(page: Page, id: string, min: number[], max: number[]) 
     .toEqual({ source: 'server', min, max });
 }
 
+/** 곡면(원기둥) 메시는 다각형 근사 → 바운딩 박스를 허용 오차로 비교 */
+async function expectMeshNear(page: Page, id: string, min: number[], max: number[], tol = 0.02) {
+  await expect
+    .poll(async () => {
+      const m = (await sources(page))[id];
+      if (!m || m.source !== 'server') return 'not ready';
+      const off = [...m.min.map((v, i) => Math.abs(v - min[i]!)), ...m.max.map((v, i) => Math.abs(v - max[i]!))];
+      return Math.max(...off) <= tol ? 'ok' : `${m.min} / ${m.max}`;
+    }, { timeout: 20_000 })
+    .toBe('ok');
+}
+
 async function setField(page: Page, testId: string, value: string) {
   const f = page.getByTestId(testId);
   await f.fill(value);
@@ -88,7 +100,7 @@ test('사각형 스케치 → 4mm 돌출 → 폭 80 → 구멍 → 저장·다�
   // 5. 저장 (v2): 스케치·돌출·구멍이 원본 형태로 들어 있다 (메시는 저장하지 않음)
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(2);
+  expect(saved.formatVersion).toBe(3);
   expect(saved.model.sketches.map((s: { id: string }) => s.id)).toEqual(['sketch_1', 'sk_hole_1']);
   expect(saved.model.sketches[0].dimensions[0]).toEqual({ id: 'r1.width', entity: 'r1', kind: 'width', value: 80 });
   expect(JSON.stringify(saved)).not.toMatch(/positions|indices|revision|commandId/);
@@ -244,4 +256,55 @@ test('XZ 평면: 평면을 바꾸고 돌출 → 서버 메시가 정면 방향, 
   await expect(page.getByTestId('dim-c1.diameter')).toHaveValue('10');
   await expect(page.getByTestId('center-c1-x')).toHaveValue('10');
   await expect(page.getByTestId('center-c1-y')).toHaveValue('20');
+});
+
+test('면 위 스케치: 판 윗면에 기둥 → 판 두께 변경을 따라감 → 안쪽 홈 → 붙은 판 삭제 거부 → 저장·다시 열기', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await page.getByRole('button', { name: '+ 사각형 스케치' }).click();
+  await page.getByTestId('extrude-r1').click(); // 판 60×40×4 (extrude_1)
+
+  // 판의 윗면(끝 면)에 스케치 → 원 Ø10 → 6mm 기둥
+  await expect(page.getByTestId('face-pick')).toHaveValue('end');
+  await page.getByTestId('face-sketch').click();
+  await expect(page.getByTestId('sketch-plane')).toContainText('끝 면');
+  await page.getByRole('button', { name: '+ 원', exact: true }).click();
+  await setField(page, 'extrude-distance-c1', '6');
+  await page.getByTestId('extrude-c1').click(); // extrude_2
+  await expectMeshNear(page, 'extrude_2', [-5, -5, 4], [5, 5, 10]);
+
+  // 판 두께 4 → 6: 기둥이 따라 올라간다
+  await page.locator('[data-object-id="extrude_1"]').click();
+  await setField(page, 'param-distance', '6');
+  await expectMesh(page, 'extrude_1', [-30, -20, 0], [30, 20, 6]);
+  await expectMeshNear(page, 'extrude_2', [-5, -5, 6], [5, 5, 12]);
+
+  // 같은 면 스케치에 사각형 → −2mm (안쪽) 홈
+  await page.locator('[data-sketch-id="sketch_2"]').click();
+  await page.getByRole('button', { name: '+ 사각형', exact: true }).click(); // r1 20×20
+  await setField(page, 'center-r1-x', '20');
+  await setField(page, 'extrude-distance-r1', '-2');
+  await page.getByTestId('extrude-r1').click(); // extrude_3
+  await expectMesh(page, 'extrude_3', [10, -10, 4], [30, 10, 6]);
+
+  // 스케치가 붙은 판은 삭제할 수 없다
+  await page.locator('[data-object-id="extrude_1"]').click();
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('면에 붙어 있어 삭제할 수 없습니다');
+  await expect(page.locator('[data-object-id="extrude_1"]')).toBeVisible();
+
+  // 저장(v3) → 새 프로젝트 → 다시 열기: 면 참조가 그대로
+  const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
+  const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
+  expect(saved.formatVersion).toBe(3);
+  expect(saved.model.sketches[1].plane).toEqual({ type: 'face', object: 'extrude_1', face: 'end', offset: 0 });
+  const file = info.outputPath('면 스케치.ai3d');
+  writeFileSync(file, JSON.stringify(saved));
+  await page.getByRole('button', { name: '새 프로젝트' }).click();
+  await open(page, file);
+  await expectMeshNear(page, 'extrude_2', [-5, -5, 6], [5, 5, 12]);
 });

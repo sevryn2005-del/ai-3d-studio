@@ -13,7 +13,11 @@ OCCT 주의 사항 (실험으로 확인)
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import cadquery as cq
+from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
+from OCP.gp import gp_Trsf
 
 from app.cad.commands import (
     ExtrudeObject,
@@ -27,6 +31,7 @@ from app.cad.commands import (
     SphereObject,
     Transform,
 )
+from app.cad.frames import extrude_local_matrix
 
 _ORIGIN = cq.Vector(0, 0, 0)
 _VERTICAL = cq.selectors.ParallelDirSelector(cq.Vector(0, 0, 1))
@@ -83,25 +88,35 @@ def world_solid(obj: CadObject) -> cq.Shape:
 _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"}
 
 
-def extrude_solid(obj: ExtrudeObject, sketches: dict[str, Sketch]) -> cq.Shape:
-    """스케치 프로파일 돌출. 평면 = CadQuery 이름 평면, 원점 = 법선 × offset, 방향 = 법선
-    (브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 형상)."""
+def extrude_solid(obj: ExtrudeObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
+    """스케치 프로파일 돌출 (객체 로컬 좌표). 평면 좌표에서 만든 뒤 frames.extrude_local_matrix 로 옮긴다
+    — 기준 평면·면 평면 모두 브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 행렬.
+    음수 거리는 평면 법선 반대쪽."""
     sk = sketches.get(obj.extrude.sketch)
     p = resolve_profile(sk, obj.extrude.profile) if sk else None
     if p is None:
         raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
-    named = cq.Plane.named(p["plane"])
-    origin = named.zDir * p["z"]
-    wp = cq.Workplane(cq.Plane(origin=origin, xDir=named.xDir, normal=named.zDir)).center(*p["center"])
+    model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
+    local = extrude_local_matrix(model, obj)  # type: ignore[arg-type]
+    if local is None:
+        raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
+    d = obj.params.distance
+    wp = cq.Workplane("XY").center(*p["center"])
     wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
-    return wp.extrude(obj.params.distance).val()
+    solid = wp.extrude(abs(d)).val()
+    if d < 0:
+        solid = solid.translate(cq.Vector(0, 0, d))
+    # 강체 변환(회전+이동)으로 굽는다. cq.Matrix 는 일반 행렬(gp_GTrsf)이라 OCCT 가 거부하므로 gp_Trsf 를 직접 만든다
+    trsf = gp_Trsf()
+    trsf.SetValues(*local[:3, :4].ravel().tolist())
+    return cq.Shape.cast(BRepBuilderAPI_Transform(solid.wrapped, trsf, True).Shape())
 
 
 def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """객체의 로컬 좌표계 솔리드. 불리언은 자식들을 (부모 기준 변환을 적용해) 재귀적으로 결합한다."""
     sketches = sketches or {}
     if isinstance(obj, ExtrudeObject):
-        return extrude_solid(obj, sketches)
+        return extrude_solid(obj, index, sketches)
     if not isinstance(obj, BooleanObject):
         return local_solid(obj)
 

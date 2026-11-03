@@ -9,8 +9,9 @@ import { BufferAttribute, BufferGeometry } from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { RenderMesh } from '../../api/backend';
 import type { EngineMesh } from '../engine/types';
-import type { CadObject, ObjectId, Sketch, Transform } from '../../cad/commandTypes';
+import type { CadObject, ObjectId, Sketch, SketchPlane, Transform } from '../../cad/commandTypes';
 import { resolveProfile } from '../../cad/sketch';
+import { extrudeLocalMatrix } from '../../cad/sketchPlane';
 
 /**
  * 형상 키. 돌출은 참조한 스케치 프로파일(치수·중심·평면 높이)을 포함 → 스케치 치수를 바꾸면 다시 계산된다.
@@ -32,9 +33,11 @@ export function geometryKey(
     const sk = sketches.get(obj.extrude.sketch);
     const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
     const prof = !p ? 'missing'
-      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${planeTag(p.plane.type)}`
-      : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane.type)}`;
-    return `extrude:${prof}|d=${obj.params.distance}`;
+      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`
+      : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`;
+    // 면 위 스케치: 붙은 면의 좌표계(돌출 객체 로컬 기준)를 키에 넣는다 → 붙은 객체가 바뀌거나 움직이면 다시 계산
+    const frame = sk?.plane.type === 'face' ? `|frame:${faceFrameKey(obj, index, sketches)}` : '';
+    return `extrude:${prof}|d=${obj.params.distance}${frame}`;
   }
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)
@@ -108,6 +111,12 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 }
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
-function planeTag(type: string): string {
-  return type === 'XY' ? '' : `/${type}`;
+function faceFrameKey(obj: Extract<CadObject, { kind: 'extrude' }>, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
+  const m = extrudeLocalMatrix({ schemaVersion: 3, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+  return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
+}
+
+function planeTag(plane: SketchPlane): string {
+  if (plane.type === 'face') return `/face:${plane.object}.${plane.face}`;
+  return plane.type === 'XY' ? '' : `/${plane.type}`;
 }

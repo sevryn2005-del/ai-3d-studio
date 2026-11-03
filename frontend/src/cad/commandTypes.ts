@@ -40,6 +40,15 @@ const radius = z
   .min(LIMITS.minDimension / 2, `반지름은 ${LIMITS.minDimension / 2}mm 이상이어야 합니다`)
   .max(LIMITS.maxDimension / 2, `반지름은 ${LIMITS.maxDimension / 2}mm 이하여야 합니다`);
 
+/**
+ * 돌출 거리: 양수 = 평면 법선 방향, 음수 = 반대 방향 (면 위 스케치에서 안쪽으로 파내기·구멍).
+ * 크기는 일반 치수와 같은 범위.
+ */
+const extrudeDistance = z.union([
+  z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension),
+  z.number().min(-LIMITS.maxDimension).max(-LIMITS.minDimension),
+], { error: `돌출 거리는 ${LIMITS.minDimension}~${LIMITS.maxDimension}mm (반대 방향은 음수) 여야 합니다` });
+
 /** 원뿔 꼭짓점처럼 0이 허용되는 반지름 */
 const radiusOrZero = z
   .number()
@@ -91,9 +100,9 @@ export const ConeParamsSchema = z
     message: '원뿔의 위·아래 반지름 중 하나는 0보다 커야 합니다',
   });
 
-/** 돌출 객체의 파라미터: 돌출 거리. 단면은 참조한 스케치 프로파일이 정한다 */
+/** 돌출 객체의 파라미터: 돌출 거리(음수 = 반대 방향). 단면은 참조한 스케치 프로파일이 정한다 */
 export const ExtrudeParamsSchema = z.strictObject({
-  distance: dimension,
+  distance: extrudeDistance,
 });
 
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
@@ -138,14 +147,36 @@ export const SketchDimensionSchema = z.strictObject({
 });
 export type SketchDimension = z.infer<typeof SketchDimensionSchema>;
 
-/** 지금은 XY 평면(높이 offset)만 지원 */
 /**
- * 스케치 평면 (CadQuery 이름 평면과 같은 규약). offset = 평면 법선 방향 거리 (mm).
+ * 기준 평면 (CadQuery 이름 평면과 같은 규약). offset = 평면 법선 방향 거리 (mm).
  * XY: u=X, v=Y, 법선 +Z · XZ: u=X, v=Z, 법선 −Y · YZ: u=Y, v=Z, 법선 +X
  */
 export const SketchPlaneTypeSchema = z.enum(['XY', 'XZ', 'YZ']);
-export const SketchPlaneSchema = z.strictObject({ type: SketchPlaneTypeSchema, offset: coordinate });
+export const StandardPlaneSchema = z.strictObject({ type: SketchPlaneTypeSchema, offset: coordinate });
+
+/**
+ * 면 이름 (docs/design-face-sketch.md 4.1). 면 번호가 아니라 피처 정의로 정한 이름이라
+ * 필렛·구멍·치수 변경 뒤에도 같은 면을 가리킨다.
+ * 박스: top bottom +X -X +Y -Y · 원통·원뿔: top bottom · 돌출: start end (+ 사각형 단면은 +u -u +v -v)
+ */
+export const FaceNameSchema = z.enum(['top', 'bottom', '+X', '-X', '+Y', '-Y', 'start', 'end', '+u', '-u', '+v', '-v']);
+export type FaceName = z.infer<typeof FaceNameSchema>;
+
+/** 객체의 이름 있는 면에 붙는 평면. offset = 그 면의 바깥 법선 방향 거리. 객체가 움직이면 따라간다 */
+export const FacePlaneSchema = z.strictObject({
+  type: z.literal('face'),
+  object: ObjectIdSchema,
+  face: FaceNameSchema,
+  offset: coordinate,
+});
+
+export const SketchPlaneSchema = z.discriminatedUnion('type', [
+  StandardPlaneSchema,
+  FacePlaneSchema,
+]);
 export type SketchPlane = z.infer<typeof SketchPlaneSchema>;
+export type StandardPlane = z.infer<typeof StandardPlaneSchema>;
+export type FacePlane = z.infer<typeof FacePlaneSchema>;
 
 export const SketchSchema = z.strictObject({
   id: ObjectIdSchema,
@@ -210,7 +241,7 @@ export type PrimitiveObject = Extract<CadObject, { kind: PrimitiveKind }>;
 export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 
-export const MODEL_SCHEMA_VERSION = 2;
+export const MODEL_SCHEMA_VERSION = 3;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -284,7 +315,7 @@ export const SetParamsParamsSchema = z
     radius,
     radiusBottom: radiusOrZero,
     radiusTop: radiusOrZero,
-    distance: dimension,
+    distance: extrudeDistance,
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -371,7 +402,7 @@ export const ExtrudeCommandSchema = z.strictObject({
   name: NameSchema.optional(),
   sketch: ObjectIdSchema,
   profile: ObjectIdSchema,
-  distance: dimension,
+  distance: extrudeDistance,
   position: Vec3Schema.optional(),
 });
 

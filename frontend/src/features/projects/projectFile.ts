@@ -13,9 +13,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * 형식 버전
  * - 1: 객체(기본 도형·불리언·모서리 처리)
  * - 2: + 스케치(model.sketches)와 돌출 객체. model.schemaVersion 2
- * 읽기는 1·2 모두, 쓰기는 항상 최신(2). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 3: + 면 위 스케치(plane.type 'face'), 반대 방향 돌출(음수 거리). model.schemaVersion 3. v2 내용은 그대로 유효
+ * 읽기는 1·2·3 모두, 쓰기는 항상 최신(3). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 2;
+export const PROJECT_FORMAT_VERSION = 3;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -77,9 +78,15 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
     const model = file.model as Record<string, unknown> | undefined;
     const migrated =
       model && typeof model === 'object' && model.schemaVersion === 1
-        ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION, sketches: model.sketches ?? [] }
+        ? { ...model, schemaVersion: 2, sketches: model.sketches ?? [] }
         : model;
     file = { ...file, formatVersion: 2, model: migrated };
+  }
+  if ((file.formatVersion as number) < 3) {
+    // v2 → v3: 새 평면 종류·음수 거리만 추가되었으므로 내용은 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 2 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 3, model: migrated };
   }
   return file;
 }

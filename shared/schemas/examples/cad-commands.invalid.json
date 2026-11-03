@@ -243,12 +243,12 @@
     }
   },
   {
-    "reason": "음수 돌출 거리",
+    "reason": "0 에 가까운 돌출 거리 (|거리| < 0.1)",
     "command": {
       "type": "extrude",
       "sketch": "sk1",
       "profile": "r1",
-      "distance": -4
+      "distance": 0.05
     }
   },
   {
@@ -305,6 +305,29 @@
     "command": {
       "type": "set_sketch_plane",
       "sketch": "sk1"
+    }
+  },
+  {
+    "reason": "알 수 없는 면 이름",
+    "command": {
+      "type": "create_sketch",
+      "plane": {
+        "type": "face",
+        "object": "plate",
+        "face": "side",
+        "offset": 0
+      }
+    }
+  },
+  {
+    "reason": "면 평면에 객체 누락",
+    "command": {
+      "type": "create_sketch",
+      "plane": {
+        "type": "face",
+        "face": "top",
+        "offset": 0
+      }
     }
   }
 ]

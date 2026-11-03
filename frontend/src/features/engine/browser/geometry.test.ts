@@ -1,6 +1,7 @@
 import fixture from '../../../../../shared/schemas/examples/model-cut-rotated.json';
 import plateFixture from '../../../../../shared/schemas/examples/model-sketch-plate.json';
 import planesFixture from '../../../../../shared/schemas/examples/model-sketch-planes.json';
+import faceFixture from '../../../../../shared/schemas/examples/model-face-sketch.json';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema, type ModelDefinition } from '../../../cad/commandTypes';
@@ -194,6 +195,24 @@ describe('스케치 돌출 (공유 픽스처: 서버 test_sketch_extrude.py 와 
     expectBox('front_moved', [3, -10, 5], [7, 20, 25]);
     const p = probe(model, 'side');
     expect(Math.abs(p.volume - Math.PI * 25 * 6)).toBeLessThan(0.01 * Math.PI * 10 * 6 + 1e-3);
+    p.dispose();
+  });
+
+  it('면 위 스케치: 판 윗면 기둥·홈, 옆면 돌기 (서버 test_face_sketch.py 와 같은 기대값)', () => {
+    const model = ModelDefinitionSchema.parse(faceFixture);
+    const meshes = worldMeshes(wasm, model);
+    expect(meshes).toHaveLength(1); // part 하나
+    const b = bbox(meshes[0]!.positions);
+    b.min.forEach((v, k) => expect(v).toBeCloseTo([-10, -45, 0][k]!, 3));
+    b.max.forEach((v, k) => expect(v).toBeCloseTo([30, 40, 10][k]!, 3));
+    const p = probe(model, 'part');
+    const exact = 80 * 40 * 4 - 10 * 6 * 3 + Math.PI * 25 * 6 + Math.PI * 9 * 5;
+    expect(Math.abs(p.volume - exact)).toBeLessThan(0.01 * (2 * Math.PI * 5 * 6 + 2 * Math.PI * 3 * 5) + 1e-3);
+    expect(p.inside([10, 0, 2.5])).toBe(false); // 홈 (z 1..4)
+    expect(p.inside([10, 0, 0.5])).toBe(true); // 홈 아래 판
+    expect(p.inside([10, 8, 8])).toBe(true); // 기둥
+    expect(p.inside([10, -43, 3])).toBe(true); // 옆면 돌기
+    expect(p.inside([0, 30, 2])).toBe(true); // 판
     p.dispose();
   });
 

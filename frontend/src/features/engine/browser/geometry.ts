@@ -12,7 +12,7 @@
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
 import { resolveProfile } from '../../../cad/sketch';
-import { planeMatrix } from '../../../cad/sketchPlane';
+import { extrudeLocalMatrix } from '../../../cad/sketchPlane';
 import { toMatrix } from '../../../cad/transformMath';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
@@ -74,8 +74,14 @@ export function localManifold(
           : scope.keep(CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)));
       const placed = scope.keep(section.translate(p.center));
       // 평면 좌표(u, v, 법선) → 객체 로컬 (서버 cq.Plane.named 와 같은 기저). 열 우선 4×4.
-      const m = planeMatrix(p.plane).elements;
-      return scope.keep(scope.keep(placed.extrude(obj.params.distance)).transform(m as unknown as Parameters<Manifold['transform']>[0]));
+      // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
+      const local = extrudeLocalMatrix({ schemaVersion: 3, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
+      const d = obj.params.distance;
+      const solid = scope.keep(placed.extrude(Math.abs(d)));
+      const signed = d < 0 ? scope.keep(solid.translate([0, 0, d])) : solid; // 음수 = 법선 반대쪽
+      const m = local.elements;
+      return scope.keep(signed.transform(m as unknown as Parameters<Manifold['transform']>[0]));
     }
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;

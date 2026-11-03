@@ -4,9 +4,8 @@ import type { ThreeEvent } from '@react-three/fiber';
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Matrix4, Vector3 } from 'three';
 import type { Point2 } from '../../cad/commandTypes';
 import { selectModel, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
-import { drawShapeCommands, sketchPlacement, type DrawnShape } from '../../cad/sketchActions';
-import { planeMatrix } from '../../cad/sketchPlane';
-import { toMatrix } from '../../cad/transformMath';
+import { drawShapeCommands, type DrawnShape } from '../../cad/sketchActions';
+import { sketchWorldMatrix } from '../../cad/sketchPlane';
 import { formatMm } from '../../cad/units';
 import { selectSnap, useEditorStore } from '../../features/selection/editorStore';
 
@@ -27,8 +26,7 @@ export function SketchDrawTool() {
 
   // 그리기 평면: 스케치 좌표 → 월드
   const frame = useMemo(() => {
-    const placement = sketch ? toMatrix(sketchPlacement(model, sketch.id)) : new Matrix4();
-    return placement.multiply(planeMatrix(sketch?.plane ?? { type: 'XY', offset: 0 }));
+    return (sketch && sketchWorldMatrix(model, sketch)) || new Matrix4(); // 스케치가 없으면 바닥(XY, z=0)
   }, [model, sketch]);
   const inverse = useMemo(() => frame.clone().invert(), [frame]);
 

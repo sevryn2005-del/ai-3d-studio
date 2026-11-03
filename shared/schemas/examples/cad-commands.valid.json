@@ -215,5 +215,22 @@
       "type": "XZ",
       "offset": 0
     }
+  },
+  {
+    "type": "extrude",
+    "id": "pocket",
+    "sketch": "sk_top",
+    "profile": "r1",
+    "distance": -3
+  },
+  {
+    "type": "create_sketch",
+    "id": "sk_top",
+    "plane": {
+      "type": "face",
+      "object": "plate",
+      "face": "end",
+      "offset": 0
+    }
   }
 ]

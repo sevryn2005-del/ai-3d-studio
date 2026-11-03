@@ -39,7 +39,7 @@ Three.js 뷰포트 ◀───────────────────�
 - 범위: 치수 0.1–1000mm, 반지름 0.05–500mm(원뿔은 0 허용), 좌표 ±10000mm, 회전 ±360°.
 - 명령 객체는 strict: 정의되지 않은 필드가 있으면 거부.
 
-## 스케치와 돌출 (형식 v2, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
+## 스케치와 돌출 (형식 v2·v3, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
 
 - `model.sketches[]`: 평면 위 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).
 - 평면 `plane: {type, offset}` — CadQuery 이름 평면과 같은 규약 (원점 = 법선 × offset, 돌출 방향 = 법선):
@@ -62,7 +62,11 @@ Three.js 뷰포트 ◀───────────────────�
   그대로 받아 최상위 객체에서 `cut`. 가장자리에서 0.5mm 이상 안쪽이어야 한다. 한 묶음(실행 취소 1번).
 - 뷰포트 그리기(`Viewport/SketchDrawTool.tsx`, 단축키 R·C, Esc 로 끝): 선택한 스케치의 평면(돌출이 있으면 그 월드 변환 위)에,
   없으면 바닥 XY 에 새 스케치로. 드래그 중에는 미리보기만, 놓으면 명령 1건(`drawShapeCommands`). 0.5mm 미만은 무시. 스냅 1mm.
-- 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1 파일은 열 때 `sketches: []` 를 붙여 v2 로 마이그레이션, 저장은 항상 v2.
+- **면 위 스케치 (형식 v3)**: `plane: {type: 'face', object, face, offset}` — 객체의 이름 있는 면(박스 top·bottom·±X·±Y, 원통·원뿔 top·bottom,
+  돌출 end·start·(사각형) ±u·±v, 불리언은 기준 객체 면)에 붙는다. 면 좌표계는 피처 정의·월드 변환만으로 계산하므로 필렛·구멍·치수 변경·이동에도
+  같은 면을 가리킨다 (`cad/sketchPlane.ts` ↔ `app/cad/frames.py`, 공유 픽스처 `model-face-sketch.json`). 상세: `docs/design-face-sketch.md`.
+- 돌출 거리는 음수 가능 (= 법선 반대쪽, 면 안쪽으로 홈·구멍). 의존 순환(돌출 → 스케치 → 붙은 객체 → …)과 스케치가 붙은 객체의 삭제는 거부.
+- 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1·v2 파일은 열 때 v3 으로 마이그레이션 (v1 은 `sketches: []` 추가), 저장은 항상 v3.
 
 ## 불리언 트리
 

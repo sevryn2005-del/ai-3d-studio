@@ -311,5 +311,33 @@
         }
       ]
     }
+  },
+  {
+    "id": "boss-on-plate-top",
+    "note": "기존 판의 윗면에 스케치를 붙여 기둥을 세운다 (면 위 스케치)",
+    "prompt": "판 윗면 가운데에 지름 10mm, 높이 6mm 원기둥을 세워줘. 판 두께를 바꿔도 따라오게 해줘",
+    "objects": "fixture:model-sketch-plate.json",
+    "selected": "plate",
+    "expect": {
+      "kind": "commands",
+      "has": [
+        {
+          "type": "create_sketch",
+          "plane": {
+            "type": "face",
+            "object": "plate",
+            "face": "end"
+          }
+        },
+        {
+          "type": "add_circle",
+          "diameter": 10
+        },
+        {
+          "type": "extrude",
+          "distance": 6
+        }
+      ]
+    }
   }
 ]

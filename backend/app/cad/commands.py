@@ -39,6 +39,11 @@ Radius = Annotated[float, _num(Limits.MIN_DIMENSION / 2, Limits.MAX_DIMENSION / 
 RadiusOrZero = Annotated[float, _num(0, Limits.MAX_DIMENSION / 2)]
 Coordinate = Annotated[float, _num(-Limits.MAX_COORDINATE, Limits.MAX_COORDINATE)]
 Angle = Annotated[float, _num(-Limits.MAX_ROTATION, Limits.MAX_ROTATION)]
+# 돌출 거리: 양수 = 평면 법선 방향, 음수 = 반대 방향 (면 위 스케치에서 안쪽으로 파내기). 크기는 치수 범위
+ExtrudeDistance = Union[
+    Annotated[float, _num(Limits.MIN_DIMENSION, Limits.MAX_DIMENSION)],
+    Annotated[float, _num(-Limits.MAX_DIMENSION, -Limits.MIN_DIMENSION)],
+]
 
 Vec3 = tuple[Coordinate, Coordinate, Coordinate]
 Rotation = tuple[Angle, Angle, Angle]
@@ -101,7 +106,7 @@ class ConeParams(Strict):
 
 
 class ExtrudeParams(Strict):
-    distance: Dimension
+    distance: ExtrudeDistance
 
 
 PARAMS_MODELS: dict[str, type[Strict]] = {
@@ -142,12 +147,27 @@ class SketchDimension(Strict):
     value: Dimension
 
 
-class SketchPlane(Strict):
+class StandardPlane(Strict):
     """CadQuery 이름 평면과 같은 규약. offset = 평면 법선 방향 거리 (mm).
     XY: u=X, v=Y, 법선 +Z · XZ: u=X, v=Z, 법선 −Y · YZ: u=Y, v=Z, 법선 +X"""
 
     type: Literal["XY", "XZ", "YZ"]
     offset: Coordinate
+
+
+FaceName = Literal["top", "bottom", "+X", "-X", "+Y", "-Y", "start", "end", "+u", "-u", "+v", "-v"]
+
+
+class FacePlane(Strict):
+    """객체의 이름 있는 면에 붙는 평면 (docs/design-face-sketch.md). offset = 면의 바깥 법선 방향 거리."""
+
+    type: Literal["face"]
+    object: ObjectId
+    face: FaceName
+    offset: Coordinate
+
+
+SketchPlane = Annotated[Union[StandardPlane, FacePlane], Field(discriminator="type")]
 
 
 class Sketch(Strict):
@@ -171,10 +191,10 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
-                    "plane": sketch.plane.type}
+                    "plane": sketch.plane}
         return None
     if "diameter" in dims:
-        return {"type": "circle", "center": e.center, "diameter": dims["diameter"], "z": z, "plane": sketch.plane.type}
+        return {"type": "circle", "center": e.center, "diameter": dims["diameter"], "z": z, "plane": sketch.plane}
     return None
 
 
@@ -266,7 +286,7 @@ CadObject = Annotated[
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[2]
+    schemaVersion: Literal[3]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -373,7 +393,7 @@ class Extrude(Strict):
     name: Name | None = None
     sketch: ObjectId
     profile: ObjectId
-    distance: Dimension
+    distance: ExtrudeDistance
     position: Vec3 | None = None
 
 
@@ -403,7 +423,7 @@ class SetParamsParams(Strict):
     radius: Radius | None = None
     radiusBottom: RadiusOrZero | None = None
     radiusTop: RadiusOrZero | None = None
-    distance: Dimension | None = None
+    distance: ExtrudeDistance | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:

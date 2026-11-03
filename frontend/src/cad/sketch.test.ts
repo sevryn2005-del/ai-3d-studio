@@ -74,7 +74,7 @@ describe('거부되는 경우 (원본 보존)', () => {
     [{ type: 'set_dimension', sketch: 'sk1', dimension: 'r1.diameter', value: 5 }, '치수 r1.diameter 이(가) 없습니다 (있는 치수: r1.width, r1.height)'],
     [{ type: 'set_dimension', sketch: 'sk1', dimension: 'r1.width', value: 0 }, '0.1mm 이상'],
     [{ type: 'extrude', sketch: 'sk1', profile: 'zz', distance: 4 }, '프로파일 zz 이(가) 없습니다'],
-    [{ type: 'extrude', sketch: 'sk1', profile: 'r1', distance: -4 }, '잘못된 명령'],
+    [{ type: 'extrude', sketch: 'sk1', profile: 'r1', distance: 0.05 }, '잘못된 명령'], // |거리| < 0.1 (음수는 반대 방향으로 유효)
     [{ type: 'create_sketch', id: 'plate' }, '이미 존재하는 ID'],
     [{ type: 'create_box', id: 'sk1', width: 1, depth: 1, height: 1 }, '이미 존재하는 ID'],
     [{ type: 'add_rectangle', sketch: 'sk1', id: 'r1', width: 1, height: 1 }, '이미 있는 요소 ID'],

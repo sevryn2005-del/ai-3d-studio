@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import type { CadObject, DimensionKind, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane } from '../../cad/commandTypes';
-import { PLANE_LABEL } from '../../cad/sketchPlane';
+import type { CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
+import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
 import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
 
-/** 평면의 u·v 가 가리키는 월드 축 (sketchPlane.ts 규약) */
-const PLANE_AXES: Record<SketchPlane['type'], [string, string]> = { XY: ['X', 'Y'], XZ: ['X', 'Z'], YZ: ['Y', 'Z'] };
+/** 평면의 u·v 가 가리키는 축 이름 (sketchPlane.ts 규약, 면 평면은 u·v) */
 const dimLabel = (kind: DimensionKind, plane: SketchPlane) =>
-  kind === 'diameter' ? '지름' : kind === 'width' ? `폭 (${PLANE_AXES[plane.type][0]})` : `높이 (${PLANE_AXES[plane.type][1]})`;
+  kind === 'diameter' ? '지름' : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
 const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원' };
 
 /**
@@ -35,8 +34,8 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
           testId={`dim-${entity.id}.${kind}`}
         />
       ))}
-      <NumberField label={`중심 ${PLANE_AXES[sketch.plane.type][0]}`} unit="mm" value={entity.center[0]} onCommit={setCenter(0)} testId={`center-${entity.id}-x`} />
-      <NumberField label={`중심 ${PLANE_AXES[sketch.plane.type][1]}`} unit="mm" value={entity.center[1]} onCommit={setCenter(1)} testId={`center-${entity.id}-y`} />
+      <NumberField label={`중심 ${planeAxes(sketch.plane)[0]}`} unit="mm" value={entity.center[0]} onCommit={setCenter(0)} testId={`center-${entity.id}-x`} />
+      <NumberField label={`중심 ${planeAxes(sketch.plane)[1]}`} unit="mm" value={entity.center[1]} onCommit={setCenter(1)} testId={`center-${entity.id}-y`} />
     </>
   );
 }
@@ -80,10 +79,21 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
             data-testid="sketch-plane"
             value={sketch.plane.type}
             onChange={(e) =>
-              submitNow({ type: 'set_sketch_plane', sketch: sketch.id, plane: { ...sketch.plane, type: e.target.value as SketchPlane['type'] } })
+              e.target.value !== 'face' &&
+              submitNow({
+                type: 'set_sketch_plane',
+                sketch: sketch.id,
+                plane: { type: e.target.value as StandardPlane['type'], offset: sketch.plane.offset },
+              })
             }
           >
-            {(Object.keys(PLANE_LABEL) as SketchPlane['type'][]).map((t) => (
+            {sketch.plane.type === 'face' && (
+              <option value="face">
+                {model.objects.find((o) => o.id === (sketch.plane as { object: string }).object)?.name ?? sketch.plane.object}의{' '}
+                {FACE_LABEL[sketch.plane.face]}
+              </option>
+            )}
+            {(Object.keys(PLANE_LABEL) as StandardPlane['type'][]).map((t) => (
               <option key={t} value={t}>
                 {PLANE_LABEL[t]}
               </option>
@@ -152,7 +162,7 @@ function ExtrudeAction({ sketch, entityId }: { sketch: Sketch; entityId: string 
   const [distance, setDistance] = useState(4);
   return (
     <>
-      <NumberField label="돌출 거리" unit="mm" value={distance} onCommit={setDistance} testId={`extrude-distance-${entityId}`} />
+      <NumberField label="거리 (−: 안쪽)" unit="mm" value={distance} onCommit={setDistance} testId={`extrude-distance-${entityId}`} />
       <button
         data-testid={`extrude-${entityId}`}
         disabled={!resolveProfile(sketch, entityId)}
@@ -197,11 +207,50 @@ function HoleAction({ object, model }: { object: Extract<CadObject, { kind: 'ext
     <fieldset>
       <legend>관통 구멍</legend>
       <NumberField label="지름" unit="mm" value={diameter} onCommit={setDiameter} testId="hole-diameter" />
-      <NumberField label={`중심 ${PLANE_AXES[profile.plane.type][0]}`} unit="mm" value={c[0]} onCommit={(v) => setCenter([v, c[1]])} testId="hole-x" />
-      <NumberField label={`중심 ${PLANE_AXES[profile.plane.type][1]}`} unit="mm" value={c[1]} onCommit={(v) => setCenter([c[0], v])} testId="hole-y" />
+      <NumberField label={`중심 ${planeAxes(profile.plane)[0]}`} unit="mm" value={c[0]} onCommit={(v) => setCenter([v, c[1]])} testId="hole-x" />
+      <NumberField label={`중심 ${planeAxes(profile.plane)[1]}`} unit="mm" value={c[1]} onCommit={(v) => setCenter([c[0], v])} testId="hole-y" />
       {!plan.ok && <div className="muted small">{plan.error}</div>}
       <button data-testid="hole-apply" disabled={!plan.ok} onClick={() => plan.ok && dispatchBatch(plan.commands)}>
         구멍 뚫기
+      </button>
+    </fieldset>
+  );
+}
+
+/**
+ * 객체의 이름 있는 면에 새 스케치 (docs/design-face-sketch.md). 만든 스케치가 선택되고,
+ * 뷰포트 그리기(R·C)나 "+ 사각형/+ 원" 으로 도형을 넣은 뒤 돌출한다. 객체가 움직이거나 치수가 바뀌면 따라간다.
+ */
+export function FaceSketchAction({ object, model }: { object: CadObject; model: ModelDefinition }) {
+  const submitNow = useSceneStore((s) => s.submitNow);
+  const faces = facesOf(model, object);
+  const [face, setFace] = useState<FaceName | ''>('');
+  const chosen = face && faces.includes(face) ? face : faces[0];
+  if (!chosen) return null;
+  return (
+    <fieldset>
+      <legend>이 면에 스케치</legend>
+      <div className="field">
+        <label htmlFor="face-pick">면</label>
+        <select id="face-pick" data-testid="face-pick" value={chosen} onChange={(e) => setFace(e.target.value as FaceName)}>
+          {faces.map((f) => (
+            <option key={f} value={f}>
+              {FACE_LABEL[f]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        data-testid="face-sketch"
+        onClick={() =>
+          submitNow({
+            type: 'create_sketch',
+            name: `${object.name} ${FACE_LABEL[chosen].split(' ')[0]} 스케치`,
+            plane: { type: 'face', object: object.id, face: chosen, offset: 0 },
+          })
+        }
+      >
+        스케치 만들기
       </button>
     </fieldset>
   );

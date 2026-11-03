@@ -200,6 +200,10 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         return fail(`'${target.name}'은(는) '${parent.name}'에 포함되어 있어 단독으로 삭제할 수 없습니다`);
       }
       const remove = new Set(subtreeIds(model, target.id));
+      // 면 위 스케치가 붙어 있으면 거부 (스케치를 다른 평면으로 옮기거나 지운 뒤 삭제)
+      const anchored = model.sketches.filter((k) => k.plane.type === 'face' && remove.has(k.plane.object));
+      if (anchored.length)
+        return fail(`'${anchored.map((k) => k.name).join("', '")}' 스케치가 이 객체의 면에 붙어 있어 삭제할 수 없습니다`);
       return done(model, { ...model, objects: model.objects.filter((o) => !remove.has(o.id)) }, cmd, null);
     }
   }

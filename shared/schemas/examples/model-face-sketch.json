@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 3,
+  "units": "mm",
+  "sketches": [
+    {
+      "id": "sk_plate",
+      "name": "판 윤곽",
+      "plane": {
+        "type": "XY",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "r1",
+          "type": "rectangle",
+          "center": [
+            0,
+            0
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "r1.width",
+          "entity": "r1",
+          "kind": "width",
+          "value": 80
+        },
+        {
+          "id": "r1.height",
+          "entity": "r1",
+          "kind": "height",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "id": "sk_top",
+      "name": "윗면",
+      "plane": {
+        "type": "face",
+        "object": "plate",
+        "face": "end",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "c1",
+          "type": "circle",
+          "center": [
+            5,
+            0
+          ]
+        },
+        {
+          "id": "r1",
+          "type": "rectangle",
+          "center": [
+            0,
+            0
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "c1.diameter",
+          "entity": "c1",
+          "kind": "diameter",
+          "value": 10
+        },
+        {
+          "id": "r1.width",
+          "entity": "r1",
+          "kind": "width",
+          "value": 10
+        },
+        {
+          "id": "r1.height",
+          "entity": "r1",
+          "kind": "height",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "id": "sk_side",
+      "name": "옆면",
+      "plane": {
+        "type": "face",
+        "object": "plate",
+        "face": "-u",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "c1",
+          "type": "circle",
+          "center": [
+            0,
+            1
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "c1.diameter",
+          "entity": "c1",
+          "kind": "diameter",
+          "value": 6
+        }
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "id": "plate",
+      "name": "판",
+      "kind": "extrude",
+      "params": {
+        "distance": 4
+      },
+      "extrude": {
+        "sketch": "sk_plate",
+        "profile": "r1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "boss",
+      "name": "기둥",
+      "kind": "extrude",
+      "params": {
+        "distance": 6
+      },
+      "extrude": {
+        "sketch": "sk_top",
+        "profile": "c1"
+      },
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -90
+        ]
+      }
+    },
+    {
+      "id": "pocket",
+      "name": "홈",
+      "kind": "extrude",
+      "params": {
+        "distance": -3
+      },
+      "extrude": {
+        "sketch": "sk_top",
+        "profile": "r1"
+      },
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -90
+        ]
+      }
+    },
+    {
+      "id": "peg",
+      "name": "돌기",
+      "kind": "extrude",
+      "params": {
+        "distance": 5
+      },
+      "extrude": {
+        "sketch": "sk_side",
+        "profile": "c1"
+      },
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -90
+        ]
+      }
+    },
+    {
+      "id": "plate_cut",
+      "name": "홈 판",
+      "kind": "boolean",
+      "boolean": {
+        "operation": "cut",
+        "base": "plate",
+        "tools": [
+          "pocket"
+        ]
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "part",
+      "name": "부품",
+      "kind": "boolean",
+      "boolean": {
+        "operation": "union",
+        "base": "plate_cut",
+        "tools": [
+          "boss",
+          "peg"
+        ]
+      },
+      "transform": {
+        "position": [
+          10,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          90
+        ]
+      }
+    }
+  ]
+}

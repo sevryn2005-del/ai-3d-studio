@@ -40,7 +40,8 @@ export type HoleResult = { ok: true; commands: CadCommand[]; holeId: ObjectId; c
 
 /**
  * 돌출 판에 원형 관통 구멍.
- * - 구멍 스케치: 판 스케치와 같은 평면에서 법선 반대로 1mm, 돌출 거리 = 판 두께 + 2mm (위아래로 1mm 씩 넘침)
+ * - 구멍 스케치: 판 스케치와 같은 평면(기준 평면·면 평면 모두)에서 판 바깥으로 1mm, 돌출 거리 = 판 두께 + 2mm
+ *   (위아래로 1mm 씩 넘침). 판이 반대 방향(음수 거리)으로 돌출됐으면 구멍도 같은 방향으로.
  * - 구멍 객체는 판의 월드 변환을 그대로 받는다 (판이 불리언 안에 있으면 상위 변환을 합성)
  * - 최상위 객체(판 자신 또는 판을 포함한 불리언)에서 구멍을 뺀다
  * center 는 판 스케치 평면 좌표 (mm).
@@ -66,13 +67,14 @@ export function throughHoleCommands(
   if (!fits) return { ok: false, error: `구멍이 판 가장자리에서 ${HOLE_MIN_WALL}mm 이상 안쪽에 있어야 합니다` };
 
   const { world, root } = worldPlacement(model, plate.id);
+  const sign = plate.params.distance < 0 ? -1 : 1;
 
   const sketchId = nextId(model, 'sk_hole');
   const holeId = nextId(model, 'hole');
   const cutId = nextId(model, 'cut');
   const holeCount = model.objects.filter((o) => o.kind === 'extrude' && o.name.startsWith('관통 구멍')).length;
   const commands: CadCommand[] = [
-    { type: 'create_sketch', id: sketchId, name: `구멍 ${holeCount + 1}`, plane: { type: sketch.plane.type, offset: sketch.plane.offset - 1 } },
+    { type: 'create_sketch', id: sketchId, name: `구멍 ${holeCount + 1}`, plane: { ...sketch.plane, offset: sketch.plane.offset - sign } },
     { type: 'add_circle', sketch: sketchId, id: 'c1', center: hole.center, diameter: hole.diameter },
     {
       type: 'extrude',
@@ -80,7 +82,7 @@ export function throughHoleCommands(
       name: `관통 구멍 ${holeCount + 1}`,
       sketch: sketchId,
       profile: 'c1',
-      distance: plate.params.distance + 2,
+      distance: sign * (Math.abs(plate.params.distance) + 2),
       position: world.position,
     },
   ];
@@ -124,14 +126,4 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
     add = { type: 'add_circle', sketch: sid, id: entityId('c'), center: [round(shape.center[0]), round(shape.center[1])], diameter };
   }
   return existing ? [add] : [{ type: 'create_sketch', id: sid }, add];
-}
-
-/**
- * 스케치를 화면에 놓는 변환: 스케치를 쓰는 돌출 객체(preferred 우선)의 월드 변환, 없으면 원점.
- * 돌출 형상과 스케치 윤곽·그리기 평면이 겹쳐 보이도록 한다.
- */
-export function sketchPlacement(model: ModelDefinition, sketchId: ObjectId, preferred?: ObjectId): Transform {
-  const users = model.objects.filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketchId);
-  const user = users.find((o) => o.id === preferred) ?? users[0];
-  return user ? worldPlacement(model, user.id).world : { position: [0, 0, 0], rotation: [0, 0, 0] };
 }

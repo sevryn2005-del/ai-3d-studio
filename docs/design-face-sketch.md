@@ -1,6 +1,6 @@
 # 설계: 면 위 스케치 (기존 형상의 면에 스케치를 붙이기)
 
-상태: **설계 (구현 전)** · 관련: `docs/plan-sketch-extrude.md`, `docs/architecture.md` "스케치와 돌출"
+상태: **✅ 구현 완료 (권장안 B, 형식 v3)** — 결과는 7장 · 관련: `docs/plan-sketch-extrude.md`, `docs/architecture.md` "스케치와 돌출"
 
 ## 1. 목표
 
@@ -93,3 +93,23 @@ CadQuery/OCCT 의 면 번호로 "윗면(+Z 평면)"을 찾으면 (`backend` 에�
 1. **권장안 B 채택 여부** (이름 있는 면만 지원, 불리언 결과의 임의 면은 기준 객체 면으로만).
 2. **형식 v3 로 올리는 시점**: 이 기능과 함께 (권장).
 3. **곡면(원통 옆면) 스케치**: 이번 범위에서 제외 (권장). 평면만.
+
+## 7. 구현 결과
+
+결정: 권장안 B, 이 기능과 함께 형식 v3, 곡면 스케치 제외.
+
+계획과 달라진 점
+- 면 안쪽으로 파내려면 돌출 방향을 뒤집어야 해서 **음수 돌출 거리**(= 법선 반대쪽)를 함께 도입했다. 관통 구멍 도우미도 음수 판을 지원.
+- 뷰포트에서 면을 클릭해 고르는 기능은 이번에 넣지 않았다. 속성 패널 "이 면에 스케치"에서 고른 뒤, 그 스케치 위에 그리기 도구(R·C)로 그린다.
+
+| 항목 | 파일 | 검사 |
+|------|------|------|
+| 형식 v3 (면 평면·음수 거리), v1·v2 → v3 마이그레이션 | `cad/commandTypes.ts`, `app/cad/commands.py`, `projectFile.ts` | `projectFile.test.ts`, `legacy-project.spec.ts` |
+| 면 좌표계 표 (같은 규칙 두 구현) | `cad/sketchPlane.ts`, `app/cad/frames.py` | `sketchPlane.test.ts`, `test_face_sketch.py::test_frame_math_matches_frontend_table` |
+| 두 엔진 | `browser/geometry.ts`, `app/cad/primitives.py` (평면 좌표에서 만들고 행렬로 옮김) | 공유 픽스처 `model-face-sketch.json`: 바운딩 박스·부피·홈/기둥/돌기 위치, STL |
+| 추종 | 형상 키에 면 좌표계 포함 (`renderMesh.geometryKey`) | 판 두께 4→6·이동·불리언 안에서도 기둥 위치 (단위 테스트·E2E·서버) |
+| 규칙 | 없는 면·객체 거부, 순환 거부, 붙은 객체 삭제 거부 | `sketchPlane.test.ts`, `test_face_sketch.py::TestValidation`, AI 검증기 |
+| UI | 속성 패널 "이 면에 스케치", 평면 표시, u·v 라벨, 음수 거리 | `e2e/sketch-extrude.spec.ts` "면 위 스케치" |
+| AI | 프롬프트 면 이름 표·음수 거리, 검증기, 평가 케이스 `boss-on-plate-top` | `test_ai_chat.py` |
+
+남은 것: 뷰포트에서 면 클릭으로 고르기, 곡면(원통 옆면) 스케치, 실제 API 로 평가 케이스 녹화.

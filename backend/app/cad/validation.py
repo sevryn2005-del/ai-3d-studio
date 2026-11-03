@@ -13,12 +13,14 @@ from app.cad.commands import (
     BooleanObject,
     BoxObject,
     ExtrudeObject,
+    FacePlane,
     Limits,
     ModelDefinition,
     Sketch,
     max_edge_size,
     resolve_profile,
 )
+from app.cad.frames import dependency_cycle, faces_of
 
 
 def _literal(model: type, field: str) -> str:
@@ -26,8 +28,10 @@ def _literal(model: type, field: str) -> str:
 
 
 # 판별 유니온 태그(오류 경로에 끼어드는 "box", "create_box" 등). 모델 정의에서 유도한다.
-_UNION_TAGS: frozenset[str] = frozenset(_literal(m, "kind") for m in OBJECT_MODELS) | frozenset(
-    _literal(m, "type") for m in COMMAND_MODELS
+_UNION_TAGS: frozenset[str] = (
+    frozenset(_literal(m, "kind") for m in OBJECT_MODELS)
+    | frozenset(_literal(m, "type") for m in COMMAND_MODELS)
+    | frozenset({"XY", "XZ", "YZ", "face", "rectangle", "circle"})  # 스케치 평면·요소 유니온 태그
 )
 
 
@@ -119,6 +123,20 @@ def check_model(model: ModelDefinition) -> list[Issue]:
             elif resolve_profile(sk, obj.extrude.profile) is None:
                 issues.append(Issue(path=f"objects.{i}.extrude.profile",
                                     message=f"{obj.id}: 스케치 {sk.id} 에 사용할 수 있는 프로파일 {obj.extrude.profile} 이(가) 없습니다"))
+
+    # 면 평면: 붙은 객체·면 이름·순환 (프론트엔드 modelGraph.validateGraph 와 같은 규칙)
+    by_id = {o.id: o for o in model.objects}
+    for i, sk in enumerate(model.sketches):
+        if not isinstance(sk.plane, FacePlane):
+            continue
+        anchor = by_id.get(sk.plane.object)
+        if anchor is None:
+            issues.append(Issue(path=f"sketches.{i}.plane.object", message=f"{sk.id}: 존재하지 않는 객체의 면에 붙어 있습니다: {sk.plane.object}"))
+        elif sk.plane.face not in (faces := faces_of(model, anchor)):
+            issues.append(Issue(path=f"sketches.{i}.plane.face",
+                                message=f"{sk.id}: {anchor.name} 에는 '{sk.plane.face}' 면이 없습니다 (있는 면: {', '.join(faces) or '없음'})"))
+    if cycle := dependency_cycle(model):
+        issues.append(Issue(path="", message=cycle))
 
     index = {o.id: o for o in model.objects}
     parent_of: dict[str, str] = {}

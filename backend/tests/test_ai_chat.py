@@ -15,7 +15,7 @@ def model_with(*objs) -> ModelDefinition:
         {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
     ]
-    return ModelDefinition.model_validate({"schemaVersion": 2, "units": "mm", "sketches": [], "objects": base + list(objs)})
+    return ModelDefinition.model_validate({"schemaVersion": 3, "units": "mm", "sketches": [], "objects": base + list(objs)})
 
 
 def chat(client, text_in="높이를 50mm로 바꿔줘", selected="box_1", history=(), model=None):
@@ -205,6 +205,34 @@ class TestValidator:
             {"type": "delete_sketch", "sketch": "sk"},
         ], m)
         assert errors == [] and len(cmds) == 3
+
+    def test_face_sketch(self):
+        cmds, errors = validate_commands([
+            {"type": "create_sketch", "id": "sk_plate"},
+            {"type": "add_rectangle", "sketch": "sk_plate", "id": "r1", "width": 60, "height": 40},
+            {"type": "extrude", "id": "plate", "sketch": "sk_plate", "profile": "r1", "distance": 4},
+            {"type": "create_sketch", "id": "sk_top", "plane": {"type": "face", "object": "plate", "face": "end", "offset": 0}},
+            {"type": "add_circle", "sketch": "sk_top", "id": "c1", "diameter": 6},
+            {"type": "extrude", "id": "hole", "sketch": "sk_top", "profile": "c1", "distance": -6},
+            {"type": "cut", "id": "holed", "base": "plate", "tools": ["hole"]},
+            {"type": "create_sketch", "id": "sk_side", "plane": {"type": "face", "object": "holed", "face": "+u", "offset": 0}},
+            {"type": "create_sketch", "id": "sk_box", "plane": {"type": "face", "object": "box_1", "face": "-Y", "offset": 0}},
+        ], model_with())
+        assert errors == [] and len(cmds) == 9
+
+    def test_face_sketch_errors(self):
+        _, errors = validate_commands([
+            {"type": "create_sphere", "id": "ball", "radius": 5},
+            {"type": "create_sketch", "id": "a", "plane": {"type": "face", "object": "ball", "face": "top", "offset": 0}},
+            {"type": "create_sketch", "id": "b", "plane": {"type": "face", "object": "box_1", "face": "end", "offset": 0}},
+            {"type": "create_sketch", "id": "c", "plane": {"type": "face", "object": "box_1", "face": "top", "offset": 0}},
+            {"type": "delete_object", "target": "box_1"},
+        ], model_with())
+        assert errors == [
+            "commands[1].plane.face: sphere 'ball' has no face 'top' (faces: none)",
+            "commands[2].plane.face: box 'box_1' has no face 'end' (faces: top, bottom, +X, -X, +Y, -Y)",
+            "commands[4].target: sketch c is attached to a face of 'box_1'; delete or move those sketches first",
+        ]
 
     @pytest.mark.parametrize("raw", [None, [], "x", [{"type": "exec_python"}]])
     def test_malformed(self, raw):

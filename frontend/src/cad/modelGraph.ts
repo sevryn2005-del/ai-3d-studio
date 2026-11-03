@@ -2,6 +2,7 @@
  * 객체 간 부모-자식 관계 (불리언 트리).
  * 관계는 불리언 객체의 base/tools 참조로만 표현되며, 이 모듈이 그로부터 유도한다.
  */
+import { facesOf } from './sketchPlane';
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
@@ -76,6 +77,16 @@ export function validateGraph(model: ModelDefinition): string[] {
     if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${o.extrude.sketch}`);
     else if (!resolveProfile(sk, o.extrude.profile)) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${o.extrude.profile} 이(가) 없습니다`);
   }
+  // 면 평면: 붙은 객체와 면 이름 (docs/design-face-sketch.md)
+  for (const sk of model.sketches) {
+    if (sk.plane.type !== 'face') continue;
+    const anchor = index.get(sk.plane.object);
+    if (!anchor) errors.push(`${sk.id}: 존재하지 않는 객체의 면에 붙어 있습니다: ${sk.plane.object}`);
+    else if (!facesOf(model, anchor).includes(sk.plane.face))
+      errors.push(`${sk.id}: ${anchor.name} 에는 '${sk.plane.face}' 면이 없습니다 (있는 면: ${facesOf(model, anchor).join(', ') || '없음'})`);
+  }
+  const cycle = dependencyCycle(model);
+  if (cycle) errors.push(cycle);
   for (const o of model.objects) {
     if (o.kind === 'box' && o.edgeFeature) {
       const err = edgeFeatureError(o.params, o.edgeFeature);
@@ -114,4 +125,35 @@ export function validateGraph(model: ModelDefinition): string[] {
     }
   }
   return errors;
+}
+
+/**
+ * 의존 순환 검사: 돌출 → 스케치, 스케치(면 평면) → 붙은 객체, 불리언 → 자식.
+ * 예: 판의 스케치를 판 자신의 윗면에 붙이면 순환. 순환이 있으면 사용자용 메시지, 없으면 null.
+ */
+export function dependencyCycle(model: ModelDefinition): string | null {
+  const edges = new Map<string, string[]>();
+  const add = (from: string, to: string) => edges.set(from, [...(edges.get(from) ?? []), to]);
+  for (const o of model.objects) {
+    if (o.kind === 'extrude') add(`o:${o.id}`, `s:${o.extrude.sketch}`);
+    if (o.kind === 'boolean') for (const c of childIds(o)) add(`o:${o.id}`, `o:${c}`);
+  }
+  for (const sk of model.sketches) if (sk.plane.type === 'face') add(`s:${sk.id}`, `o:${sk.plane.object}`);
+  const state = new Map<string, 1 | 2>(); // 1 = 방문 중, 2 = 끝
+  const visit = (node: string): string | null => {
+    if (state.get(node) === 2) return null;
+    if (state.get(node) === 1) return node;
+    state.set(node, 1);
+    for (const next of edges.get(node) ?? []) {
+      const hit = visit(next);
+      if (hit) return hit;
+    }
+    state.set(node, 2);
+    return null;
+  };
+  for (const node of edges.keys()) {
+    const hit = visit(node);
+    if (hit) return `면 참조가 순환합니다: ${hit.slice(2)} (스케치를 자신이 만든 형상의 면에 붙일 수 없습니다)`;
+  }
+  return null;
 }

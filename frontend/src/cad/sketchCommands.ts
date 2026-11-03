@@ -5,6 +5,8 @@ import type { CadCommand, CadObject, ModelDefinition, ObjectId, Sketch } from '.
 import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
 import { findSketch, resolveProfile } from './sketch';
+import { facesOf } from './sketchPlane';
+import { dependencyCycle } from './modelGraph';
 
 const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
@@ -23,6 +25,22 @@ const ok = (model: ModelDefinition, command: CadCommand, affectedId: ObjectId | 
 
 function replaceSketch(model: ModelDefinition, sketch: Sketch): ModelDefinition {
   return { ...model, sketches: model.sketches.map((s) => (s.id === sketch.id ? sketch : s)) };
+}
+
+/** 면 평면 검사: 붙을 객체·면 이름. 문제가 없으면 null */
+function planeError(model: ModelDefinition, plane: Sketch['plane']): string | null {
+  if (plane.type !== 'face') return null;
+  const anchor = model.objects.find((o) => o.id === plane.object);
+  if (!anchor) return `존재하지 않는 객체입니다: ${plane.object}`;
+  const faces = facesOf(model, anchor);
+  if (!faces.includes(plane.face)) return `'${anchor.name}'에는 '${plane.face}' 면이 없습니다 (있는 면: ${faces.join(', ') || '없음'})`;
+  return null;
+}
+
+/** 결과 모델에 의존 순환이 생기면 실패 (예: 판의 스케치를 판 자신의 면에 붙임) */
+function okUnlessCycle(next: ModelDefinition, command: CadCommand, affectedId: ObjectId | null): ExecuteResult {
+  const cycle = dependencyCycle(next);
+  return cycle ? fail(cycle) : ok(next, command, affectedId);
 }
 
 function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
@@ -44,6 +62,8 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       if (model.sketches.length >= LIMITS.maxSketches) return fail(`스케치는 최대 ${LIMITS.maxSketches}개까지 가능합니다`);
       const id = cmd.id ?? nextId(model, 'sketch');
       if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const planeErr = planeError(model, cmd.plane ?? { type: 'XY', offset: 0 });
+      if (planeErr) return fail(planeErr);
       const sketch: Sketch = {
         id,
         name: cmd.name ?? `스케치 ${model.sketches.length + 1}`,
@@ -119,7 +139,9 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
     case 'set_sketch_plane': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
-      return ok(replaceSketch(model, { ...sketch, plane: cmd.plane }), cmd, null);
+      const planeErr = planeError(model, cmd.plane);
+      if (planeErr) return fail(planeErr);
+      return okUnlessCycle(replaceSketch(model, { ...sketch, plane: cmd.plane }), cmd, null);
     }
 
     case 'rename_sketch': {

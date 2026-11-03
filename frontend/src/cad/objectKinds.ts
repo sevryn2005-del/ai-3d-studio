@@ -6,7 +6,7 @@ import type { BooleanOperation, CadObject, ModelDefinition, ObjectKind } from '.
 import { formatMm } from './units';
 import { describeEdgeFeature } from './edgeFeature';
 import { findSketch, resolveProfile } from './sketch';
-import { planeSizeToLocal } from './sketchPlane';
+import { extrudeLocalMatrix, extrudeLocalSize } from './sketchPlane';
 
 export interface ParamField {
   key: string;
@@ -72,7 +72,9 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const p = extrudeProfile(obj, model);
       if (!p) return [0, 0, obj.params.distance];
       const d = obj.params.distance;
-      return planeSizeToLocal(p.plane, p.type === 'rectangle' ? [p.width, p.height, d] : [p.diameter, p.diameter, d]);
+      const local = extrudeLocalMatrix(model, obj);
+      const size: [number, number, number] = p.type === 'rectangle' ? [p.width, p.height, Math.abs(d)] : [p.diameter, p.diameter, Math.abs(d)];
+      return local ? extrudeLocalSize(local, size) : size;
     }
     case 'boolean': {
       const base = model.objects.find((o) => o.id === obj.boolean.base);

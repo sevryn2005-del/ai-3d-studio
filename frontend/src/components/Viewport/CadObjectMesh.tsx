@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Euler, Quaternion, Vector3, type BufferGeometry } from 'three';
-import { extrudePreviewMatrix } from '../../cad/sketchPlane';
+import { Euler, Quaternion, Vector3, type BufferGeometry, type Matrix4 } from 'three';
+import { extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
 import { resolveProfile, type Profile } from '../../cad/sketch';
 import { useEditorStore } from '../../features/selection/editorStore';
-import { useSceneStore } from '../../cad/sceneStore';
+import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
 import { useBackendStore } from '../../features/backend/backendStore';
 import { geometryKey } from '../../features/backend/renderMesh';
@@ -25,7 +25,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 2, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 3, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -84,15 +84,18 @@ function PreviewBody({
   variant: Variant;
 }) {
   const sketches = useSketches();
+  const model = useSceneStore(selectModel);
   if (object.kind !== 'boolean') {
     let profile: Profile | null = null;
+    let local: Matrix4 | null = null;
     if (object.kind === 'extrude') {
       const sk = sketches.get(object.extrude.sketch);
       profile = sk ? resolveProfile(sk, object.extrude.profile) : null;
-      if (!profile) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
+      local = extrudeLocalMatrix(model, object);
+      if (!profile || !local) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
     }
     return (
-      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} variant={variant} source={variant === 'ghost' ? 'ghost' : 'preview'} />
+      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} local={local} variant={variant} source={variant === 'ghost' ? 'ghost' : 'preview'} />
     );
   }
   return (
@@ -116,6 +119,7 @@ function ObjectMesh({
   geometry,
   primitive,
   profile,
+  local,
   variant,
   source,
 }: {
@@ -124,6 +128,8 @@ function ObjectMesh({
   primitive?: PrimitiveObject;
   /** 돌출 미리보기용 단면 */
   profile?: Profile | null;
+  /** 돌출: 스케치 평면 → 객체 로컬 (sketchPlane.extrudeLocalMatrix) */
+  local?: Matrix4 | null;
   variant: Variant;
   source: 'server' | 'browser' | 'preview' | 'ghost';
 }) {
@@ -136,7 +142,7 @@ function ObjectMesh({
 
   return (
     <mesh
-      {...(primitive ? primitivePlacement(primitive, profile ?? null) : {})}
+      {...(primitive ? primitivePlacement(primitive, profile ?? null, local ?? null) : {})}
       geometry={geometry}
       userData={{ source }}
       onClick={(e) => {
@@ -175,7 +181,7 @@ const SEGMENTS = 64;
  * 원점 규칙(바운딩 박스 바닥면 중심)에 맞추는 메시 배치.
  * Three.js 기본 도형은 중심이 원점이고, 원통은 Y축 방향이므로 Z축으로 눕힌다.
  */
-function primitivePlacement(o: PrimitiveObject, profile: Profile | null): {
+function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: Matrix4 | null): {
   position: [number, number, number];
   rotation?: [number, number, number];
 } {
@@ -189,8 +195,8 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null): {
       return { position: [0, 0, o.params.radius] };
     case 'extrude': {
       // 돌출: 평면 좌표에서 단면 중심 + 법선으로 distance/2 → 평면 기저로 객체 로컬에 놓는다
-      if (!profile) return { position: [0, 0, 0] };
-      const m = extrudePreviewMatrix(profile, o.params.distance);
+      if (!profile || !local) return { position: [0, 0, 0] };
+      const m = extrudePreviewMatrix(profile, o.params.distance, local);
       const pos = new Vector3();
       const q = new Quaternion();
       m.decompose(pos, q, new Vector3());
@@ -214,8 +220,8 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
     case 'extrude':
       if (profile?.type === 'circle') {
         const r = profile.diameter / 2;
-        return <cylinderGeometry args={[r, r, o.params.distance, SEGMENTS]} />;
+        return <cylinderGeometry args={[r, r, Math.abs(o.params.distance), SEGMENTS]} />;
       }
-      return <boxGeometry args={[profile?.width ?? 1, profile?.height ?? 1, o.params.distance]} />;
+      return <boxGeometry args={[profile?.width ?? 1, profile?.height ?? 1, Math.abs(o.params.distance)]} />;
   }
 }

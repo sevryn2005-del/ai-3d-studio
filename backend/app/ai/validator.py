@@ -15,6 +15,7 @@ from app.cad.commands import (
     BooleanObject,
     CadCommandAdapter,
     ExtrudeObject,
+    FacePlane,
     ModelDefinition,
     PARAMS_MODELS,
     REQUIRED_DIMENSIONS,
@@ -51,6 +52,40 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     extrude_refs: dict[str, tuple[str, str]] = {
         o.id: (o.extrude.sketch, o.extrude.profile) for o in model.objects if isinstance(o, ExtrudeObject)
     }
+
+    # 면 위 스케치: 스케치 → 붙은 객체, 불리언 → 기준 객체 (면 이름은 기준 객체 종류로 정한다)
+    anchors: dict[str, str] = {sk.id: sk.plane.object for sk in model.sketches if isinstance(sk.plane, FacePlane)}
+    bases: dict[str, str] = {o.id: o.boolean.base for o in model.objects if isinstance(o, BooleanObject)}
+
+    def allowed_faces(oid: str, depth: int = 0) -> list[str]:
+        kind = kinds.get(oid)
+        if kind == "box":
+            return ["top", "bottom", "+X", "-X", "+Y", "-Y"]
+        if kind in ("cylinder", "cone"):
+            return ["top", "bottom"]
+        if kind == "extrude":
+            sid, eid = extrude_refs.get(oid, ("", ""))
+            rect = sketches.get(sid, {}).get(eid) == "rectangle"
+            return ["end", "start", "+u", "-u", "+v", "-v"] if rect else ["end", "start"]
+        if kind == "boolean" and oid in bases and depth < 16:
+            return allowed_faces(bases[oid], depth + 1)
+        return []
+
+    def plane_ok(i: int, plane: dict | None, sid: str | None) -> None:
+        if not plane or plane.get("type") != "face":
+            if sid:
+                anchors.pop(sid, None)
+            return
+        if not exists(i, plane["object"], "plane.object"):
+            return
+        faces = allowed_faces(plane["object"])
+        if plane["face"] not in faces:
+            errors.append(
+                f"commands[{i}].plane.face: {kinds[plane['object']]} '{plane['object']}' has no face '{plane['face']}' "
+                f"(faces: {', '.join(faces) or 'none'})"
+            )
+        elif sid:
+            anchors[sid] = plane["object"]
 
     def users_of(sid: str, eid: str | None = None) -> list[str]:
         return sorted(o for o, (s_, p_) in extrude_refs.items() if s_ == sid and (eid is None or p_ == eid))
@@ -92,6 +127,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             kinds[oid] = _CREATE_KIND[t]
         elif t == "create_sketch":
             sid = c.get("id")
+            plane_ok(i, c.get("plane"), sid)
             if sid is None:
                 continue  # 자동 이름: 같은 묶음에서 참조할 수 없음
             if id_used(sid):
@@ -124,8 +160,11 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                         errors.append(f"commands[{i}].entity: '{c['entity']}' is used by extrude {', '.join(users)}; delete those objects first")
                     else:
                         ents.pop(c["entity"])
-        elif t in ("rename_sketch", "set_sketch_plane"):
+        elif t == "rename_sketch":
             sketch_exists(i, c["sketch"])
+        elif t == "set_sketch_plane":
+            if sketch_exists(i, c["sketch"]):
+                plane_ok(i, c["plane"], c["sketch"])
         elif t == "delete_sketch":
             if sketch_exists(i, c["sketch"]):
                 if users := users_of(c["sketch"]):
@@ -154,6 +193,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if id_used(new_id):
                     errors.append(f"commands[{i}].id: id '{new_id}' is already used")
                 kinds[new_id] = "boolean"
+                bases[new_id] = c["base"]
                 for oid in ids:
                     parent[oid] = new_id
         elif t == "set_params":
@@ -175,6 +215,9 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 gone = {c["target"]}
                 while extra := {k for k, p in parent.items() if p in gone and k not in gone}:
                     gone |= extra
+                if held := sorted(sk for sk, obj in anchors.items() if obj in gone):
+                    errors.append(f"commands[{i}].target: sketch {', '.join(held)} is attached to a face of '{c['target']}'; "
+                                  "delete or move those sketches first")
                 for oid in gone:
                     kinds.pop(oid, None)
                     extrude_refs.pop(oid, None)

@@ -8,7 +8,7 @@ import { dropToBedCommand } from '../../cad/printCheck';
 import { maxEdgeSize } from '../../cad/edgeFeature';
 import { formatMm } from '../../cad/units';
 import { usePrintCheck } from '../../features/print/usePrintCheck';
-import { ExtrudeFields, SketchProperties } from './SketchFields';
+import { ExtrudeFields, FaceSketchAction, SketchProperties } from './SketchFields';
 
 export function PropertyPanel() {
   const model = useSceneStore(selectModel);
@@ -142,6 +142,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
 
       {object.kind === 'box' && <EdgeFeatureFields object={object} />}
       {object.kind === 'extrude' && <ExtrudeFields object={object} model={model} />}
+      <FaceSketchAction key={`face-${object.id}`} object={object} model={model} />
 
       <fieldset>
         <legend>{parent ? `위치 (${parent.name} 기준)` : '위치 (바닥면 중심)'}</legend>

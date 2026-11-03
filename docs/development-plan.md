@@ -167,3 +167,8 @@
 
 - Windows 데스크톱 앱(Tauri) + 엔진 묶음(PyInstaller) + GitHub Actions(Windows) 테스트·설치·실행 검증. 상세: `docs/platforms.md`.
 - 설계 문서: 면 위 스케치 `docs/design-face-sketch.md`, 구속 해석기 검토 `docs/review-constraint-solver.md` (결정 대기).
+
+## 13. 면 위 스케치 (형식 v3) — ✅ 완료
+
+- 권장안 B (이름 있는 면) 구현. 두 엔진 교차 검증, UI·AI·마이그레이션 포함. 상세: `docs/design-face-sketch.md` 7장.
+- 다음 후보: 구속 해석기 1단계(자체 TypeScript, `docs/review-constraint-solver.md` 결정 대기), 뷰포트 면 클릭 선택.

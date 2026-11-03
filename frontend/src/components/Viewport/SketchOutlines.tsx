@@ -3,9 +3,7 @@ import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { dimensionValue } from '../../cad/sketch';
-import { sketchPlacement } from '../../cad/sketchActions';
-import { planeMatrix } from '../../cad/sketchPlane';
-import { toMatrix } from '../../cad/transformMath';
+import { sketchWorldMatrix } from '../../cad/sketchPlane';
 
 /**
  * 스케치 윤곽 표시 (보기 전용, 선택·편집은 속성 패널).
@@ -38,8 +36,8 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
       const used = model.objects.some((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
       if (sketch.id !== activeSketch && used) return null;
       // 스케치 좌표 → 월드: (돌출 객체의 월드 변환) ∘ (평면)
-      const frame = toMatrix(sketchPlacement(model, sketch.id, selectedObj?.id)).multiply(planeMatrix(sketch.plane));
-      return { sketch, frame, highlighted: sketch.id === activeSketch };
+      const frame = sketchWorldMatrix(model, sketch, selectedObj?.id);
+      return frame ? { sketch, frame, highlighted: sketch.id === activeSketch } : null;
     })
     .filter((x) => x !== null);
 }
