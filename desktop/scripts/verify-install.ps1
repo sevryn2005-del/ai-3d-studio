@@ -37,7 +37,14 @@ try {
   if (-not $url) { throw "엔진 주소가 기록되지 않았습니다 (180초)" }
   Write-Host "엔진: $url"
 
-  $health = Invoke-RestMethod -Uri "${url}api/health" -TimeoutSec 10
+  # 엔진은 서버가 포트를 열기 전에 주소를 먼저 기록한다 → 응답할 때까지 기다린다 (셸도 같은 방식)
+  $health = $null
+  $deadline = (Get-Date).AddSeconds(120)
+  while (-not $health -and (Get-Date) -lt $deadline) {
+    try { $health = Invoke-RestMethod -Uri "${url}api/health" -TimeoutSec 5 } catch { Start-Sleep -Seconds 1 }
+    if ($app.HasExited) { throw "앱이 종료되었습니다 (코드 $($app.ExitCode))" }
+  }
+  if (-not $health) { throw "엔진이 120초 안에 응답하지 않았습니다" }
   Write-Host "상태: $($health | ConvertTo-Json -Compress)"
   $model = Get-Content -Raw -Encoding utf8 "$root/shared/schemas/examples/model-sketch-plate.json"
   $r = Invoke-RestMethod -Uri "${url}api/model/evaluate" -Method Post -ContentType "application/json" -Body ([Text.Encoding]::UTF8.GetBytes($model)) -TimeoutSec 180
