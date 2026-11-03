@@ -1,0 +1,20 @@
+[package]
+name = "ai-3d-studio"
+version = "0.1.0"
+description = "AI 3D Studio 데스크톱 셸"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

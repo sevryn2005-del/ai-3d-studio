@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI 3D Studio</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { height: 100%; margin: 0; background: #1c1f24; color: #d7dde5;
+        font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif; }
+      main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+      h1 { font-size: 20px; font-weight: 600; margin: 0; }
+      p { margin: 0; color: #9aa4b2; font-size: 14px; text-align: center; max-width: 520px; line-height: 1.5; }
+      .spinner { width: 28px; height: 28px; border: 3px solid #3e4651; border-top-color: #4f8cff; border-radius: 50%;
+        animation: spin 0.9s linear infinite; }
+      .error .spinner { display: none; }
+      .error #status { color: #ff8a80; }
+      code { background: #2a2f37; padding: 2px 6px; border-radius: 4px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <!-- 데스크톱 셸이 로컬 CAD 엔진을 시작하는 동안 보이는 화면. 외부 리소스를 쓰지 않는다. -->
+    <main id="root">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>AI 3D Studio</h1>
+      <p id="status">CAD 엔진을 시작하는 중입니다… (처음에는 30초 정도 걸릴 수 있습니다)</p>
+    </main>
+    <script>
+      // 셸(Rust)이 실패 시 호출한다. 메시지는 셸이 만든 문자열이며 textContent 로만 넣는다.
+      window.showEngineError = function (message, logPath) {
+        document.getElementById('root').classList.add('error');
+        const status = document.getElementById('status');
+        status.textContent = message;
+        if (logPath) {
+          const p = document.createElement('p');
+          p.append('기록 파일: ');
+          const c = document.createElement('code');
+          c.textContent = logPath;
+          p.append(c);
+          document.getElementById('root').append(p);
+        }
+      };
+    </script>
+  </body>
+</html>

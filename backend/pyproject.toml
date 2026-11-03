@@ -17,6 +17,9 @@ dev = [
   "httpx>=0.28",
   "jsonschema>=4.26",
 ]
+packaging = [
+    "pyinstaller>=6.10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

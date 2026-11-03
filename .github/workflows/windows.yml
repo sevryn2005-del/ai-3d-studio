@@ -1,0 +1,101 @@
+# Windows 검증과 설치 프로그램 빌드 (공개 저장소: GitHub 호스트 러너 무료)
+#   1) tests   : Windows 에서 백엔드 pytest + 프론트엔드 타입 검사·단위 테스트
+#   2) desktop : 프론트 빌드 → 엔진 묶기(PyInstaller) → 엔진 스모크 테스트 → Tauri 설치 프로그램(MSI·NSIS)
+#                → NSIS 로 실제 설치 → 앱 실행 → 엔진 응답 확인 → 산출물 업로드
+name: windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/mvp-prototype]
+    paths:
+      - backend/**
+      - frontend/**
+      - desktop/**
+      - shared/**
+      - .github/workflows/windows.yml
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: 백엔드 테스트 (CadQuery 포함)
+        working-directory: backend
+        run: |
+          uv sync --python 3.12
+          uv run pytest -p no:cacheprovider
+      - name: 프론트엔드 타입 검사·단위 테스트
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc -b
+          npm test
+
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: 프론트엔드 빌드
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 엔진 묶기 (PyInstaller)
+        working-directory: backend
+        run: |
+          uv sync --python 3.12 --group packaging
+          uv run pyinstaller packaging/ai3d-engine.spec --noconfirm
+
+      - name: 엔진 스모크 테스트 (계산·STL·3MF·STEP·GLB·부모 종료)
+        working-directory: backend
+        run: uv run python packaging/smoke_test.py dist/ai3d-engine/ai3d-engine.exe
+
+      - name: 설치 프로그램 빌드 (Tauri)
+        working-directory: desktop
+        run: |
+          npm ci
+          npx tauri build
+
+      - name: 설치 → 실행 → 엔진 응답 확인
+        shell: pwsh
+        run: ./desktop/scripts/verify-install.ps1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-3d-studio-windows
+          if-no-files-found: warn
+          path: |
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            verify-logs/**

@@ -1,6 +1,6 @@
 """로컬 모드 실행기: 클라우드 서버 없이 개인 PC 에서 독립 실행.
 
-사용:  uv run python -m app.local [--port 8765] [--no-browser]
+사용:  uv run python -m app.local [--port 8765] [--no-browser] [--parent-pid PID]
 
 - 127.0.0.1 에만 바인딩 (같은 네트워크의 다른 기기에서 접근 불가)
 - API + 빌드된 프론트엔드를 한 프로세스에서 제공
@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AI 3D Studio 로컬 모드")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="브라우저를 자동으로 열지 않음")
+    parser.add_argument("--parent-pid", type=int, default=0, help="이 프로세스가 끝나면 함께 종료 (데스크톱 앱용)")
     args = parser.parse_args(argv)
 
     host = "127.0.0.1"
@@ -58,8 +59,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"포트 {args.port} 이(가) 사용 중입니다. --port 로 다른 포트를 지정하세요.", file=sys.stderr)
         return 1
 
+    if args.parent_pid:
+        from app.parent_watch import exit_when_parent_dies
+
+        exit_when_parent_dies(args.parent_pid)
+
     url = f"http://{host}:{args.port}/"
-    print(f"AI 3D Studio 로컬 모드: {url}  (종료: Ctrl+C)")
+    print(f"AI 3D Studio 로컬 모드: {url}  (종료: Ctrl+C)", flush=True)  # 데스크톱 셸·CI 가 기록 파일에서 주소를 읽는다
     if not args.no_browser:
         threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
 

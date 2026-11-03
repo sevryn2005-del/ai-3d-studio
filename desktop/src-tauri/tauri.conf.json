@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AI 3D Studio",
+  "version": "0.1.0",
+  "identifier": "com.ai3dstudio.desktop",
+  "build": {
+    "frontendDist": "../splash"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AI 3D Studio",
+        "url": "index.html",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "../../backend/dist/ai3d-engine/": "engine/"
+    },
+    "licenseFile": "../../THIRD_PARTY_NOTICES.md",
+    "shortDescription": "AI 3D Studio",
+    "longDescription": "자연어와 직접 편집으로 3D 프린팅용 모델을 만드는 로컬 CAD",
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" }
+    }
+  }
+}

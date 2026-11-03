@@ -37,6 +37,12 @@ powershell -ExecutionPolicy Bypass -File .\run-local.ps1   # Windows
 
 브라우저가 `http://127.0.0.1:8765` 로 열립니다. 처음 실행 시 CadQuery 설치(약 1.7GB)와 프론트엔드 빌드가 진행됩니다.
 
+## Windows 앱 (설치 프로그램)
+
+GitHub Actions 의 `windows` 워크플로가 Windows 에서 테스트·엔진 스모크 테스트·설치·실행 확인 후
+설치 파일(MSI·NSIS `*-setup.exe`)을 산출물 `ai-3d-studio-windows` 로 올린다. 아직 코드 서명이 없어 처음 실행 시 SmartScreen 경고가 뜬다.
+구성과 직접 빌드 방법: `docs/platforms.md` 의 "Windows 데스크톱 앱".
+
 ## 웹 버전 (정적 호스팅, 서버 불필요)
 
 ```bash

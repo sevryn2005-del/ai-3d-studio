@@ -162,3 +162,8 @@
 - AI: 스케치 명령 사용 + 요청 후 모델이 바뀌면 응답을 적용하지 않음.
 - 이어서 완료: 스케치 관리(이름·삭제·요소 이동/삭제), 뷰포트 직접 그리기(R·C), XZ·YZ 평면, 속성 패널 편집의 봉투 경로 이전.
 - 남은 후보: 면 위 스케치(형상 면 참조 — 토폴로지 이름 문제), 일반 구속 해석기(라이선스 검토), Windows 설치 프로그램(Tauri).
+
+## 12. Windows 설치 프로그램 · 다음 설계 — 진행 중
+
+- Windows 데스크톱 앱(Tauri) + 엔진 묶음(PyInstaller) + GitHub Actions(Windows) 테스트·설치·실행 검증. 상세: `docs/platforms.md`.
+- 설계 문서: 면 위 스케치 `docs/design-face-sketch.md`, 구속 해석기 검토 `docs/review-constraint-solver.md` (결정 대기).

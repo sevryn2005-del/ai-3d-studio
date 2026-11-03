@@ -18,8 +18,18 @@
 ## 배포 시 확인 사항 (Windows / Tauri)
 
 1. OCCT·casadi 공유 라이브러리를 **정적 링크하거나 하나의 실행 파일로 병합하지 않는다** (PyInstaller `--onefile` 사용 시 주의, `--onedir` 권장).
-2. 설치 폴더에 LGPL 라이선스 전문과 이 고지 파일을 포함한다.
+2. 설치 폴더에 LGPL 라이선스 전문과 이 고지 파일을 포함한다. → `licenses/`, 엔진 묶음의 `_internal/licenses`·`_internal/THIRD_PARTY_NOTICES.md`
+   (`backend/packaging/ai3d-engine.spec`). 설치 프로그램은 이 파일을 라이선스 화면으로 보여준다.
 3. 사용하지 않는 무거운 의존성(vtk, trame 등) 제거 가능성 검토 → 배포 크기 절감 (현재 가상환경 약 1.7GB).
+
+## Windows 데스크톱 앱 (설치 프로그램)
+
+| 구성 요소 | 라이선스 | 비고 |
+|-----------|----------|------|
+| Tauri 2 (+ tao, wry 등 Rust 의존성) | MIT / Apache-2.0 | 데스크톱 셸 |
+| Microsoft Edge WebView2 Runtime | Microsoft 소프트웨어 라이선스 | 설치 시 없으면 Microsoft 부트스트래퍼로 내려받음 (Windows 10/11 대부분 기본 포함) |
+| PyInstaller 부트로더 | GPL-2.0 + 부트로더 예외 | 예외에 따라 묶은 프로그램의 라이선스에 영향 없음 |
+| Python 3.12 런타임 | PSF-2.0 | 엔진 묶음에 포함 |
 
 ## 프론트엔드
 

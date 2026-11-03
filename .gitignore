@@ -4,3 +4,8 @@ dist/
 __pycache__/
 .venv/
 .env
+
+# 데스크톱 빌드 산출물
+target/
+backend/build/
+desktop/src-tauri/gen/

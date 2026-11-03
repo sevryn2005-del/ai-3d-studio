@@ -7,13 +7,21 @@
 from __future__ import annotations
 
 import json
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app.cad.commands import ModelDefinition
 
-_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "shared" / "schemas" / "cad-command.schema.json"
+def _schema_path() -> Path:
+    """저장소에서는 shared/schemas, PyInstaller 묶음(데스크톱 앱)에서는 묶음 안의 shared/schemas."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    root = Path(bundle) if bundle else Path(__file__).resolve().parents[3]
+    return root / "shared" / "schemas" / "cad-command.schema.json"
+
+
+_SCHEMA_PATH = _schema_path()
 
 APPLY_TOOL = "apply_cad_commands"
 ASK_TOOL = "ask_user"
