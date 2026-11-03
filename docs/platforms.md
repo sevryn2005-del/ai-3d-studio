@@ -68,7 +68,9 @@ AI 3D Studio.exe (Tauri 2, desktop/src-tauri/src/main.rs)
 - 화면은 Tauri API 를 쓰지 않는다. `capabilities/default.json` 권한 없음 → 원격(127.0.0.1) 페이지에 IPC 없음.
 - 데이터(AI 설정·사용량)는 로컬 모드와 같은 `%APPDATA%\AI3DStudio`. 키는 엔진에만 있고 화면·기록에 노출되지 않는다.
 - 엔진 출력은 UTF-8 로 고정 (`packaging/desktop_entry.py`): Windows 기본 인코딩으로 한글 기록이 실패하지 않게.
-- 크기: 엔진 묶음 약 1.6GB (CadQuery/OCCT·VTK). 설치 파일 크기는 CI 산출물에서 확인한다.
+- 크기: 엔진 묶음 약 1.6GB (CadQuery/OCCT·VTK) → 설치 파일 NSIS 197MB, MSI 304MB (2026-11-03 CI).
+- 설치 프로그램 언어: 한국어 (MSI `ko-KR`, NSIS `Korean`). 라이선스 화면이 한글이라 MSI 기본 코드 페이지 1252 로는 빌드되지 않는다.
+- NSIS 는 사용자 단위 설치 (`%LOCALAPPDATA%\AI 3D Studio`, 관리자 권한 불필요).
 
 ### 빌드·검증 (GitHub Actions `.github/workflows/windows.yml`, windows-latest)
 
@@ -87,6 +89,17 @@ cd ../desktop && npm ci && npx tauri build      # → src-tauri/target/release/b
 ```
 
 개발 중 셸만 실행: `AI3D_ENGINE_PATH=<묶은 엔진 실행 파일> cargo run` (desktop/src-tauri).
+
+### Windows 검증 결과 (GitHub Actions run 41629683200, windows-latest, 2026-11-03)
+
+| 항목 | 결과 |
+|------|------|
+| 백엔드 pytest (CadQuery 포함) · 프론트 tsc·vitest | 통과 |
+| 묶은 엔진: 시작 10.7초, 기준 판 계산 32.7ms, STL 80×40×4, 3MF·STEP·GLB, 부모 종료 → 엔진 종료 | 통과 |
+| NSIS 조용히 설치 → 앱 실행 → 엔진 응답·기준 판 계산·화면 제공 → 앱 강제 종료 → 엔진 정리 | 통과 |
+
+확인하지 못한 것: 사람이 보는 화면 조작(창 안에서 마우스로 편집), MSI 설치 경로, 한국어 Windows(cp949)에서의 실행,
+WebView2 의 저장 대화상자 동작. 실제 PC 에서 설치 파일로 한 번 확인이 필요하다.
 
 ### 남은 것
 - **코드 서명**: 서명하지 않은 설치 파일은 Windows SmartScreen 경고가 뜬다 (인증서 비용 — 결정 필요).
