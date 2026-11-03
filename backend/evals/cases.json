@@ -1,0 +1,83 @@
+[
+  {
+    "id": "height-50",
+    "note": "첫 번째 목표: 선택한 큐브의 높이 변경",
+    "prompt": "높이를 50mm로 바꿔줘",
+    "objects": "default",
+    "selected": "box_1",
+    "expect": {"kind": "commands", "has": [{"type": "set_params", "target": "box_1", "params": {"height": 50}}]}
+  },
+  {
+    "id": "storage-box",
+    "note": "치수가 주어진 새 물체는 질문 없이 만든다",
+    "prompt": "가로 80mm, 세로 50mm, 높이 30mm 수납함 만들어줘",
+    "objects": "empty",
+    "expect": {"kind": "commands", "has": [{"type": "create_box", "width": 80, "depth": 50, "height": 30}]}
+  },
+  {
+    "id": "cup-needs-size",
+    "note": "기능에 중요한 치수가 없으면 질문한다",
+    "prompt": "컵 만들어줘",
+    "objects": "empty",
+    "expect": {"kind": "question"}
+  },
+  {
+    "id": "hole-6mm",
+    "note": "지름 → 반지름 변환, 관통 구멍 = 원통 + 빼기",
+    "prompt": "가운데에 지름 6mm 구멍을 뚫어줘",
+    "objects": [{"id": "plate", "name": "판", "kind": "box", "params": {"width": 60, "depth": 40, "height": 5}, "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}],
+    "selected": "plate",
+    "expect": {"kind": "commands", "has": [{"type": "create_cylinder", "radius": 3}, {"type": "cut", "base": "plate"}]}
+  },
+  {
+    "id": "cylinder-radius",
+    "prompt": "이 원통 반지름을 10mm로 해줘",
+    "objects": [{"id": "pin", "name": "핀", "kind": "cylinder", "params": {"radius": 3, "height": 20}, "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}],
+    "selected": "pin",
+    "expect": {"kind": "commands", "has": [{"type": "set_params", "target": "pin", "params": {"radius": 10}}]}
+  },
+  {
+    "id": "move-right",
+    "note": "이동은 상대 이동/절대 위치 어느 쪽이든 정답",
+    "prompt": "큐브를 오른쪽(+X)으로 20mm 옮겨줘",
+    "objects": "default",
+    "selected": "box_1",
+    "expect": {"kind": "commands", "any_of": [
+      [{"type": "translate", "target": "box_1", "offset": [20, 0, 0]}],
+      [{"type": "set_transform", "target": "box_1", "position": [20, 0, 0]}]
+    ]}
+  },
+  {
+    "id": "enlarge-hole",
+    "note": "불리언 안의 자식(구멍)을 찾아 수정 — 결과 객체에는 치수 파라미터가 없다",
+    "prompt": "구멍 지름을 8mm로 키워줘",
+    "objects": "fixture:model-cut-rotated.json",
+    "selected": "cut_1",
+    "expect": {"kind": "commands", "has": [{"type": "set_params", "target": "pin", "params": {"radius": 4}}]}
+  },
+  {
+    "id": "ambiguous-delete",
+    "note": "선택 없이 여러 객체 중 '이거' → 질문",
+    "prompt": "이거 지워줘",
+    "objects": [
+      {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20}, "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
+      {"id": "sphere_1", "name": "구 1", "kind": "sphere", "params": {"radius": 10}, "transform": {"position": [40, 0, 0], "rotation": [0, 0, 0]}}
+    ],
+    "expect": {"kind": "question"}
+  },
+  {
+    "id": "format-question",
+    "note": "모델을 바꾸지 않는 질문에는 답만",
+    "prompt": "3D 프린팅용으로 저장할 때 어떤 파일 형식이 좋아?",
+    "objects": "default",
+    "expect": {"kind": "message"}
+  },
+  {
+    "id": "out-of-range",
+    "note": "허용 범위(1000mm) 밖 요청은 적용하지 않는다",
+    "prompt": "높이를 2000mm로 바꿔줘",
+    "objects": "default",
+    "selected": "box_1",
+    "expect": {"kind": ["question", "message"]}
+  }
+]

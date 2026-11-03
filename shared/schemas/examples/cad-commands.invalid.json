@@ -1,0 +1,201 @@
+[
+  {
+    "reason": "알 수 없는 명령",
+    "command": {
+      "type": "exec_python",
+      "code": "import os"
+    }
+  },
+  {
+    "reason": "type 누락",
+    "command": {
+      "width": 10,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  {
+    "reason": "치수 0",
+    "command": {
+      "type": "create_box",
+      "width": 0,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  {
+    "reason": "치수 상한 초과",
+    "command": {
+      "type": "create_box",
+      "width": 1001,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  {
+    "reason": "문자열 숫자",
+    "command": {
+      "type": "create_box",
+      "width": "10",
+      "depth": 10,
+      "height": 10
+    }
+  },
+  {
+    "reason": "음수 반지름",
+    "command": {
+      "type": "create_sphere",
+      "radius": -1
+    }
+  },
+  {
+    "reason": "필수 필드 누락",
+    "command": {
+      "type": "create_cylinder",
+      "radius": 5
+    }
+  },
+  {
+    "reason": "알 수 없는 필드",
+    "command": {
+      "type": "create_box",
+      "width": 10,
+      "depth": 10,
+      "height": 10,
+      "color": "red"
+    }
+  },
+  {
+    "reason": "빈 params",
+    "command": {
+      "type": "set_params",
+      "target": "box_1",
+      "params": {}
+    }
+  },
+  {
+    "reason": "알 수 없는 파라미터 이름",
+    "command": {
+      "type": "set_params",
+      "target": "box_1",
+      "params": {
+        "thickness": 2
+      }
+    }
+  },
+  {
+    "reason": "잘못된 ID 형식",
+    "command": {
+      "type": "delete_object",
+      "target": "../etc/passwd"
+    }
+  },
+  {
+    "reason": "좌표 개수 오류",
+    "command": {
+      "type": "translate",
+      "target": "box_1",
+      "offset": [
+        1,
+        2
+      ]
+    }
+  },
+  {
+    "reason": "좌표 범위 초과",
+    "command": {
+      "type": "set_transform",
+      "target": "box_1",
+      "position": [
+        20000,
+        0,
+        0
+      ]
+    }
+  },
+  {
+    "reason": "선택 필드에 null",
+    "command": {
+      "type": "create_box",
+      "id": null,
+      "width": 10,
+      "depth": 10,
+      "height": 10
+    }
+  },
+  {
+    "reason": "bool 을 숫자로",
+    "command": {
+      "type": "create_sphere",
+      "radius": true
+    }
+  },
+  {
+    "reason": "공백뿐인 이름",
+    "command": {
+      "type": "rename_object",
+      "target": "box_1",
+      "name": "   "
+    }
+  },
+  {
+    "reason": "params 안의 null",
+    "command": {
+      "type": "set_params",
+      "target": "box_1",
+      "params": {
+        "height": null
+      }
+    }
+  },
+  {
+    "reason": "불리언 tools 비어 있음",
+    "command": {
+      "type": "cut",
+      "base": "box_1",
+      "tools": []
+    }
+  },
+  {
+    "reason": "불리언 base 누락",
+    "command": {
+      "type": "union",
+      "tools": [
+        "box_1"
+      ]
+    }
+  },
+  {
+    "reason": "불리언 tools 가 배열이 아님",
+    "command": {
+      "type": "cut",
+      "base": "box_1",
+      "tools": "cylinder_1"
+    }
+  },
+  {
+    "reason": "지원하지 않는 불리언 이름",
+    "command": {
+      "type": "subtract",
+      "base": "box_1",
+      "tools": [
+        "cylinder_1"
+      ]
+    }
+  },
+  {
+    "reason": "불리언에 position 지정",
+    "command": {
+      "type": "cut",
+      "base": "box_1",
+      "tools": [
+        "cylinder_1"
+      ],
+      "position": [
+        0,
+        0,
+        0
+      ]
+    }
+  }
+]

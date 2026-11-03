@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "units": "mm",
+  "objects": [
+    {
+      "id": "plate",
+      "name": "판",
+      "params": {
+        "width": 40,
+        "depth": 20,
+        "height": 5
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "kind": "box"
+    },
+    {
+      "id": "pin",
+      "name": "구멍",
+      "params": {
+        "radius": 3,
+        "height": 10
+      },
+      "transform": {
+        "position": [
+          7.071068,
+          -7.071068,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          -45
+        ]
+      },
+      "kind": "cylinder"
+    },
+    {
+      "id": "cut_1",
+      "name": "빼기 1",
+      "kind": "boolean",
+      "boolean": {
+        "operation": "cut",
+        "base": "plate",
+        "tools": [
+          "pin"
+        ]
+      },
+      "transform": {
+        "position": [
+          50,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          45
+        ]
+      }
+    }
+  ]
+}

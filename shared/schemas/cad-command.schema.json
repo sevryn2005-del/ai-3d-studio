@@ -1,0 +1,610 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "create_box"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "width",
+        "depth",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "create_cylinder"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 500
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "radius",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "create_sphere"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 500
+        }
+      },
+      "required": [
+        "type",
+        "radius"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "create_cone"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radiusBottom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "radiusTop": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "radiusBottom",
+        "radiusTop",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "cut"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "tools": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "base",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "union"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "tools": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "base",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "intersect"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "tools": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "base",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_params"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 500
+            },
+            "radiusBottom": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500
+            },
+            "radiusTop": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "translate"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "offset": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "offset"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_transform"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "rotation": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -360,
+              "maximum": 360
+            },
+            {
+              "type": "number",
+              "minimum": -360,
+              "maximum": 360
+            },
+            {
+              "type": "number",
+              "minimum": -360,
+              "maximum": 360
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "rename_object"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "duplicate_object"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "newId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "offset": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "delete_object"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$id": "https://ai-3d-studio.local/schemas/cad-command.schema.json",
+  "title": "CadCommand",
+  "description": "AI 와 사용자 UI 가 공통으로 사용하는 CAD 명령. 이 형식 이외의 명령은 실행되지 않는다. 단위: 길이 mm, 각도 degree. 좌표계: Z-up 오른손 좌표계. 모든 기본 도형의 원점은 바운딩 박스 바닥면 중심이며, 원통·원뿔의 축은 로컬 Z축이다. 범위: 치수 0.1–1000mm, 좌표 ±10000mm, 회전 ±360°, 객체 최대 1000개. JSON Schema 로 표현되지 않는 추가 규칙(서버에서 검증): 원뿔의 radiusBottom/radiusTop 중 하나는 0.05mm 이상, set_params 의 params 는 대상 도형 종류에 있는 키만 허용, 존재하지 않는 객체 참조 및 중복 ID 거부."
+}

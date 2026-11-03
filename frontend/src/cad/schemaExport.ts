@@ -1,0 +1,80 @@
+/**
+ * Zod 스키마 → JSON Schema (draft 2020-12) 변환.
+ *
+ * 생성 결과는 shared/schemas/ 에 커밋되며 다음에 사용된다.
+ * - 백엔드(Pydantic) 검증 모델의 계약 테스트 기준
+ * - LLM 구조화 출력(structured output)의 스키마
+ *
+ * 주의: .refine() 같은 교차 필드 규칙(예: 원뿔 반지름 중 하나는 0 초과)은
+ * JSON Schema 로 표현되지 않는다. 이런 규칙은 description 에 남기고 서버 검증에서 다시 확인한다.
+ */
+import { z } from 'zod';
+import { CadCommandSchema, LIMITS, ModelDefinitionSchema, SetParamsParamsSchema, emptyModel } from './commandTypes';
+import { executeCommand } from './commandExecutor';
+
+const SCHEMA_BASE_URL = 'https://ai-3d-studio.local/schemas/';
+
+const COMMON_NOTES = [
+  '단위: 길이 mm, 각도 degree. 좌표계: Z-up 오른손 좌표계.',
+  '모든 기본 도형의 원점은 바운딩 박스 바닥면 중심이며, 원통·원뿔의 축은 로컬 Z축이다.',
+  `범위: 치수 ${LIMITS.minDimension}–${LIMITS.maxDimension}mm, 좌표 ±${LIMITS.maxCoordinate}mm, 회전 ±${LIMITS.maxRotation}°, 객체 최대 ${LIMITS.maxObjects}개.`,
+  'JSON Schema 로 표현되지 않는 추가 규칙(서버에서 검증): 원뿔의 radiusBottom/radiusTop 중 하나는 0.05mm 이상, ' +
+    'set_params 의 params 는 대상 도형 종류에 있는 키만 허용, 존재하지 않는 객체 참조 및 중복 ID 거부.',
+].join(' ');
+
+function toSchema(schema: z.ZodType, file: string, title: string, description: string): string {
+  const json = {
+    ...z.toJSONSchema(schema, {
+      target: 'draft-2020-12',
+      // refine 로 표현한 규칙 중 JSON Schema 로 옮길 수 있는 것은 여기서 옮긴다
+      override: (ctx) => {
+        if (ctx.zodSchema === SetParamsParamsSchema) ctx.jsonSchema.minProperties = 1;
+      },
+    }),
+    $id: SCHEMA_BASE_URL + file,
+    title,
+    description: `${description} ${COMMON_NOTES}`,
+  };
+  return JSON.stringify(json, null, 2) + '\n';
+}
+
+/**
+ * 프론트엔드 실행기로 만든 실제 모델 (언어 간 계약 픽스처).
+ * 45° 회전한 판(plate)에서, 월드 좌표 (60, 0) 위치의 원통(pin)을 빼서 구멍을 뚫는다.
+ * 백엔드는 이 파일의 "부모 기준 변환"을 해석해 구멍이 월드 (60, 0) 에 생기는지 검사한다.
+ */
+export const BOOLEAN_FIXTURE_COMMANDS: unknown[] = [
+  { type: 'create_box', id: 'plate', name: '판', width: 40, depth: 20, height: 5, position: [50, 0, 0] },
+  { type: 'set_transform', target: 'plate', rotation: [0, 0, 45] },
+  { type: 'create_cylinder', id: 'pin', name: '구멍', radius: 3, height: 10, position: [60, 0, -1] },
+  { type: 'cut', base: 'plate', tools: ['pin'] },
+];
+
+export function buildBooleanFixture() {
+  let model = emptyModel();
+  for (const cmd of BOOLEAN_FIXTURE_COMMANDS) {
+    const r = executeCommand(model, cmd);
+    if (!r.ok) throw new Error(`픽스처 생성 실패: ${r.error}`);
+    model = r.model;
+  }
+  return model;
+}
+
+/** 파일명(shared/schemas 기준 상대 경로) → 내용 */
+export function generateSchemas(): Record<string, string> {
+  return {
+    'examples/model-cut-rotated.json': JSON.stringify(buildBooleanFixture(), null, 2) + '\n',
+    'cad-command.schema.json': toSchema(
+      CadCommandSchema,
+      'cad-command.schema.json',
+      'CadCommand',
+      'AI 와 사용자 UI 가 공통으로 사용하는 CAD 명령. 이 형식 이외의 명령은 실행되지 않는다.',
+    ),
+    'model-definition.schema.json': toSchema(
+      ModelDefinitionSchema,
+      'model-definition.schema.json',
+      'ModelDefinition',
+      '설계 원본(프로젝트 파일에 저장되는 객체·파라미터·변환).',
+    ),
+  };
+}

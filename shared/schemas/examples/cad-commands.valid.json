@@ -1,0 +1,116 @@
+[
+  {
+    "type": "create_box",
+    "width": 80,
+    "depth": 50,
+    "height": 30
+  },
+  {
+    "type": "create_box",
+    "id": "base",
+    "name": "받침",
+    "width": 100,
+    "depth": 60,
+    "height": 5,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "type": "create_cylinder",
+    "radius": 5,
+    "height": 30,
+    "position": [
+      10,
+      0,
+      0
+    ]
+  },
+  {
+    "type": "create_sphere",
+    "radius": 12.5
+  },
+  {
+    "type": "create_cone",
+    "radiusBottom": 10,
+    "radiusTop": 0,
+    "height": 20
+  },
+  {
+    "type": "cut",
+    "base": "box_1",
+    "tools": [
+      "cylinder_1"
+    ]
+  },
+  {
+    "type": "union",
+    "name": "받침대",
+    "base": "box_1",
+    "tools": [
+      "box_2",
+      "cylinder_1"
+    ]
+  },
+  {
+    "type": "intersect",
+    "id": "lens",
+    "base": "sphere_1",
+    "tools": [
+      "box_1"
+    ]
+  },
+  {
+    "type": "set_params",
+    "target": "box_1",
+    "params": {
+      "height": 50
+    }
+  },
+  {
+    "type": "set_params",
+    "target": "pin",
+    "params": {
+      "radius": 8,
+      "height": 12
+    }
+  },
+  {
+    "type": "translate",
+    "target": "box_1",
+    "offset": [
+      5,
+      0,
+      -2.5
+    ]
+  },
+  {
+    "type": "set_transform",
+    "target": "box_1",
+    "rotation": [
+      0,
+      0,
+      45
+    ]
+  },
+  {
+    "type": "rename_object",
+    "target": "box_1",
+    "name": "뚜껑"
+  },
+  {
+    "type": "duplicate_object",
+    "target": "box_1",
+    "offset": [
+      30,
+      0,
+      0
+    ]
+  },
+  {
+    "type": "delete_object",
+    "target": "box_1"
+  }
+]
