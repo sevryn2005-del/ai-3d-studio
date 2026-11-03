@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import { useSceneStore } from './cad/sceneStore';
 import { useEditorStore } from './features/selection/editorStore';
+import { cancelPending, commitPending } from './features/selection/featureFlow';
 import { openProject, saveProject } from './features/projects/projectActions';
 
 /**
  * Ctrl+Z 실행 취소, Ctrl+Shift+Z / Ctrl+Y 다시 실행, Delete 선택 객체 삭제, Esc 선택 해제,
  * W 이동 모드, E 회전 모드, S 스냅 전환, F 화면 맞춤, R 사각형 그리기, C 원 그리기, P 다각형 그리기 (Esc: 그리기 끝내기),
  * Ctrl+S 저장, Ctrl+Shift+S 다른 이름으로 저장, Ctrl+O 열기 (입력 중에도 동작)
+ * 솔리드웍스식: Ctrl+1 정면 · 2 후면 · 3 좌측면 · 4 우측면 · 5 윗면 · 6 아랫면 · 7 등각 · 8 스케치에 수직, 스페이스 = 보기 방향 메뉴,
+ * Enter = 속성 관리자 확인, Esc = 취소 (속성 관리자 → 평면 고르기 → 그리기 → 선택 순)
  */
 export function useKeyboardShortcuts() {
   useEffect(() => {
@@ -17,6 +20,12 @@ export function useKeyboardShortcuts() {
       if (modKey && e.key.toLowerCase() === 's') {
         e.preventDefault(); // 브라우저의 "페이지 저장" 대신
         void saveProject({ saveAs: e.shiftKey });
+        return;
+      }
+      const VIEWS = ['front', 'back', 'left', 'right', 'top', 'bottom', 'iso', 'normal'] as const;
+      if (modKey && /^[1-8]$/.test(e.key)) {
+        e.preventDefault(); // 브라우저 탭 전환 대신
+        useEditorStore.getState().requestView(VIEWS[Number(e.key) - 1]!);
         return;
       }
       if (modKey && e.key.toLowerCase() === 'o') {
@@ -46,10 +55,21 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         const isSketch = s.history.present.model.sketches.some((k) => k.id === s.selectedId);
         s.submitNow(isSketch ? { type: 'delete_sketch', sketch: s.selectedId } : { type: 'delete_object', target: s.selectedId });
+      } else if (e.key === 'Enter' && useEditorStore.getState().pending) {
+        e.preventDefault();
+        commitPending();
+      } else if (e.key === ' ' && !mod) {
+        e.preventDefault();
+        window.dispatchEvent(new Event('ai3d:view-menu'));
       } else if (e.key === 'Escape') {
         const editor = useEditorStore.getState();
-        if (editor.drawTool) editor.setDrawTool(null); // 먼저 그리기만 끝내고 선택은 유지
-        else s.select(null);
+        if (editor.pending) cancelPending();
+        else if (editor.pickingPlane) editor.setPickingPlane(false);
+        else if (editor.drawTool) editor.setDrawTool(null); // 먼저 그리기만 끝내고 선택은 유지
+        else {
+          editor.selectPlane(null);
+          s.select(null);
+        }
       } else if (!mod && !e.altKey) {
         const editor = useEditorStore.getState();
         if (key === 'w' || key === 'e') {

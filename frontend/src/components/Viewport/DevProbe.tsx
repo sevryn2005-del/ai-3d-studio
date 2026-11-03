@@ -20,6 +20,8 @@ export function DevProbe() {
         const r = gl.domElement.getBoundingClientRect();
         return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
       },
+      /** 카메라가 바라보는 방향(단위 벡터, 소수 셋째 자리) — 표준 보기 검사용 */
+      cameraDir: () => camera.getWorldDirection(new Vector3()).toArray().map((v) => Math.round(v * 1000) / 1000 + 0),
       meshSources: () => {
         const out: Record<string, { source: string; min: number[]; max: number[]; vertices: number }> = {};
         scene.updateMatrixWorld(true);

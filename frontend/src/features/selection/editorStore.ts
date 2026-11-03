@@ -1,37 +1,104 @@
 /**
  * 편집기 UI 상태 (설계 원본이 아님 → 히스토리/저장 대상 아님).
- * 기즈모 모드, 스냅 설정, 화면 맞춤 요청 등.
+ * 기즈모 모드, 스냅, 화면 맞춤·표준 보기 요청, 마우스 방식, 기준 평면 선택, 진행 중인 피처(속성 관리자) 등.
  */
 import { create } from 'zustand';
+import type { ObjectId, StandardPlane } from '../../cad/commandTypes';
 import { DEFAULT_SNAP, type SnapSettings } from '../../cad/transformUtils';
 
 export type TransformMode = 'translate' | 'rotate';
 /** 뷰포트 직접 그리기 도구 (null = 선택·이동 모드) */
 export type DrawTool = 'rectangle' | 'circle' | 'polygon' | null;
+/**
+ * 마우스 방식
+ * - solidworks: 가운데 버튼 드래그 = 회전, Ctrl + 가운데 = 이동, Shift + 가운데 = 확대/축소, 휠 = 확대/축소, 왼쪽 = 선택
+ * - simple: 왼쪽 드래그 = 회전, 오른쪽 드래그 = 이동, 휠 = 확대/축소 (트랙패드·가운데 버튼 없는 마우스)
+ */
+export type MouseScheme = 'solidworks' | 'simple';
+/** 표준 보기 (솔리드웍스 단축키 Ctrl+1~7, Ctrl+8 = 선택한 스케치에 수직) */
+export type ViewName = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso' | 'normal';
+
+/**
+ * 속성 관리자에서 확인(✓)을 기다리는 피처. 확정 전에는 뷰포트에 미리보기만 (설계 원본 그대로).
+ */
+export type PendingFeature =
+  | { kind: 'extrude'; sketch: ObjectId; profile: ObjectId; distance: number }
+  | { kind: 'revolve'; sketch: ObjectId; profile: ObjectId; angle: number };
 
 interface EditorState {
   transformMode: TransformMode;
   snapEnabled: boolean;
   /** 값이 바뀔 때마다 뷰포트가 카메라를 모델에 맞춘다 */
   fitRequest: number;
+  /** 값이 바뀔 때마다 그 방향에서 모델 전체가 보이게 카메라를 옮긴다 */
+  viewRequest: { name: ViewName; n: number } | null;
   drawTool: DrawTool;
+  mouseScheme: MouseScheme;
+  chatOpen: boolean;
+  /** 피처 트리에서 고른 기준 평면 (스케치 시작에 쓰임) */
+  selectedPlane: StandardPlane['type'] | null;
+  /** "스케치" 를 눌렀는데 평면이 없을 때: 뷰포트에 기준 평면을 띄워 고르게 한다 */
+  pickingPlane: boolean;
+  pending: PendingFeature | null;
 
   setDrawTool: (t: DrawTool) => void;
   setTransformMode: (m: TransformMode) => void;
   toggleSnap: () => void;
   requestFit: () => void;
+  requestView: (name: ViewName) => void;
+  setMouseScheme: (m: MouseScheme) => void;
+  toggleChat: () => void;
+  selectPlane: (p: StandardPlane['type'] | null) => void;
+  setPickingPlane: (on: boolean) => void;
+  setPending: (p: PendingFeature | null) => void;
+}
+
+/** 사용자 선호(마우스 방식·AI 패널)는 이 브라우저에만 저장. 저장소가 막혀 있어도 기본값으로 동작 */
+function loadPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* 비공개 모드 등: 이번 세션에만 적용 */
+  }
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
   transformMode: 'translate',
   snapEnabled: true,
   fitRequest: 0,
+  viewRequest: null,
   drawTool: null,
+  mouseScheme: loadPref('ai3d.mouseScheme', ['solidworks', 'simple'] as const, 'solidworks'),
+  chatOpen: loadPref('ai3d.chatOpen', ['1', '0'] as const, '1') === '1',
+  selectedPlane: null,
+  pickingPlane: false,
+  pending: null,
 
   setDrawTool: (drawTool) => set({ drawTool }),
   setTransformMode: (transformMode) => set({ transformMode }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
   requestFit: () => set((s) => ({ fitRequest: s.fitRequest + 1 })),
+  requestView: (name) => set((s) => ({ viewRequest: { name, n: (s.viewRequest?.n ?? 0) + 1 } })),
+  setMouseScheme: (mouseScheme) => {
+    savePref('ai3d.mouseScheme', mouseScheme);
+    set({ mouseScheme });
+  },
+  toggleChat: () =>
+    set((s) => {
+      savePref('ai3d.chatOpen', s.chatOpen ? '0' : '1');
+      return { chatOpen: !s.chatOpen };
+    }),
+  selectPlane: (selectedPlane) => set({ selectedPlane }),
+  setPickingPlane: (pickingPlane) => set({ pickingPlane }),
+  setPending: (pending) => set({ pending }),
 }));
 
 const NO_SNAP: SnapSettings = { translation: null, rotation: null };

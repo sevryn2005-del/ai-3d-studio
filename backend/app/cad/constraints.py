@@ -142,12 +142,15 @@ def _cross(p1, p2, p3, p4) -> bool:
     return ((d1 > eps and d2 < -eps) or (d1 < -eps and d2 > eps)) and ((d3 > eps and d4 < -eps) or (d3 < -eps and d4 > eps))
 
 
+MIN_EDGE = 0.01  # mm, 프론트엔드 solver.ts MIN_EDGE 와 같음 (거의 같은 점 = 보이지 않는 틈)
+
+
 def polygon_error(points) -> str | None:
     n = len(points)
     for i in range(n):
         a, b = points[i], points[(i + 1) % n]
-        if math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6:
-            return f"변 e{i} 의 길이가 0 입니다"
+        if math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_EDGE:
+            return f"변 e{i} 이(가) 너무 짧습니다 ({MIN_EDGE}mm 미만 — 거의 같은 점 두 개)"
         for j in range(i + 1, n):
             if (j + 1) % n == i or (i + 1) % n == j:
                 continue

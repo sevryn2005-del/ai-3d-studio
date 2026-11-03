@@ -61,6 +61,23 @@ describe('checkPrintability', () => {
   });
 });
 
+describe('겹침 (합치지 않은 두 객체가 파고듦 → 슬라이서 문제, docs/issue-survey.md 7-2)', () => {
+  const two = build(
+    { type: 'create_box', id: 'a', name: '판', width: 20, depth: 20, height: 20 },
+    { type: 'create_box', id: 'b', name: '기둥', width: 10, depth: 10, height: 10 },
+  );
+  it('서로 파고들면 경고 + 합치기 수정 명령, 그대로 실행 가능', () => {
+    const issues = checkPrintability(two, boxes([['a', box([-10, -10, 0], [10, 10, 20])], ['b', box([5, -5, 0], [15, 5, 10])]]));
+    expect(issues).toEqual([
+      expect.objectContaining({ key: 'overlap:a:b', severity: 'warning', fix: { label: '합치기', command: { type: 'union', base: 'a', tools: ['b'] } } }),
+    ]);
+    expect(executeCommand(two, issues[0]!.fix!.command).ok).toBe(true);
+  });
+  it('면이 맞닿기만 하면 경고 없음', () => {
+    expect(checkPrintability(two, boxes([['a', box([-10, -10, 0], [10, 10, 20])], ['b', box([10, -5, 0], [20, 5, 10])]]))).toEqual([]);
+  });
+});
+
 describe('dropToBedCommand', () => {
   it('이미 바닥이면 명령 없음', () => {
     const m = build({ type: 'create_box', id: 'a', width: 1, depth: 1, height: 1 });

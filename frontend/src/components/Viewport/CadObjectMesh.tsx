@@ -72,7 +72,7 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
 type Variant = 'solid' | 'translucent' | 'ghost';
 
 /** 클라이언트 미리보기. 불리언은 피연산자를 반투명하게 그린다(정확한 결과는 서버 계산 후 표시). */
-function PreviewBody({
+export function PreviewBody({
   object,
   index,
   selectId,
@@ -138,7 +138,8 @@ function ObjectMesh({
   const select = useSceneStore((s) => s.select);
   const [hovered, setHovered] = useState(false);
 
-  const color = variant === 'ghost' ? '#7fb0ff' : selected ? '#4f8cff' : hovered ? '#b9c2cf' : '#a3adba';
+  // 밝은 배경용: 기본 회청색, 선택은 옅은 파랑, 미리보기(유령)는 반투명 파랑
+  const color = variant === 'ghost' ? '#3f86e6' : selected ? '#8fbaf0' : hovered ? '#c3cbd6' : '#b4bcc8';
   const transparent = variant !== 'solid';
 
   return (
@@ -171,7 +172,7 @@ function ObjectMesh({
         depthWrite={!transparent}
       />
       {/* 곡면의 분할선은 숨기고 실제 모서리(평면 경계)만 표시 */}
-      <Edges threshold={20} color={variant === 'ghost' ? '#cfe0ff' : selected ? '#cfe0ff' : '#2a2f36'} />
+      <Edges threshold={20} color={variant === 'ghost' ? '#1f5fd6' : selected ? '#1f5fd6' : '#2a2f36'} />
     </mesh>
   );
 }

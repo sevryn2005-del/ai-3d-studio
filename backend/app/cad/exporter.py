@@ -54,7 +54,9 @@ def weld(vertices: np.ndarray, triangles: np.ndarray, decimals: int = 6) -> tupl
 
 
 def to_binary_stl(shapes: list[cq.Shape]) -> bytes:
-    tris = [v[t] for v, t in (_fine_mesh(s) for s in shapes)]
+    # 3MF 와 같이 정점 병합 + 넓이 0 삼각형 제거: 원뿔 꼭짓점·회전축 위 점에서 OCCT 가 만드는 퇴화 삼각형은
+    # 슬라이서가 "degenerate facet / 열린 모서리" 로 경고한다 (docs/issue-survey.md 7-3)
+    tris = [v[t] for v, t in (weld(*_fine_mesh(s)) for s in shapes)]
     triangles = np.concatenate(tris).astype("<f4") if tris else np.zeros((0, 3, 3), "<f4")
     normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
     lengths = np.linalg.norm(normals, axis=1, keepdims=True)

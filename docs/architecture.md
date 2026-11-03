@@ -39,6 +39,15 @@ Three.js 뷰포트 ◀───────────────────�
 - 범위: 치수 0.1–1000mm, 반지름 0.05–500mm(원뿔은 0 허용), 좌표 ±10000mm, 회전 ±360°.
 - 명령 객체는 strict: 정의되지 않은 필드가 있으면 거부.
 
+## 화면 구성과 피처 작업 흐름 (솔리드웍스식)
+
+- `Toolbar`: 메뉴 + 명령 탭(피처·스케치·보기). `PropertyPanel`: 피처 트리(기준 평면·객체·스케치) + 속성/속성 관리자. `ChatPanel`: AI (접기).
+- 편집기 UI 상태는 `features/selection/editorStore.ts` (설계 원본 아님 → 저장·실행 취소 대상 아님): 마우스 방식, 보기 요청,
+  기준 평면 선택, 평면 고르기, **확정 대기 피처(`pending`)**.
+- 피처 흐름(`features/selection/featureFlow.ts`): 돌출/회전 → `pending` 에 값만 저장 → `PendingPreview` 가 같은 실행기로 계산한
+  결과를 반투명 표시 → ✓ 에서 `submitNow` 로 명령 1건. 미리보기와 결과가 같은 경로라 서로 다를 수 없다.
+- 마우스 방식은 `MouseScheme.tsx` 가 OrbitControls 버튼 배치만 바꾼다 (선택·그리기 로직은 그대로).
+
 ## 스케치와 돌출·회전 (형식 v2~v5, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
 
 - `model.sketches[]`: 평면 위 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).

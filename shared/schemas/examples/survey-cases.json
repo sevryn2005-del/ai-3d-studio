@@ -1,0 +1,492 @@
+{
+  "touching-faces-union": {
+    "volume": 2000,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "a",
+          "name": "박스 1",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "b",
+          "name": "박스 2",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              10,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "u",
+          "name": "합치기 1",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "union",
+            "base": "a",
+            "tools": [
+              "b"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "coplanar-through-cut": {
+    "volume": 3717.2566611769184,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "a",
+          "name": "박스 1",
+          "params": {
+            "width": 20,
+            "depth": 20,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 3,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder"
+        },
+        {
+          "id": "k",
+          "name": "빼기 1",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "a",
+            "tools": [
+              "c"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "tangent-side-cut": {
+    "volume": 4000,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "a",
+          "name": "박스 1",
+          "params": {
+            "width": 20,
+            "depth": 20,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 3,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              13,
+              0,
+              -5
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder"
+        },
+        {
+          "id": "k",
+          "name": "빼기 1",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "a",
+            "tools": [
+              "c"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "revolve-and-negative-extrude": {
+    "volume": 4269.911184307752,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XZ",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "r",
+              "type": "rectangle",
+              "center": [
+                10,
+                5
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "r.width",
+              "entity": "r",
+              "kind": "width",
+              "value": 6
+            },
+            {
+              "id": "r.height",
+              "entity": "r",
+              "kind": "height",
+              "value": 10
+            }
+          ],
+          "constraints": []
+        },
+        {
+          "id": "t",
+          "name": "스케치 2",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "q",
+              "type": "rectangle",
+              "center": [
+                40,
+                0
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "q.width",
+              "entity": "q",
+              "kind": "width",
+              "value": 10
+            },
+            {
+              "id": "q.height",
+              "entity": "q",
+              "kind": "height",
+              "value": 10
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "v",
+          "name": "회전 1",
+          "kind": "revolve",
+          "params": {
+            "angle": 360
+          },
+          "revolve": {
+            "sketch": "s",
+            "profile": "r"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": -5
+          },
+          "extrude": {
+            "sketch": "t",
+            "profile": "q"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "revolve-edge-on-axis": {
+    "volume": 3141.5926535897934,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "y",
+              "type": "rectangle",
+              "center": [
+                5,
+                5
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "y.width",
+              "entity": "y",
+              "kind": "width",
+              "value": 10
+            },
+            {
+              "id": "y.height",
+              "entity": "y",
+              "kind": "height",
+              "value": 10
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "v",
+          "name": "회전 1",
+          "kind": "revolve",
+          "params": {
+            "angle": 360
+          },
+          "revolve": {
+            "sketch": "s",
+            "profile": "y"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "revolve-cone-point-on-axis": {
+    "volume": 1047.1975511965977,
+    "model": {
+      "schemaVersion": 5,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "t",
+              "type": "polygon",
+              "points": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  10,
+                  0
+                ],
+                [
+                  0,
+                  10
+                ]
+              ]
+            }
+          ],
+          "dimensions": [],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "v",
+          "name": "회전 1",
+          "kind": "revolve",
+          "params": {
+            "angle": 360
+          },
+          "revolve": {
+            "sketch": "s",
+            "profile": "t"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

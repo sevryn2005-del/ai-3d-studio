@@ -4,6 +4,8 @@ import { useProjectStore } from '../../features/projects/projectStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import { appConfig } from '../../api/config';
 import { PrintCheckStatus } from '../PrintCheck/PrintCheckStatus';
+import { selectSelectedSketch } from '../../cad/sceneStore';
+import { degreesOfFreedom } from '../../cad/solver';
 
 export function StatusBar() {
   const model = useSceneStore(selectModel);
@@ -28,6 +30,7 @@ export function StatusBar() {
       </span>
       {engineId && <EvaluationStatus evaluation={evaluation} />}
       <PrintCheckStatus />
+      <SketchState />
       {notice && (
         <span className="notice" role="status" data-testid="notice">
           {notice}
@@ -70,6 +73,24 @@ function EvaluationStatus({ evaluation: e }: { evaluation: Evaluation }) {
   return (
     <span data-testid="server-evaluation" className="muted" title={title}>
       {text}
+    </span>
+  );
+}
+
+/** 선택한 스케치의 정의 상태 (솔리드웍스 상태 표시줄의 "완전 정의 / 불충분 정의") */
+function SketchState() {
+  const sketch = useSceneStore(selectSelectedSketch);
+  if (!sketch) return null;
+  if (sketch.entities.length === 0)
+    return (
+      <span data-testid="sketch-state" className="sketch-under">
+        {sketch.name}: 비어 있음 — 사각형·원·다각형을 그리세요
+      </span>
+    );
+  const dof = degreesOfFreedom(sketch);
+  return (
+    <span data-testid="sketch-state" className={dof === 0 ? 'sketch-full' : 'sketch-under'}>
+      {sketch.name}: {dof === 0 ? '완전 정의' : `불충분 정의 (자유도 ${dof})`}
     </span>
   );
 }

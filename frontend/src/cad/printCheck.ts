@@ -9,6 +9,8 @@
  * - warning 떠 있음: 바닥에 닿지 않고 다른 객체와도 닿지 않음 → 허공에서 출력 시작
  * - warning 크기 초과: 프린터 출력 범위보다 큼
  * - warning 얇음: 노즐 두 줄(0.8mm)보다 얇은 치수 (구멍을 뚫는 도구는 제외)
+ * - warning 겹침: 합치지 않은 두 객체가 서로 파고듦 → 파일 안에 겹친 껍질 두 개 (슬라이서 오류·이중 압출의 흔한 원인,
+ *   docs/issue-survey.md 7-2). 고치기 = 합치기
  */
 import type { CadCommand, CadObject, ModelDefinition, ObjectId, Vec3 } from './commandTypes';
 import { childIds, topLevelObjects } from './modelGraph';
@@ -32,6 +34,8 @@ export const DEFAULT_BED: Vec3 = [220, 220, 250];
 /** 0.4mm 노즐 두 줄 */
 export const MIN_FEATURE_MM = 0.8;
 const EPS = 0.01;
+/** 이만큼 이상 서로 파고들어야 겹침으로 본다 (맞닿기만 한 것은 제외) */
+const OVERLAP_MM = 0.1;
 
 const PARAM_LABEL: Record<string, string> = {
   width: '너비', depth: '깊이', height: '높이', radius: '지름', radiusBottom: '아래 지름', radiusTop: '위 지름',
@@ -114,5 +118,22 @@ export function checkPrintability(
     };
     visit(obj, false);
   }
+  // 겹침: 바운딩 박스가 세 축 모두 OVERLAP_MM 이상 파고드는 최상위 객체 쌍 (박스 기준이라 "겹칠 수 있음")
+  for (let i = 0; i < roots.length; i++)
+    for (let j = i + 1; j < roots.length; j++) {
+      const a = roots[i]!;
+      const b = roots[j]!;
+      const ba = boxes.get(a.id);
+      const bb = boxes.get(b.id);
+      if (!ba || !bb) continue;
+      const depth = [0, 1, 2].map((k) => Math.min(ba.max[k]!, bb.max[k]!) - Math.max(ba.min[k]!, bb.min[k]!));
+      if (depth.every((d) => d >= OVERLAP_MM)) {
+        issues.push({
+          key: `overlap:${a.id}:${b.id}`, severity: 'warning', objectId: b.id,
+          message: `'${a.name}'와(과) '${b.name}'이(가) 겹쳐 있습니다. 따로 내보내면 슬라이서에서 오류가 날 수 있으니 하나로 합치세요`,
+          fix: { label: '합치기', command: { type: 'union', base: a.id, tools: [b.id] } },
+        });
+      }
+    }
   return issues;
 }

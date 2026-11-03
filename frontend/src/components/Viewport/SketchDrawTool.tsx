@@ -154,7 +154,7 @@ function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' }
   return (
     <>
       <lineLoop geometry={geometry} raycast={() => null}>
-        <lineBasicMaterial color="#ffffff" depthTest={false} />
+        <lineBasicMaterial color="#1c232e" depthTest={false} />
       </lineLoop>
       <Html position={anchor} style={{ pointerEvents: 'none' }}>
         <div className="draw-label" data-testid="draw-label">
@@ -171,7 +171,7 @@ function PolylinePreview({ points, count }: { points: Point2[]; count: number })
   const line = useMemo(() => {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0.03]), 3));
-    const l = new Line(g, new LineBasicMaterial({ color: '#ffffff', depthTest: false }));
+    const l = new Line(g, new LineBasicMaterial({ color: '#1c232e', depthTest: false }));
     l.raycast = () => {};
     return l;
   }, [points]);

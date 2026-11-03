@@ -1,20 +1,21 @@
+/* 밝은 작업 화면 (솔리드웍스류 CAD 의 관례: 밝은 패널 + 밝은 그라디언트 그래픽 영역) */
 :root {
-  --bg: #15171b;
-  --panel: #1e2126;
-  --panel-2: #252931;
-  --border: #30353e;
-  --text: #e4e7ec;
-  --muted: #8b939f;
-  --accent: #4f8cff;
-  --accent-soft: rgba(79, 140, 255, 0.15);
-  --danger: #e5534b;
-  --ok: #57ab5a;
+  --bg: #e6e9ee;
+  --panel: #f5f6f8;
+  --panel-2: #ffffff;
+  --border: #c7cdd6;
+  --text: #1c232e;
+  --muted: #5d6877;
+  --accent: #1f6fd1;
+  --accent-soft: rgba(31, 111, 209, 0.12);
+  --danger: #c4352b;
+  --ok: #2c8a3b;
   --radius: 6px;
   font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -37,7 +38,7 @@ button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--d
 input, textarea {
   font: inherit;
   color: var(--text);
-  background: var(--bg);
+  background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 5px 8px;
@@ -50,12 +51,13 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .empty { color: var(--muted); padding: 8px 12px; margin: 0; }
 
 /* ---- 레이아웃: 상단 툴바 / 25·55·20 작업 영역 / 하단 상태바 ---- */
-.app { display: grid; grid-template-rows: 44px 1fr 28px; height: 100%; }
+.app { display: grid; grid-template-rows: auto 1fr 28px; height: 100%; }
 .workspace {
   display: grid;
-  grid-template-columns: 25fr 55fr 20fr;
+  grid-template-columns: minmax(260px, 22fr) 56fr minmax(260px, 22fr);
   min-height: 0;
 }
+.workspace.no-chat { grid-template-columns: minmax(260px, 22fr) 78fr; }
 .panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); }
 .panel-header {
   padding: 10px 12px;
@@ -94,22 +96,22 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 .composer button { align-self: flex-end; background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ---- 뷰포트 ---- */
-.viewport { position: relative; background: #1c1f24; }
+.viewport { position: relative; background: linear-gradient(180deg, #c9d4e2 0%, #eef2f7 70%, #f8fafc 100%); }
 .viewport-hint {
   position: absolute; left: 10px; bottom: 8px;
   color: var(--muted); font-size: 11px; pointer-events: none;
 }
 
 /* ---- 속성 패널 ---- */
-.properties { border-left: 1px solid var(--border); overflow-y: auto; }
+.properties { border-right: 1px solid var(--border); overflow-y: auto; }
 /* 패널 전체가 스크롤되므로 목록·속성이 줄어들어 사라지지 않게 한다 (목록은 max-height 안에서 자체 스크롤) */
 .properties > * { flex-shrink: 0; }
-.object-list { list-style: none; margin: 0; padding: 6px; max-height: 30%; overflow-y: auto; }
-.object-list button {
+.object-list, .origin-list { list-style: none; margin: 0; padding: 6px; max-height: 30%; overflow-y: auto; }
+.object-list button, .origin-list button {
   width: 100%; display: flex; justify-content: space-between; gap: 8px;
   background: transparent; border-color: transparent; text-align: left;
 }
-.object-list button.active { background: var(--accent-soft); border-color: var(--accent); }
+.object-list button.active, .origin-list button.active { background: var(--accent-soft); border-color: var(--accent); }
 .props { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
 fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 legend { color: var(--muted); padding: 0 4px; font-size: 11px; }
@@ -134,12 +136,17 @@ legend { color: var(--muted); padding: 0 4px; font-size: 11px; }
 }
 
 /* ---- 뷰포트 도구 막대 ---- */
+/* 보기 도구 모음: 그래픽 영역 위쪽 가운데 (솔리드웍스의 헤즈업 보기 도구 모음 위치) */
 .viewport-toolbar {
-  position: absolute; top: 10px; left: 10px;
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 4px;
   padding: 4px; border-radius: 8px;
-  background: rgba(30, 33, 38, 0.92); border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92); border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  width: max-content; max-width: calc(100% - 20px); white-space: nowrap; flex-wrap: wrap; justify-content: center;
 }
+.view-menu { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: repeat(4, auto); gap: 4px;
+  padding: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); z-index: 6; }
 .viewport-toolbar button { padding: 4px 8px; background: transparent; border-color: transparent; }
 .viewport-toolbar button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 .viewport-toolbar .sep { height: 16px; }
@@ -155,7 +162,7 @@ kbd {
 
 /* ---- 불리언 ---- */
 select {
-  font: inherit; color: var(--text); background: var(--bg);
+  font: inherit; color: var(--text); background: var(--panel-2);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 8px; width: 100%;
 }
 .operands { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
@@ -282,3 +289,46 @@ table.usage th:first-child { text-align: left; }
 .constraint-list li > span { flex: 1; min-width: 120px; }
 .pair-constraint { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
 .pair-constraint select { min-width: 0; flex: 1; }
+
+
+/* ---- 메뉴 줄 + 명령 탭 (솔리드웍스식 CommandManager) ---- */
+.toolbar { display: flex !important; flex-direction: column; align-items: stretch !important; padding: 0 !important; gap: 0 !important; height: auto !important; }
+.menu-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.menu-bar .tools { display: flex; align-items: center; gap: 6px; }
+.menu-bar .project-name { margin-left: auto; }
+.ai-toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+.command-tabs { display: flex; gap: 2px; padding: 4px 10px 0; background: var(--panel); }
+.command-tabs [role='tab'] { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; background: transparent; padding: 4px 14px; }
+.command-tabs [role='tab'][aria-selected='true'] { background: var(--panel-2); border-color: var(--border); font-weight: 600; }
+.command-bar { display: flex; align-items: center; gap: 4px; padding: 6px 10px; min-height: 62px; background: var(--panel-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.command-bar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 6px; }
+.cmd { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 64px; padding: 4px 8px; border-color: transparent; background: transparent; }
+.cmd:hover:not(:disabled) { background: var(--accent-soft); }
+.cmd[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.cmd.small { flex-direction: row; min-width: 0; border-color: var(--border); background: var(--panel-2); }
+.cmd-icon { line-height: 0; color: var(--text); }
+.cmd-label { font-size: 11px; white-space: nowrap; }
+.cmd-group-label, .cmd-hint { color: var(--muted); font-size: 11px; padding: 0 4px; }
+
+/* ---- 피처 트리 ---- */
+.panel-header.sub { font-size: 11px; color: var(--muted); padding-top: 4px; padding-bottom: 4px; }
+.tree-icon.plane { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--accent); transform: skewX(-20deg); margin-right: 4px; }
+.origin-list button { padding-top: 3px; padding-bottom: 3px; }
+
+/* ---- 속성 관리자 · 확인 모서리 ---- */
+.property-manager .pm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pm-actions { display: flex; gap: 6px; }
+button.ok { border-color: var(--ok); color: var(--ok); font-weight: 600; }
+button.cancel { border-color: var(--danger); color: var(--danger); }
+label.check { display: flex; align-items: center; gap: 6px; }
+label.check input { width: auto; }
+.confirm-corner { position: absolute; top: 54px; right: 10px; display: flex; align-items: center; gap: 6px; z-index: 5; }
+.confirm-corner button { font-size: 18px; width: 40px; height: 36px; background: var(--panel-2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+.confirm-hint { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; }
+.sketch-full { color: var(--text); font-weight: 600; }
+.sketch-under { color: #1f5fd6; }
+.plane-label { display: inline-block; transform: translate(4px, 4px); background: rgba(255, 255, 255, 0.9); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; font-size: 12px; white-space: nowrap; color: var(--text); }
+.plane-label.hover { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.cmd-label kbd { margin-left: 4px; }
+.cmd-icon svg { display: block; }

@@ -9,6 +9,15 @@ import { maxEdgeSize } from '../../cad/edgeFeature';
 import { formatMm } from '../../cad/units';
 import { usePrintCheck } from '../../features/print/usePrintCheck';
 import { ExtrudeFields, FaceSketchAction, SketchProperties } from './SketchFields';
+import { PropertyManager } from './PropertyManager';
+import { useEditorStore } from '../../features/selection/editorStore';
+
+/** 원점 기준 평면 (Z-up: 윗면 = XY, 정면 = XZ, 우측면 = YZ) */
+const ORIGIN_PLANES = [
+  { type: 'XZ', label: '정면' },
+  { type: 'XY', label: '윗면' },
+  { type: 'YZ', label: '우측면' },
+] as const;
 
 export function PropertyPanel() {
   const model = useSceneStore(selectModel);
@@ -19,9 +28,34 @@ export function PropertyPanel() {
   const index = useMemo(() => byId(model), [model]);
   const roots = useMemo(() => topLevelObjects(model), [model]);
 
+  const pending = useEditorStore((s) => s.pending);
+  const selectedPlane = useEditorStore((s) => s.selectedPlane);
+  const pickPlane = (t: (typeof ORIGIN_PLANES)[number]['type']) => {
+    useEditorStore.getState().selectPlane(selectedPlane === t ? null : t);
+    select(null);
+  };
+
   return (
     <aside className="panel properties" aria-label="속성 패널">
-      <header className="panel-header">객체</header>
+      <header className="panel-header">피처 트리</header>
+      <ul className="origin-list" aria-label="기준 평면">
+        {ORIGIN_PLANES.map((p) => (
+          <li key={p.type}>
+            <button
+              className={selectedPlane === p.type ? 'active' : ''}
+              data-plane={p.type}
+              onClick={() => pickPlane(p.type)}
+              title={`${p.label} 평면 — 선택한 뒤 위 "스케치" 를 누르면 이 평면에 스케치를 시작합니다`}
+            >
+              <span>
+                <span className="tree-icon plane" aria-hidden="true" /> {p.label}
+              </span>
+              <span className="muted">{p.type}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <header className="panel-header sub">객체</header>
       <ul className="object-list" aria-label="객체 목록">
         {roots.length === 0 && <li className="empty">객체가 없습니다</li>}
         {roots.map((o) => (
@@ -31,7 +65,7 @@ export function PropertyPanel() {
 
       {model.sketches.length > 0 && (
         <>
-          <header className="panel-header">스케치</header>
+          <header className="panel-header sub">스케치</header>
           <ul className="object-list" aria-label="스케치 목록">
             {model.sketches.map((sk) => (
               <li key={sk.id}>
@@ -45,8 +79,10 @@ export function PropertyPanel() {
         </>
       )}
 
-      <header className="panel-header">속성</header>
-      {selected ? (
+      <header className="panel-header">{pending ? '속성 관리자' : '속성'}</header>
+      {pending ? (
+        <PropertyManager key={`${pending.kind}-${pending.sketch}`} model={model} />
+      ) : selected ? (
         <ObjectProperties key={selected.id} object={selected} model={model} />
       ) : selectedSketch ? (
         <SketchProperties key={selectedSketch.id} sketch={selectedSketch} model={model} />

@@ -169,6 +169,70 @@ export function buildSketchPlateFixture(commands: unknown[] = SKETCH_PLATE_COMMA
   return model;
 }
 
+/**
+ * 다른 CAD 에서 보고된 형상 실패 사례 (docs/issue-survey.md 4-3·4-5·7-3·7-4). 두 엔진 모두
+ * 닫힌 메시·양의 부피·같은 부피여야 한다: 브라우저 issueSurvey.test.ts, 서버 test_issue_survey.py
+ */
+export const SURVEY_CASES: Record<string, { volume: number; commands: unknown[] }> = {
+  'touching-faces-union': {
+    volume: 2000,
+    commands: [
+      { type: 'create_box', id: 'a', width: 10, depth: 10, height: 10 },
+      { type: 'create_box', id: 'b', width: 10, depth: 10, height: 10, position: [10, 0, 0] },
+      { type: 'union', id: 'u', base: 'a', tools: ['b'] },
+    ],
+  },
+  'coplanar-through-cut': {
+    volume: 4000 - Math.PI * 9 * 10,
+    commands: [
+      { type: 'create_box', id: 'a', width: 20, depth: 20, height: 10 },
+      { type: 'create_cylinder', id: 'c', radius: 3, height: 10 },
+      { type: 'cut', id: 'k', base: 'a', tools: ['c'] },
+    ],
+  },
+  'tangent-side-cut': {
+    volume: 4000,
+    commands: [
+      { type: 'create_box', id: 'a', width: 20, depth: 20, height: 10 },
+      { type: 'create_cylinder', id: 'c', radius: 3, height: 20, position: [13, 0, -5] },
+      { type: 'cut', id: 'k', base: 'a', tools: ['c'] },
+    ],
+  },
+  'revolve-and-negative-extrude': {
+    volume: Math.PI * (13 * 13 - 7 * 7) * 10 + 500,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 5], width: 6, height: 10 },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 'r', angle: 360 },
+      { type: 'create_sketch', id: 't', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 't', id: 'q', center: [40, 0], width: 10, height: 10 },
+      { type: 'extrude', id: 'e', sketch: 't', profile: 'q', distance: -5 },
+    ],
+  },
+  'revolve-edge-on-axis': {
+    volume: Math.PI * 100 * 10,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'y', center: [5, 5], width: 10, height: 10 },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 'y', angle: 360 },
+    ],
+  },
+  'revolve-cone-point-on-axis': {
+    volume: (Math.PI * 100 * 10) / 3,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 't', points: [[0, 0], [10, 0], [0, 10]] },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 't', angle: 360 },
+    ],
+  },
+};
+
+export function buildSurveyFixture() {
+  return Object.fromEntries(
+    Object.entries(SURVEY_CASES).map(([name, c]) => [name, { volume: c.volume, model: buildSketchPlateFixture(c.commands) }]),
+  );
+}
+
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */
 export function generateSchemas(): Record<string, string> {
   return {
@@ -178,6 +242,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-face-sketch.json': JSON.stringify(buildSketchPlateFixture(FACE_SKETCH_COMMANDS), null, 2) + '\n',
     'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
     'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
+    'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

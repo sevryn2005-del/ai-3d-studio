@@ -181,13 +181,27 @@ export function constraintResiduals(sketch: Sketch): Map<string, number> {
 
 // ---- 해석 -------------------------------------------------------------------
 
+/** 진단에 쓰는 구속 수 상한 (구속마다 해석을 한 번 더 하므로) */
+const MAX_DIAGNOSE = 40;
+
+/**
+ * 풀리지 않을 때 "어느 구속끼리 충돌하는지" 찾는다 (SolidWorks SketchXpert 의 진단과 같은 목적):
+ * 그 구속 하나만 빼면 풀리는 구속들 = 충돌에 관여한 구속. 하나만 빼서는 안 풀리면 빈 목록.
+ */
+export function conflictingConstraints(sketch: Sketch, pinned: ReadonlySet<string> = new Set()): SketchConstraint[] {
+  if (sketch.constraints.length > MAX_DIAGNOSE) return [];
+  return sketch.constraints.filter(
+    (c) => solveSketch({ ...sketch, constraints: sketch.constraints.filter((o) => o !== c) }, pinned, false).ok,
+  );
+}
+
 export type SolveResult = { ok: true; sketch: Sketch; dof: number } | { ok: false; error: string };
 
 /**
  * 구속을 만족하도록 점을 옮긴다. pinned: 이번 편집에서 사용자가 정한 점(움직이지 않음).
  * 풀 수 없으면 ok:false — 실행기는 이 경우 명령을 거부하고 원본을 그대로 둔다.
  */
-export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Set()): SolveResult {
+export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Set(), diagnose = true): SolveResult {
   for (const c of sketch.constraints) {
     const err = constraintError(sketch, c);
     if (err) return { ok: false, error: `구속 ${c.id}: ${err}` };
@@ -220,7 +234,14 @@ export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Se
     x = best.x;
     r = best.r;
     if (maxAbs(r) > SOLVE_TOLERANCE * 1e3) {
-      return { ok: false, error: '구속을 동시에 만족할 수 없습니다 (서로 모순되거나 과하게 구속되었습니다)' };
+      const culprits = diagnose ? conflictingConstraints(sketch, pinned) : [];
+      const named = culprits.map((c) => `${CONSTRAINT_LABEL[c.type]} ${c.id}`).join(', ');
+      return {
+        ok: false,
+        error: culprits.length
+          ? `구속을 동시에 만족할 수 없습니다 — 서로 충돌하는 구속: ${named}. 이 중 하나를 지우거나 값을 바꾸세요`
+          : '구속을 동시에 만족할 수 없습니다 (서로 모순되거나 과하게 구속되었습니다)',
+      };
     }
   }
 
@@ -363,13 +384,21 @@ function rank(J: number[][]): number {
 
 // ---- 다각형 형상 검사 ----------------------------------------------------------
 
+/**
+ * 변의 최소 길이 (mm) = 출력 허용 오차. 이보다 짧은 변은 눈에 보이지 않는 틈·중복 점이라
+ * 다른 CAD 에서 "열린 윤곽"·미세 모서리 실패의 흔한 원인이 된다 (docs/issue-survey.md 2-4, 4-6).
+ * 백엔드 constraints.MIN_EDGE 와 같은 값.
+ */
+export const MIN_EDGE = 0.01;
+
 /** 다각형이 단순(변끼리 교차하지 않음)하고 넓이가 있는지. 문제가 없으면 null */
 export function polygonError(points: Point2[]): string | null {
   const n = points.length;
   for (let i = 0; i < n; i++) {
     const a = points[i]!;
     const b = points[(i + 1) % n]!;
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6) return `변 e${i} 의 길이가 0 입니다`;
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_EDGE)
+      return `변 e${i} 이(가) 너무 짧습니다 (${MIN_EDGE}mm 미만 — 거의 같은 점 두 개). 점 p${i} 또는 p${(i + 1) % n} 을 옮기거나 지우세요`;
     for (let j = i + 1; j < n; j++) {
       if (j === i || (j + 1) % n === i || (i + 1) % n === j) continue; // 이웃한 변
       if (segmentsCross(a, b, points[j]!, points[(j + 1) % n]!)) return `변 e${i} 와 e${j} 가 교차합니다 (꼬인 다각형)`;
