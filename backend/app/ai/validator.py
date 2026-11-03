@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from app.cad.commands import (
     BooleanObject,
     CadCommandAdapter,
+    ExtrudeObject,
     ModelDefinition,
     PARAMS_MODELS,
     REQUIRED_DIMENSIONS,
@@ -46,6 +47,13 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     kinds: dict[str, str] = {o.id: o.kind for o in model.objects}
     # 스케치 id → 요소 id → 요소 유형 (객체와 스케치는 ID 이름공간을 공유한다)
     sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
+    # 돌출 객체 id → (스케치, 프로파일): 참조 중인 스케치·요소 삭제를 막기 위해
+    extrude_refs: dict[str, tuple[str, str]] = {
+        o.id: (o.extrude.sketch, o.extrude.profile) for o in model.objects if isinstance(o, ExtrudeObject)
+    }
+
+    def users_of(sid: str, eid: str | None = None) -> list[str]:
+        return sorted(o for o, (s_, p_) in extrude_refs.items() if s_ == sid and (eid is None or p_ == eid))
 
     def id_used(oid: str) -> bool:
         return oid in kinds or oid in sketches
@@ -106,6 +114,24 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(
                         f"commands[{i}].dimension: sketch '{c['sketch']}' has no dimension '{c['dimension']}' (existing: {', '.join(allowed) or 'none'})"
                     )
+        elif t in ("set_entity_center", "delete_sketch_entity"):
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                if c["entity"] not in ents:
+                    errors.append(f"commands[{i}].entity: sketch '{c['sketch']}' has no element '{c['entity']}' (existing: {', '.join(sorted(ents)) or 'none'})")
+                elif t == "delete_sketch_entity":
+                    if users := users_of(c["sketch"], c["entity"]):
+                        errors.append(f"commands[{i}].entity: '{c['entity']}' is used by extrude {', '.join(users)}; delete those objects first")
+                    else:
+                        ents.pop(c["entity"])
+        elif t in ("rename_sketch", "set_sketch_plane"):
+            sketch_exists(i, c["sketch"])
+        elif t == "delete_sketch":
+            if sketch_exists(i, c["sketch"]):
+                if users := users_of(c["sketch"]):
+                    errors.append(f"commands[{i}].sketch: sketch '{c['sketch']}' is used by extrude {', '.join(users)}; delete those objects first")
+                else:
+                    sketches.pop(c["sketch"])
         elif t == "extrude":
             if sketch_exists(i, c["sketch"]) and c["profile"] not in sketches[c["sketch"]]:
                 existing = ", ".join(sorted(sketches[c["sketch"]])) or "none"
@@ -115,6 +141,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if id_used(new_id):
                     errors.append(f"commands[{i}].id: id '{new_id}' is already used")
                 kinds[new_id] = "extrude"
+                extrude_refs[new_id] = (c["sketch"], c["profile"])
         elif t in ("cut", "union", "intersect"):
             ids = [c["base"], *c["tools"]]
             if len(set(ids)) != len(ids):
@@ -144,7 +171,14 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             if exists(i, c["target"], "target"):
                 if c["target"] in parent:
                     errors.append(f"commands[{i}].target: '{c['target']}' is inside boolean '{parent[c['target']]}' and cannot be deleted alone")
-                kinds.pop(c["target"], None)
+                # 불리언 삭제 = 하위 트리 전체 삭제 (프론트엔드 실행기와 같은 규칙)
+                gone = {c["target"]}
+                while extra := {k for k, p in parent.items() if p in gone and k not in gone}:
+                    gone |= extra
+                for oid in gone:
+                    kinds.pop(oid, None)
+                    extrude_refs.pop(oid, None)
+                    parent.pop(oid, None)
         elif t == "duplicate_object":
             if exists(i, c["target"], "target") and c.get("newId"):
                 if id_used(c["newId"]):

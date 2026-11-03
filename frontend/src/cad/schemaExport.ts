@@ -75,9 +75,26 @@ export const SKETCH_PLATE_COMMANDS: unknown[] = [
   { type: 'cut', id: 'plate_holed', name: '구멍 뚫린 판', base: 'plate', tools: ['hole'] },
 ];
 
-export function buildSketchPlateFixture() {
+/**
+ * 세 평면 (언어 간 계약 픽스처). 기대 월드 바운딩 박스 (CadQuery 이름 평면 규약):
+ *   front (XZ, offset 3, 30×20 @ (5,10), 4mm):  X −10..20, Y −7..−3, Z 0..20
+ *   side  (YZ, offset −2, Ø10 @ (2,8), 6mm):     X −2..4,  Y −3..7,  Z 3..13
+ *   front_moved: front 와 같은 스케치, 위치 (0,0,5) · Z 90° 회전
+ */
+export const SKETCH_PLANES_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 'sk_front', name: '정면', plane: { type: 'XZ', offset: 3 } },
+  { type: 'add_rectangle', sketch: 'sk_front', id: 'r1', center: [5, 10], width: 30, height: 20 },
+  { type: 'extrude', id: 'front', sketch: 'sk_front', profile: 'r1', distance: 4 },
+  { type: 'create_sketch', id: 'sk_side', name: '측면', plane: { type: 'YZ', offset: -2 } },
+  { type: 'add_circle', sketch: 'sk_side', id: 'c1', center: [2, 8], diameter: 10 },
+  { type: 'extrude', id: 'side', sketch: 'sk_side', profile: 'c1', distance: 6 },
+  { type: 'extrude', id: 'front_moved', sketch: 'sk_front', profile: 'r1', distance: 4, position: [0, 0, 5] },
+  { type: 'set_transform', target: 'front_moved', rotation: [0, 0, 90] },
+];
+
+export function buildSketchPlateFixture(commands: unknown[] = SKETCH_PLATE_COMMANDS) {
   let model = emptyModel();
-  for (const cmd of SKETCH_PLATE_COMMANDS) {
+  for (const cmd of commands) {
     const r = executeCommand(model, cmd);
     if (!r.ok) throw new Error(`픽스처 생성 실패: ${r.error}`);
     model = r.model;
@@ -90,6 +107,7 @@ export function generateSchemas(): Record<string, string> {
   return {
     'examples/model-cut-rotated.json': JSON.stringify(buildBooleanFixture(), null, 2) + '\n',
     'examples/model-sketch-plate.json': JSON.stringify(buildSketchPlateFixture(), null, 2) + '\n',
+    'examples/model-sketch-planes.json': JSON.stringify(buildSketchPlateFixture(SKETCH_PLANES_COMMANDS), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

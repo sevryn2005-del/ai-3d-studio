@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { BufferGeometry } from 'three';
+import { Euler, Quaternion, Vector3, type BufferGeometry } from 'three';
+import { extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
 import { resolveProfile, type Profile } from '../../cad/sketch';
+import { useEditorStore } from '../../features/selection/editorStore';
 import { useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
 import { useBackendStore } from '../../features/backend/backendStore';
@@ -138,6 +140,7 @@ function ObjectMesh({
       geometry={geometry}
       userData={{ source }}
       onClick={(e) => {
+        if (useEditorStore.getState().drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
         e.stopPropagation();
         select(selectId);
       }}
@@ -185,10 +188,14 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null): {
     case 'sphere':
       return { position: [0, 0, o.params.radius] };
     case 'extrude': {
-      // 돌출: 스케치 평면 좌표의 단면 중심 + 평면 높이에서 +Z 로 distance
-      const [cx, cy] = profile?.center ?? [0, 0];
-      const z = (profile?.z ?? 0) + o.params.distance / 2;
-      return profile?.type === 'circle' ? { position: [cx, cy, z], rotation: [Math.PI / 2, 0, 0] } : { position: [cx, cy, z] };
+      // 돌출: 평면 좌표에서 단면 중심 + 법선으로 distance/2 → 평면 기저로 객체 로컬에 놓는다
+      if (!profile) return { position: [0, 0, 0] };
+      const m = extrudePreviewMatrix(profile, o.params.distance);
+      const pos = new Vector3();
+      const q = new Quaternion();
+      m.decompose(pos, q, new Vector3());
+      const e = new Euler().setFromQuaternion(q, 'XYZ');
+      return { position: [pos.x, pos.y, pos.z], rotation: [e.x, e.y, e.z] };
     }
   }
 }

@@ -175,6 +175,37 @@ class TestValidator:
             "commands[6].params: box 'box_1' has no parameter distance (allowed: depth, height, width)",
         ]
 
+    def test_sketch_management(self):
+        plate = model_with()
+        data = plate.model_dump(mode="json")
+        data["sketches"] = [{"id": "sk", "name": "판", "plane": {"type": "XY", "offset": 0},
+                             "entities": [{"id": "r1", "type": "rectangle", "center": [0, 0]}, {"id": "c1", "type": "circle", "center": [5, 0]}],
+                             "dimensions": [{"id": "r1.width", "entity": "r1", "kind": "width", "value": 60},
+                                            {"id": "r1.height", "entity": "r1", "kind": "height", "value": 40},
+                                            {"id": "c1.diameter", "entity": "c1", "kind": "diameter", "value": 3}]}]
+        data["objects"].append({"id": "plate", "name": "판", "kind": "extrude", "params": {"distance": 4},
+                                "extrude": {"sketch": "sk", "profile": "r1"}, "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}})
+        m = ModelDefinition.model_validate(data)
+        _, errors = validate_commands([
+            {"type": "set_entity_center", "sketch": "sk", "entity": "c1", "center": [10, 0]},
+            {"type": "delete_sketch_entity", "sketch": "sk", "entity": "c1"},
+            {"type": "set_entity_center", "sketch": "sk", "entity": "c1", "center": [0, 0]},
+            {"type": "delete_sketch_entity", "sketch": "sk", "entity": "r1"},
+            {"type": "delete_sketch", "sketch": "sk"},
+            {"type": "rename_sketch", "sketch": "sk", "name": "윤곽"},
+        ], m)
+        assert errors == [
+            "commands[2].entity: sketch 'sk' has no element 'c1' (existing: r1)",
+            "commands[3].entity: 'r1' is used by extrude plate; delete those objects first",
+            "commands[4].sketch: sketch 'sk' is used by extrude plate; delete those objects first",
+        ]
+        cmds, errors = validate_commands([
+            {"type": "cut", "id": "holed", "base": "plate", "tools": ["box_1"]},
+            {"type": "delete_object", "target": "holed"},
+            {"type": "delete_sketch", "sketch": "sk"},
+        ], m)
+        assert errors == [] and len(cmds) == 3
+
     @pytest.mark.parametrize("raw", [None, [], "x", [{"type": "exec_python"}]])
     def test_malformed(self, raw):
         assert validate_commands(raw, model_with())[1]

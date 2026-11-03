@@ -139,7 +139,13 @@ export const SketchDimensionSchema = z.strictObject({
 export type SketchDimension = z.infer<typeof SketchDimensionSchema>;
 
 /** 지금은 XY 평면(높이 offset)만 지원 */
-export const SketchPlaneSchema = z.strictObject({ type: z.literal('XY'), offset: coordinate });
+/**
+ * 스케치 평면 (CadQuery 이름 평면과 같은 규약). offset = 평면 법선 방향 거리 (mm).
+ * XY: u=X, v=Y, 법선 +Z · XZ: u=X, v=Z, 법선 −Y · YZ: u=Y, v=Z, 법선 +X
+ */
+export const SketchPlaneTypeSchema = z.enum(['XY', 'XZ', 'YZ']);
+export const SketchPlaneSchema = z.strictObject({ type: SketchPlaneTypeSchema, offset: coordinate });
+export type SketchPlane = z.infer<typeof SketchPlaneSchema>;
 
 export const SketchSchema = z.strictObject({
   id: ObjectIdSchema,
@@ -289,7 +295,7 @@ export const SetParamsCommandSchema = z.strictObject({
   params: SetParamsParamsSchema,
 });
 
-/** 새 스케치 (XY 평면, 높이 offset). 요소는 add_rectangle / add_circle 로 추가 */
+/** 새 스케치 (기본 XY 평면, offset 0). 요소는 add_rectangle / add_circle 로 추가 */
 export const CreateSketchCommandSchema = z.strictObject({
   type: z.literal('create_sketch'),
   id: ObjectIdSchema.optional(),
@@ -324,7 +330,41 @@ export const SetDimensionCommandSchema = z.strictObject({
   value: dimension,
 });
 
-/** 스케치 프로파일(사각형·원)을 +Z 방향으로 distance 만큼 돌출해 새 객체를 만든다 */
+/** 스케치 요소의 중심 이동 (스케치 평면 좌표, mm) → 참조하는 돌출이 다시 계산된다 */
+export const SetEntityCenterCommandSchema = z.strictObject({
+  type: z.literal('set_entity_center'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+  center: Point2Schema,
+});
+
+/** 스케치 요소 삭제 (치수도 함께). 돌출이 참조 중이면 거부 */
+export const DeleteSketchEntityCommandSchema = z.strictObject({
+  type: z.literal('delete_sketch_entity'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+});
+
+/** 스케치 평면 변경 (요소·치수는 평면 좌표 그대로) → 참조하는 돌출이 다시 계산된다 */
+export const SetSketchPlaneCommandSchema = z.strictObject({
+  type: z.literal('set_sketch_plane'),
+  sketch: ObjectIdSchema,
+  plane: SketchPlaneSchema,
+});
+
+export const RenameSketchCommandSchema = z.strictObject({
+  type: z.literal('rename_sketch'),
+  sketch: ObjectIdSchema,
+  name: NameSchema.trim(),
+});
+
+/** 스케치 삭제. 돌출이 참조 중이면 거부 (먼저 돌출 객체를 삭제) */
+export const DeleteSketchCommandSchema = z.strictObject({
+  type: z.literal('delete_sketch'),
+  sketch: ObjectIdSchema,
+});
+
+/** 스케치 프로파일(사각형·원)을 평면 법선 방향으로 distance 만큼 돌출해 새 객체를 만든다 */
 export const ExtrudeCommandSchema = z.strictObject({
   type: z.literal('extrude'),
   id: ObjectIdSchema.optional(),
@@ -391,6 +431,11 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddRectangleCommandSchema,
   AddCircleCommandSchema,
   SetDimensionCommandSchema,
+  SetEntityCenterCommandSchema,
+  DeleteSketchEntityCommandSchema,
+  SetSketchPlaneCommandSchema,
+  RenameSketchCommandSchema,
+  DeleteSketchCommandSchema,
   ExtrudeCommandSchema,
   CutCommandSchema,
   UnionCommandSchema,

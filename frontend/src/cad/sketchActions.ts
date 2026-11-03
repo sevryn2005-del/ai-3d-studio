@@ -40,7 +40,7 @@ export type HoleResult = { ok: true; commands: CadCommand[]; holeId: ObjectId; c
 
 /**
  * 돌출 판에 원형 관통 구멍.
- * - 구멍 스케치: 판 스케치 평면보다 1mm 아래, 돌출 거리 = 판 두께 + 2mm (위아래로 1mm 씩 넘침)
+ * - 구멍 스케치: 판 스케치와 같은 평면에서 법선 반대로 1mm, 돌출 거리 = 판 두께 + 2mm (위아래로 1mm 씩 넘침)
  * - 구멍 객체는 판의 월드 변환을 그대로 받는다 (판이 불리언 안에 있으면 상위 변환을 합성)
  * - 최상위 객체(판 자신 또는 판을 포함한 불리언)에서 구멍을 뺀다
  * center 는 판 스케치 평면 좌표 (mm).
@@ -72,7 +72,7 @@ export function throughHoleCommands(
   const cutId = nextId(model, 'cut');
   const holeCount = model.objects.filter((o) => o.kind === 'extrude' && o.name.startsWith('관통 구멍')).length;
   const commands: CadCommand[] = [
-    { type: 'create_sketch', id: sketchId, name: `구멍 ${holeCount + 1}`, plane: { type: 'XY', offset: sketch.plane.offset - 1 } },
+    { type: 'create_sketch', id: sketchId, name: `구멍 ${holeCount + 1}`, plane: { type: sketch.plane.type, offset: sketch.plane.offset - 1 } },
     { type: 'add_circle', sketch: sketchId, id: 'c1', center: hole.center, diameter: hole.diameter },
     {
       type: 'extrude',
@@ -87,4 +87,51 @@ export function throughHoleCommands(
   if (world.rotation.some((v) => v !== 0)) commands.push({ type: 'set_transform', target: holeId, rotation: world.rotation });
   commands.push({ type: 'cut', id: cutId, base: root, tools: [holeId] });
   return { ok: true, commands, holeId, cutId };
+}
+
+/** 뷰포트에서 그린 도형 (스케치 평면 좌표, mm) */
+export type DrawnShape =
+  | { type: 'rectangle'; from: Point2; to: Point2 }
+  | { type: 'circle'; center: Point2; radius: number };
+
+/** 그리기로 만들 수 있는 최소 크기 (mm). 이보다 작으면 클릭으로 보고 무시한다 */
+export const MIN_DRAWN_SIZE = 0.5;
+
+/**
+ * 그린 도형 → 명령. sketchId 가 있으면 그 스케치에 추가, 없으면 XY 평면(z=0)에 새 스케치를 만든다.
+ * 너무 작으면 null.
+ */
+export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | null, shape: DrawnShape): CadCommand[] | null {
+  const existing = sketchId ? findSketch(model, sketchId) : undefined;
+  const sid = existing?.id ?? nextId(model, 'sketch');
+  const taken = new Set(existing?.entities.map((e) => e.id) ?? []);
+  const entityId = (prefix: string) => {
+    let n = 1;
+    while (taken.has(`${prefix}${n}`)) n++;
+    return `${prefix}${n}`;
+  };
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  let add: CadCommand;
+  if (shape.type === 'rectangle') {
+    const width = round(Math.abs(shape.to[0] - shape.from[0]));
+    const height = round(Math.abs(shape.to[1] - shape.from[1]));
+    if (width < MIN_DRAWN_SIZE || height < MIN_DRAWN_SIZE) return null;
+    const center: Point2 = [round((shape.from[0] + shape.to[0]) / 2), round((shape.from[1] + shape.to[1]) / 2)];
+    add = { type: 'add_rectangle', sketch: sid, id: entityId('r'), center, width, height };
+  } else {
+    const diameter = round(shape.radius * 2);
+    if (diameter < MIN_DRAWN_SIZE) return null;
+    add = { type: 'add_circle', sketch: sid, id: entityId('c'), center: [round(shape.center[0]), round(shape.center[1])], diameter };
+  }
+  return existing ? [add] : [{ type: 'create_sketch', id: sid }, add];
+}
+
+/**
+ * 스케치를 화면에 놓는 변환: 스케치를 쓰는 돌출 객체(preferred 우선)의 월드 변환, 없으면 원점.
+ * 돌출 형상과 스케치 윤곽·그리기 평면이 겹쳐 보이도록 한다.
+ */
+export function sketchPlacement(model: ModelDefinition, sketchId: ObjectId, preferred?: ObjectId): Transform {
+  const users = model.objects.filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketchId);
+  const user = users.find((o) => o.id === preferred) ?? users[0];
+  return user ? worldPlacement(model, user.id).world : { position: [0, 0, 0], rotation: [0, 0, 0] };
 }

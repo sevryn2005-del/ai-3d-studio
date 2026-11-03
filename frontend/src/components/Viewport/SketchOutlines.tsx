@@ -1,12 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
-import type { ModelDefinition, ObjectId, Sketch, SketchEntity, Transform } from '../../cad/commandTypes';
+import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { dimensionValue } from '../../cad/sketch';
-import { worldPlacement } from '../../cad/sketchActions';
-import { DEG2RAD } from '../../cad/units';
-
-const IDENTITY: Transform = { position: [0, 0, 0], rotation: [0, 0, 0] };
+import { sketchPlacement } from '../../cad/sketchActions';
+import { planeMatrix } from '../../cad/sketchPlane';
+import { toMatrix } from '../../cad/transformMath';
 
 /**
  * 스케치 윤곽 표시 (보기 전용, 선택·편집은 속성 패널).
@@ -20,13 +19,8 @@ export function SketchOutlines() {
   const visible = useMemo(() => visibleSketches(model, selectedId), [model, selectedId]);
   return (
     <>
-      {visible.map(({ sketch, placement, highlighted }) => (
-        <group
-          key={sketch.id}
-          position={placement.position}
-          rotation={[placement.rotation[0] * DEG2RAD, placement.rotation[1] * DEG2RAD, placement.rotation[2] * DEG2RAD]}
-          userData={{ sketchId: sketch.id }}
-        >
+      {visible.map(({ sketch, frame, highlighted }) => (
+        <group key={sketch.id} matrixAutoUpdate={false} matrix={frame} userData={{ sketchId: sketch.id }}>
           {sketch.entities.map((e) => (
             <EntityOutline key={e.id} sketch={sketch} entity={e} color={highlighted ? '#f0b429' : '#6cb6ff'} />
           ))}
@@ -41,18 +35,18 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
   const activeSketch = selectedObj?.kind === 'extrude' ? selectedObj.extrude.sketch : selectedId;
   return model.sketches
     .map((sketch) => {
-      const user =
-        (selectedObj?.kind === 'extrude' && selectedObj.extrude.sketch === sketch.id ? selectedObj : undefined) ??
-        model.objects.find((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
-      const show = sketch.id === activeSketch || !user;
-      return show ? { sketch, placement: user ? worldPlacement(model, user.id).world : IDENTITY, highlighted: sketch.id === activeSketch } : null;
+      const used = model.objects.some((o) => o.kind === 'extrude' && o.extrude.sketch === sketch.id);
+      if (sketch.id !== activeSketch && used) return null;
+      // 스케치 좌표 → 월드: (돌출 객체의 월드 변환) ∘ (평면)
+      const frame = toMatrix(sketchPlacement(model, sketch.id, selectedObj?.id)).multiply(planeMatrix(sketch.plane));
+      return { sketch, frame, highlighted: sketch.id === activeSketch };
     })
     .filter((x) => x !== null);
 }
 
 function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: SketchEntity; color: string }) {
   const geometry = useMemo(() => {
-    const z = sketch.plane.offset + 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 살짝 띄움
+    const z = 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 평면에서 살짝 띄움
     const [cx, cy] = entity.center;
     const pts: number[] = [];
     if (entity.type === 'rectangle') {

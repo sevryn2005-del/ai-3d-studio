@@ -1,5 +1,6 @@
 import fixture from '../../../../../shared/schemas/examples/model-cut-rotated.json';
 import plateFixture from '../../../../../shared/schemas/examples/model-sketch-plate.json';
+import planesFixture from '../../../../../shared/schemas/examples/model-sketch-planes.json';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema, type ModelDefinition } from '../../../cad/commandTypes';
@@ -178,6 +179,22 @@ describe('스케치 돌출 (공유 픽스처: 서버 test_sketch_extrude.py 와 
     const b = bbox(evaluateMeshes(wasm, m)[0]!.positions);
     expect(b.min).toEqual([-45, -20, 0]);
     expect(b.max).toEqual([45, 20, 4]);
+  });
+
+  it('XZ·YZ 평면: 서버(CadQuery 이름 평면)와 같은 월드 바운딩 박스', () => {
+    const model = ModelDefinitionSchema.parse(planesFixture);
+    const ids = model.objects.map((o) => o.id); // worldMeshes 는 최상위 객체 순서
+    const boxes = Object.fromEntries(worldMeshes(wasm, model).map((m, i) => [ids[i]!, bbox(m.positions)]));
+    const expectBox = (id: string, min: number[], max: number[]) => {
+      boxes[id]!.min.forEach((v, k) => expect(v).toBeCloseTo(min[k]!, 3));
+      boxes[id]!.max.forEach((v, k) => expect(v).toBeCloseTo(max[k]!, 3));
+    };
+    expectBox('front', [-10, -7, 0], [20, -3, 20]);
+    expectBox('side', [-2, -3, 3], [4, 7, 13]);
+    expectBox('front_moved', [3, -10, 5], [7, 20, 25]);
+    const p = probe(model, 'side');
+    expect(Math.abs(p.volume - Math.PI * 25 * 6)).toBeLessThan(0.01 * Math.PI * 10 * 6 + 1e-3);
+    p.dispose();
   });
 
   it('스케치가 없으면 형상 오류', () => {

@@ -84,12 +84,15 @@ _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"
 
 
 def extrude_solid(obj: ExtrudeObject, sketches: dict[str, Sketch]) -> cq.Shape:
-    """스케치 프로파일 돌출. 로컬 원점 = 스케치 평면 원점, 방향 +Z (브라우저 엔진 geometry.ts 와 같은 형상)."""
+    """스케치 프로파일 돌출. 평면 = CadQuery 이름 평면, 원점 = 법선 × offset, 방향 = 법선
+    (브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 형상)."""
     sk = sketches.get(obj.extrude.sketch)
     p = resolve_profile(sk, obj.extrude.profile) if sk else None
     if p is None:
         raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
-    wp = cq.Workplane("XY", origin=(0, 0, p["z"])).center(*p["center"])
+    named = cq.Plane.named(p["plane"])
+    origin = named.zDir * p["z"]
+    wp = cq.Workplane(cq.Plane(origin=origin, xDir=named.xDir, normal=named.zDir)).center(*p["center"])
     wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
     return wp.extrude(obj.params.distance).val()
 

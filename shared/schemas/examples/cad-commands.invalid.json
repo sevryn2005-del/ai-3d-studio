@@ -228,7 +228,7 @@
     "command": {
       "type": "create_sketch",
       "plane": {
-        "type": "XZ",
+        "type": "XW",
         "offset": 0
       }
     }
@@ -271,6 +271,40 @@
       ],
       "width": 1,
       "height": 1
+    }
+  },
+  {
+    "reason": "요소 중심은 2D 좌표",
+    "command": {
+      "type": "set_entity_center",
+      "sketch": "sk1",
+      "entity": "c1",
+      "center": [
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  {
+    "reason": "빈 스케치 이름",
+    "command": {
+      "type": "rename_sketch",
+      "sketch": "sk1",
+      "name": "   "
+    }
+  },
+  {
+    "reason": "삭제 대상 누락",
+    "command": {
+      "type": "delete_sketch"
+    }
+  },
+  {
+    "reason": "평면 변경에 평면 누락",
+    "command": {
+      "type": "set_sketch_plane",
+      "sketch": "sk1"
     }
   }
 ]

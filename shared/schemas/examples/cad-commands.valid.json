@@ -176,5 +176,44 @@
     "params": {
       "distance": 6
     }
+  },
+  {
+    "type": "set_entity_center",
+    "sketch": "sk1",
+    "entity": "c1",
+    "center": [
+      12.5,
+      -3
+    ]
+  },
+  {
+    "type": "delete_sketch_entity",
+    "sketch": "sk1",
+    "entity": "r2"
+  },
+  {
+    "type": "rename_sketch",
+    "sketch": "sk1",
+    "name": "뚜껑 윤곽"
+  },
+  {
+    "type": "delete_sketch",
+    "sketch": "sk1"
+  },
+  {
+    "type": "set_sketch_plane",
+    "sketch": "sk1",
+    "plane": {
+      "type": "YZ",
+      "offset": -5
+    }
+  },
+  {
+    "type": "create_sketch",
+    "id": "sk_front",
+    "plane": {
+      "type": "XZ",
+      "offset": 0
+    }
   }
 ]

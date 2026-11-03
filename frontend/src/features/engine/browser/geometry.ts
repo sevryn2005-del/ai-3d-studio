@@ -12,6 +12,7 @@
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
 import { resolveProfile } from '../../../cad/sketch';
+import { planeMatrix } from '../../../cad/sketchPlane';
 import { toMatrix } from '../../../cad/transformMath';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
@@ -63,7 +64,7 @@ export function localManifold(
   const { Manifold, CrossSection } = wasm;
   switch (obj.kind) {
     case 'extrude': {
-      // 서버 CadQuery: Workplane("XY", origin=(0,0,z)).center(cx,cy).rect(w,h)|circle(r).extrude(d) 와 같은 형상
+      // 서버 CadQuery: Workplane(평면, origin=법선×offset).center(cx,cy).rect(w,h)|circle(r).extrude(d) 와 같은 형상
       const sk = sketches.get(obj.extrude.sketch);
       const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
@@ -72,7 +73,9 @@ export function localManifold(
           ? scope.keep(CrossSection.square([p.width, p.height], true))
           : scope.keep(CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)));
       const placed = scope.keep(section.translate(p.center));
-      return scope.keep(scope.keep(placed.extrude(obj.params.distance)).translate([0, 0, p.z]));
+      // 평면 좌표(u, v, 법선) → 객체 로컬 (서버 cq.Plane.named 와 같은 기저). 열 우선 4×4.
+      const m = planeMatrix(p.plane).elements;
+      return scope.keep(scope.keep(placed.extrude(obj.params.distance)).transform(m as unknown as Parameters<Manifold['transform']>[0]));
     }
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;

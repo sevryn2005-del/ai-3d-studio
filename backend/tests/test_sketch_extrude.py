@@ -109,3 +109,18 @@ def test_stl_export_of_plate_with_hole(client):
     assert pts.max(axis=0) == pytest.approx([40, 20, 4], abs=1e-5)
     assert mesh_volume(tris) == pytest.approx(PLATE_VOLUME, rel=2e-3)
     assert is_watertight(tris)
+
+
+def bbox(s: cq.Shape):
+    b = s.BoundingBox()
+    return (b.xmin, b.xmax, b.ymin, b.ymax, b.zmin, b.zmax)
+
+
+def test_planes_fixture_matches_named_plane_convention():
+    """XZ(법선 −Y)·YZ(법선 +X) 평면 — 프론트엔드가 만든 픽스처, 브라우저 geometry.test.ts 와 같은 기대값."""
+    m = ModelDefinition.model_validate(load_json("examples/model-sketch-planes.json"))
+    assert check_model(m) == []
+    assert bbox(world(m, "front")) == pytest.approx((-10, 20, -7, -3, 0, 20), abs=1e-6)
+    assert bbox(world(m, "side")) == pytest.approx((-2, 4, -3, 7, 3, 13), abs=1e-3)
+    assert bbox(world(m, "front_moved")) == pytest.approx((3, 7, -10, 20, 5, 25), abs=1e-6)
+    assert world(m, "side").Volume() == pytest.approx(math.pi * 25 * 6, rel=1e-6)

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "units": "mm",
+  "sketches": [
+    {
+      "id": "sk_front",
+      "name": "정면",
+      "plane": {
+        "type": "XZ",
+        "offset": 3
+      },
+      "entities": [
+        {
+          "id": "r1",
+          "type": "rectangle",
+          "center": [
+            5,
+            10
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "r1.width",
+          "entity": "r1",
+          "kind": "width",
+          "value": 30
+        },
+        {
+          "id": "r1.height",
+          "entity": "r1",
+          "kind": "height",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "id": "sk_side",
+      "name": "측면",
+      "plane": {
+        "type": "YZ",
+        "offset": -2
+      },
+      "entities": [
+        {
+          "id": "c1",
+          "type": "circle",
+          "center": [
+            2,
+            8
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "c1.diameter",
+          "entity": "c1",
+          "kind": "diameter",
+          "value": 10
+        }
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "id": "front",
+      "name": "돌출 1",
+      "kind": "extrude",
+      "params": {
+        "distance": 4
+      },
+      "extrude": {
+        "sketch": "sk_front",
+        "profile": "r1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "side",
+      "name": "돌출 2",
+      "kind": "extrude",
+      "params": {
+        "distance": 6
+      },
+      "extrude": {
+        "sketch": "sk_side",
+        "profile": "c1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "front_moved",
+      "name": "돌출 3",
+      "kind": "extrude",
+      "params": {
+        "distance": 4
+      },
+      "extrude": {
+        "sketch": "sk_front",
+        "profile": "r1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          5
+        ],
+        "rotation": [
+          0,
+          0,
+          90
+        ]
+      }
+    }
+  ]
+}

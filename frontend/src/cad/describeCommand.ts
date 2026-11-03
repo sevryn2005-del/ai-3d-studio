@@ -35,6 +35,16 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${sketchName(cmd.sketch)}에 원 지름 ${formatMm(cmd.diameter)}mm`;
     case 'set_dimension':
       return `${sketchName(cmd.sketch)} 치수 ${cmd.dimension} → ${formatMm(cmd.value)}mm`;
+    case 'set_entity_center':
+      return `${sketchName(cmd.sketch)}의 ${cmd.entity} 중심 → (${formatMm(cmd.center[0])}, ${formatMm(cmd.center[1])})`;
+    case 'delete_sketch_entity':
+      return `${sketchName(cmd.sketch)}의 ${cmd.entity} 삭제`;
+    case 'set_sketch_plane':
+      return `${sketchName(cmd.sketch)} 평면 → ${cmd.plane.type}${cmd.plane.offset ? ` (${formatMm(cmd.plane.offset)}mm)` : ''}`;
+    case 'rename_sketch':
+      return `스케치 이름 → ${cmd.name}`;
+    case 'delete_sketch':
+      return `스케치 ${sketchName(cmd.sketch)} 삭제`;
     case 'extrude':
       return `${sketchName(cmd.sketch)}의 ${cmd.profile} 을(를) ${formatMm(cmd.distance)}mm 돌출`;
     case 'fillet':

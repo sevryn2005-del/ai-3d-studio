@@ -32,8 +32,8 @@ export function geometryKey(
     const sk = sketches.get(obj.extrude.sketch);
     const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
     const prof = !p ? 'missing'
-      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}`
-      : `circle:${p.diameter}@${p.center.join(',')},${p.z}`;
+      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${planeTag(p.plane.type)}`
+      : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane.type)}`;
     return `extrude:${prof}|d=${obj.params.distance}`;
   }
   const params = obj.params as Record<string, number>;
@@ -105,4 +105,9 @@ export function buildGeometry(mesh: EngineMesh): BufferGeometry {
 
 export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
   return buildGeometry(decodeRenderMeshArrays(mesh));
+}
+
+/** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
+function planeTag(type: string): string {
+  return type === 'XY' ? '' : `/${type}`;
 }

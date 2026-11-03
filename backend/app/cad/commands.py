@@ -143,7 +143,10 @@ class SketchDimension(Strict):
 
 
 class SketchPlane(Strict):
-    type: Literal["XY"]
+    """CadQuery 이름 평면과 같은 규약. offset = 평면 법선 방향 거리 (mm).
+    XY: u=X, v=Y, 법선 +Z · XZ: u=X, v=Z, 법선 −Y · YZ: u=Y, v=Z, 법선 +X"""
+
+    type: Literal["XY", "XZ", "YZ"]
     offset: Coordinate
 
 
@@ -167,10 +170,11 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     z = sketch.plane.offset
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
-            return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z}
+            return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
+                    "plane": sketch.plane.type}
         return None
     if "diameter" in dims:
-        return {"type": "circle", "center": e.center, "diameter": dims["diameter"], "z": z}
+        return {"type": "circle", "center": e.center, "diameter": dims["diameter"], "z": z, "plane": sketch.plane.type}
     return None
 
 
@@ -333,6 +337,36 @@ class SetDimension(Strict):
     value: Dimension
 
 
+class SetEntityCenter(Strict):
+    type: Literal["set_entity_center"]
+    sketch: ObjectId
+    entity: ObjectId
+    center: Point2
+
+
+class DeleteSketchEntity(Strict):
+    type: Literal["delete_sketch_entity"]
+    sketch: ObjectId
+    entity: ObjectId
+
+
+class SetSketchPlane(Strict):
+    type: Literal["set_sketch_plane"]
+    sketch: ObjectId
+    plane: SketchPlane
+
+
+class RenameSketch(Strict):
+    type: Literal["rename_sketch"]
+    sketch: ObjectId
+    name: TrimmedName
+
+
+class DeleteSketch(Strict):
+    type: Literal["delete_sketch"]
+    sketch: ObjectId
+
+
 class Extrude(Strict):
     type: Literal["extrude"]
     id: ObjectId | None = None
@@ -439,6 +473,11 @@ CadCommand = Annotated[
         AddRectangle,
         AddCircle,
         SetDimension,
+        SetEntityCenter,
+        DeleteSketchEntity,
+        SetSketchPlane,
+        RenameSketch,
+        DeleteSketch,
         Extrude,
         Cut,
         Union_,
@@ -466,6 +505,11 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddRectangle,
     AddCircle,
     SetDimension,
+    SetEntityCenter,
+    DeleteSketchEntity,
+    SetSketchPlane,
+    RenameSketch,
+    DeleteSketch,
     Extrude,
     Cut,
     Union_,

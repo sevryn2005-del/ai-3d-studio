@@ -87,8 +87,7 @@ function ObjectTreeItem({ object, index, depth }: { object: CadObject; index: Ma
 }
 
 function ObjectProperties({ object, model }: { object: CadObject; model: ModelDefinition }) {
-  const dispatch = useSceneStore((s) => s.dispatch);
-  const submitNow = useSceneStore((s) => s.submitNow);
+  const submit = useSceneStore((s) => s.submitNow);
   const { transform } = object;
   const [name, setName] = useState(object.name);
   useEffect(() => setName(object.name), [object.name]);
@@ -99,7 +98,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
   const setVec = (field: 'position' | 'rotation', axis: 0 | 1 | 2) => (v: number) => {
     const next = [...transform[field]] as Vec3;
     next[axis] = v;
-    dispatch({ type: 'set_transform', target: object.id, [field]: next });
+    submit(field === 'position' ? { type: 'set_transform', target: object.id, position: next } : { type: 'set_transform', target: object.id, rotation: next });
   };
 
   return (
@@ -112,7 +111,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
           onChange={(e) => setName(e.target.value)}
           onBlur={() =>
             name.trim() && name !== object.name
-              ? dispatch({ type: 'rename_object', target: object.id, name })
+              ? submit({ type: 'rename_object', target: object.id, name })
               : setName(object.name)
           }
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -134,7 +133,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
               label={f.label}
               unit="mm"
               value={(object.params as Record<string, number>)[f.key]!}
-              onCommit={(v) => submitNow({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
+              onCommit={(v) => submit({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
               testId={`param-${f.key}`}
             />
           ))}
@@ -166,7 +165,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
         <button
           disabled={!!parent}
           title={parent ? '불리언에 포함된 객체는 상위 객체를 복제하세요' : undefined}
-          onClick={() => dispatch({ type: 'duplicate_object', target: object.id })}
+          onClick={() => submit({ type: 'duplicate_object', target: object.id })}
         >
           복제
         </button>
@@ -174,7 +173,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
           className="danger"
           disabled={!!parent}
           title={parent ? '불리언에 포함된 객체는 단독으로 삭제할 수 없습니다' : undefined}
-          onClick={() => dispatch({ type: 'delete_object', target: object.id })}
+          onClick={() => submit({ type: 'delete_object', target: object.id })}
         >
           삭제
         </button>
@@ -206,7 +205,7 @@ function BooleanInfo({ object, model }: { object: Extract<CadObject, { kind: 'bo
 
 /** 선택한(최상위) 객체를 기준으로 다른 최상위 객체와 불리언 연산 */
 function BooleanActions({ object, model }: { object: CadObject; model: ModelDefinition }) {
-  const dispatch = useSceneStore((s) => s.dispatch);
+  const submit = useSceneStore((s) => s.submitNow);
   const others = topLevelObjects(model).filter((o) => o.id !== object.id);
   const [toolId, setToolId] = useState<ObjectId>(others[0]?.id ?? '');
   useEffect(() => {
@@ -214,7 +213,7 @@ function BooleanActions({ object, model }: { object: CadObject; model: ModelDefi
   }, [others, toolId]);
 
   if (others.length === 0) return null;
-  const run = (op: BooleanOperation) => dispatch({ type: op, base: object.id, tools: [toolId] });
+  const run = (op: BooleanOperation) => submit({ type: op, base: object.id, tools: [toolId] });
 
   return (
     <fieldset>
@@ -240,7 +239,7 @@ function BooleanActions({ object, model }: { object: CadObject; model: ModelDefi
 /** 선택한 최상위 객체의 가장 낮은 점을 바닥(z=0)에 맞춘다 (회전·불리언 결과 기준) */
 function DropToBed({ object }: { object: CadObject }) {
   const { boxes } = usePrintCheck();
-  const dispatch = useSceneStore((s) => s.dispatch);
+  const submit = useSceneStore((s) => s.submitNow);
   const box = boxes.get(object.id);
   const cmd = box ? dropToBedCommand(object, box) : null;
   return (
@@ -248,7 +247,7 @@ function DropToBed({ object }: { object: CadObject }) {
       className="drop-to-bed"
       disabled={!cmd}
       title={cmd ? '가장 낮은 점을 출력 베드(z=0)에 맞춥니다' : '이미 바닥에 놓여 있습니다'}
-      onClick={() => cmd && dispatch(cmd)}
+      onClick={() => cmd && submit(cmd)}
     >
       바닥에 놓기
     </button>
@@ -257,12 +256,12 @@ function DropToBed({ object }: { object: CadObject }) {
 
 /** 박스 모서리 처리 (필렛·모따기). 바꿀 때마다 fillet/chamfer 명령 1개 → 실행 취소 가능 */
 function EdgeFeatureFields({ object }: { object: Extract<CadObject, { kind: 'box' }> }) {
-  const dispatch = useSceneStore((s) => s.dispatch);
+  const submit = useSceneStore((s) => s.submitNow);
   const f = object.edgeFeature;
   const type = f?.type ?? 'none';
   const edges = f?.edges ?? 'all';
   const apply = (t: 'fillet' | 'chamfer', size: number, e: 'all' | 'vertical') =>
-    dispatch(t === 'fillet' ? { type: 'fillet', target: object.id, radius: size, edges: e } : { type: 'chamfer', target: object.id, distance: size, edges: e });
+    submit(t === 'fillet' ? { type: 'fillet', target: object.id, radius: size, edges: e } : { type: 'chamfer', target: object.id, distance: size, edges: e });
   const max = maxEdgeSize(object.params, edges);
   const defaultSize = Math.min(2, Math.floor(max * 0.5 * 10) / 10 || 0.1);
 

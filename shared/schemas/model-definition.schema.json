@@ -30,7 +30,11 @@
             "properties": {
               "type": {
                 "type": "string",
-                "const": "XY"
+                "enum": [
+                  "XY",
+                  "XZ",
+                  "YZ"
+                ]
               },
               "offset": {
                 "type": "number",

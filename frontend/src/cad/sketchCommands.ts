@@ -6,7 +6,10 @@ import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
 import { findSketch, resolveProfile } from './sketch';
 
-const SKETCH_TYPES = ['create_sketch', 'add_rectangle', 'add_circle', 'set_dimension', 'extrude'] as const;
+const SKETCH_TYPES = [
+  'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
+  'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
+] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
 export function isSketchCommand(cmd: CadCommand): cmd is SketchCommand {
@@ -26,6 +29,13 @@ function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
   let n = 1;
   while (sketch.entities.some((e) => e.id === `${prefix}${n}`)) n++;
   return `${prefix}${n}`;
+}
+
+/** 스케치(또는 그 요소)를 참조하는 돌출 객체 이름 */
+function extrudeUsers(model: ModelDefinition, sketchId: ObjectId, entityId?: ObjectId): string[] {
+  return model.objects
+    .filter((o) => o.kind === 'extrude' && o.extrude.sketch === sketchId && (entityId === undefined || o.extrude.profile === entityId))
+    .map((o) => o.name);
 }
 
 export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand): ExecuteResult {
@@ -82,6 +92,48 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const next = { ...sketch, dimensions: sketch.dimensions.map((d) => (d.id === dim.id ? { ...d, value: cmd.value } : d)) };
       // 선택을 바꾸지 않는다 (돌출 객체를 보며 치수를 고치는 흐름)
       return ok(replaceSketch(model, next), cmd, null);
+    }
+
+    case 'set_entity_center':
+    case 'delete_sketch_entity': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (!sketch.entities.some((e) => e.id === cmd.entity)) {
+        const names = sketch.entities.map((e) => e.id).join(', ') || '없음';
+        return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다 (있는 요소: ${names})`);
+      }
+      if (cmd.type === 'set_entity_center') {
+        const next = { ...sketch, entities: sketch.entities.map((e) => (e.id === cmd.entity ? { ...e, center: cmd.center } : e)) };
+        return ok(replaceSketch(model, next), cmd, null);
+      }
+      const users = extrudeUsers(model, sketch.id, cmd.entity);
+      if (users.length) return fail(`${cmd.entity} 을(를) 쓰는 돌출이 있어 삭제할 수 없습니다: ${users.join(', ')}`);
+      const next = {
+        ...sketch,
+        entities: sketch.entities.filter((e) => e.id !== cmd.entity),
+        dimensions: sketch.dimensions.filter((d) => d.entity !== cmd.entity),
+      };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
+    }
+
+    case 'set_sketch_plane': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      return ok(replaceSketch(model, { ...sketch, plane: cmd.plane }), cmd, null);
+    }
+
+    case 'rename_sketch': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      return ok(replaceSketch(model, { ...sketch, name: cmd.name }), cmd, sketch.id);
+    }
+
+    case 'delete_sketch': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const users = extrudeUsers(model, sketch.id);
+      if (users.length) return fail(`'${sketch.name}'을(를) 쓰는 돌출이 있어 삭제할 수 없습니다: ${users.join(', ')}`);
+      return ok({ ...model, sketches: model.sketches.filter((s) => s.id !== sketch.id) }, cmd, null);
     }
 
     case 'extrude': {

@@ -39,19 +39,30 @@ Three.js 뷰포트 ◀───────────────────�
 - 범위: 치수 0.1–1000mm, 반지름 0.05–500mm(원뿔은 0 허용), 좌표 ±10000mm, 회전 ±360°.
 - 명령 객체는 strict: 정의되지 않은 필드가 있으면 거부.
 
-## 스케치와 돌출 (형식 v2, `cad/sketch.ts`, `cad/sketchCommands.ts`)
+## 스케치와 돌출 (형식 v2, `cad/sketch.ts`, `cad/sketchCommands.ts`, `cad/sketchPlane.ts`)
 
-- `model.sketches[]`: XY 평면(높이 `plane.offset`)의 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).
-- `kind: "extrude"` 객체: `extrude: {sketch, profile}` 로 스케치 요소를 **참조**하고 `params.distance` 만큼 +Z 로 돌출.
-  로컬 원점 = 스케치 평면 원점. 치수를 바꾸면(`set_dimension`) 참조하는 돌출이 모두 다시 계산된다.
-- 명령: `create_sketch`, `add_rectangle`, `add_circle`, `set_dimension`, `extrude` (+ `set_params {distance}`). 객체와 스케치는 ID 이름공간을 공유한다.
-- 형상 키에 참조 프로파일(종류·치수·중심·평면 높이)을 넣는다 → 관련 치수가 바뀔 때만 재계산 (`renderMesh.geometryKey`).
-- 엔진: 서버 `cq.Workplane("XY", origin=(0,0,z)).center(cx,cy).rect|circle.extrude(d)`, 브라우저 `CrossSection.square|circle → extrude`.
-  공유 픽스처 `shared/schemas/examples/model-sketch-plate.json` 을 `tests/test_sketch_extrude.py` 와 `geometry.test.ts` 가 같은 값으로 검사.
-- 관통 구멍(`cad/sketchActions.throughHoleCommands`): 판 스케치 평면 −1mm 에 원 스케치, 두께 +2mm 돌출, 판의 월드 변환을 그대로 받아
-  최상위 객체에서 `cut`. 가장자리에서 0.5mm 이상 안쪽이어야 한다. 한 묶음(실행 취소 1번).
+- `model.sketches[]`: 평면 위 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).
+- 평면 `plane: {type, offset}` — CadQuery 이름 평면과 같은 규약 (원점 = 법선 × offset, 돌출 방향 = 법선):
+
+  | type | u | v | 법선(돌출) |
+  |------|---|---|-----------|
+  | XY | X | Y | +Z |
+  | XZ | X | Z | −Y |
+  | YZ | Y | Z | +X |
+
+  프론트 `planeMatrix`(Three.js, 브라우저 엔진·미리보기·윤곽·그리기 공용), 서버 `cq.Plane.named`. 두 엔진의 일치는 공유 픽스처
+  `model-sketch-planes.json`(XZ 사각형, YZ 원, 이동·회전한 돌출)으로 `test_sketch_extrude.py`·`geometry.test.ts` 가 같은 기대값으로 검사.
+- `kind: "extrude"` 객체: `extrude: {sketch, profile}` 로 스케치 요소를 **참조**하고 `params.distance` 만큼 법선 방향으로 돌출.
+  치수·중심·평면을 바꾸면 참조하는 돌출이 모두 다시 계산된다.
+- 명령: `create_sketch`, `add_rectangle`, `add_circle`, `set_dimension`, `set_entity_center`, `delete_sketch_entity`, `set_sketch_plane`,
+  `rename_sketch`, `delete_sketch`, `extrude` (+ `set_params {distance}`). 객체와 스케치는 ID 이름공간을 공유한다.
+  돌출이 쓰는 요소·스케치는 삭제를 거부한다 (먼저 돌출 객체를 삭제).
+- 형상 키에 참조 프로파일(종류·치수·중심·평면)을 넣는다 → 관련 값이 바뀔 때만 재계산 (`renderMesh.geometryKey`).
+- 관통 구멍(`cad/sketchActions.throughHoleCommands`): 판 스케치와 같은 평면에서 법선 반대로 1mm, 두께 +2mm 돌출, 판의 월드 변환을
+  그대로 받아 최상위 객체에서 `cut`. 가장자리에서 0.5mm 이상 안쪽이어야 한다. 한 묶음(실행 취소 1번).
+- 뷰포트 그리기(`Viewport/SketchDrawTool.tsx`, 단축키 R·C, Esc 로 끝): 선택한 스케치의 평면(돌출이 있으면 그 월드 변환 위)에,
+  없으면 바닥 XY 에 새 스케치로. 드래그 중에는 미리보기만, 놓으면 명령 1건(`drawShapeCommands`). 0.5mm 미만은 무시. 스냅 1mm.
 - 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1 파일은 열 때 `sketches: []` 를 붙여 v2 로 마이그레이션, 저장은 항상 v2.
-- 스케치 삭제·이름 변경 명령은 아직 없다 (실행 취소로만 되돌림).
 
 ## 불리언 트리
 
@@ -95,8 +106,9 @@ Three.js 뷰포트 ◀───────────────────�
 - 리비전은 커밋마다 새 번호(재사용 안 함). 실행 취소하면 이전 항목의 번호로 돌아간다. 적용한 명령 ID 는 실행 취소와 무관하게 남는다.
 - 세션 메모리에만 있다 (프로젝트 파일에 저장하지 않음).
 - 적용 경로: **이동·회전 기즈모** (드래그 시작 때 ID·기준 리비전 결정, 드래그 중에는 화면만 움직이고, 놓을 때 submit),
-  스케치 치수·돌출·도형 치수 입력 (`submitNow`: 확정 순간의 리비전을 기준으로 봉투 제출).
-  나머지 편집 경로(위치·회전 입력, 툴바, 여러 명령 묶음)는 기존 `dispatch` / `dispatchBatch` 를 쓰며, 리비전은 함께 올라간다.
+  속성 패널의 모든 단일 편집(치수·위치·회전·이름·복제·삭제·모서리·불리언·스케치)과 Delete 키
+  (`submitNow`: 확정 순간의 리비전을 기준으로 봉투 제출).
+  여러 명령 묶음(툴바 도형 추가, 그리기, 관통 구멍, AI)은 `dispatchBatch` 를 쓰며, 리비전은 함께 올라간다.
 - AI 응답: 요청을 보낼 때의 설계 원본과 응답 도착 시점의 원본이 다르면(직접 편집·실행 취소·다른 파일 열기) 명령을 적용하지 않고 다시 요청하라고 안내한다 (`aiStore.STALE_RESPONSE`).
 - 오래된 계산 결과: `runEvaluation` 은 취소된 요청의 결과·오류를 버리고, 메시는 보낸 모델의 형상 키로만 저장한다 (설계 원본은 바꾸지 않음).
 - 저장 실패: 쓰기 실패 시 `writable.abort()` 로 임시 사본을 버려 기존 파일이 그대로 남는다.

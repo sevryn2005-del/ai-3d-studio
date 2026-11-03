@@ -50,7 +50,7 @@ describe('치수형 사각형 → 4 mm 돌출 → 폭 수정', () => {
       { type: 'add_circle', sketch: 'sk2', id: 'c1', center: [18, 0], diameter: 6 },
       { type: 'extrude', id: 'hole', sketch: 'sk2', profile: 'c1', distance: 8 },
     );
-    expect(resolveProfile(m.sketches[1]!, 'c1')).toEqual({ type: 'circle', center: [18, 0], diameter: 6, z: -1 });
+    expect(resolveProfile(m.sketches[1]!, 'c1')).toEqual({ type: 'circle', center: [18, 0], diameter: 6, z: -1, plane: { type: 'XY', offset: -1 } });
     expect(sizeSummary(findObject(m, 'hole')!, m)).toBe('Ø6×8');
   });
 
@@ -106,4 +106,42 @@ it('설명 문구', () => {
   const m = run(emptyModel(), ...PLATE);
   expect(describeCommand({ type: 'set_dimension', sketch: 'sk1', dimension: 'r1.width', value: 80 }, m)).toBe('판 윤곽 치수 r1.width → 80mm');
   expect(describeCommand({ type: 'extrude', sketch: 'sk1', profile: 'r1', distance: 4 }, m)).toBe('판 윤곽의 r1 을(를) 4mm 돌출');
+});
+
+describe('스케치 관리 (이름·삭제·요소 이동/삭제)', () => {
+  const base = run(emptyModel(), ...PLATE, { type: 'add_circle', sketch: 'sk1', id: 'c1', center: [5, 0], diameter: 3 });
+
+  it('요소 중심 이동 → 돌출 단면이 따라온다', () => {
+    const m = run(base, { type: 'set_entity_center', sketch: 'sk1', entity: 'r1', center: [10, -5] });
+    expect(resolveProfile(m.sketches[0]!, 'r1')).toMatchObject({ center: [10, -5], width: 60 });
+  });
+
+  it('쓰이지 않는 요소는 치수와 함께 삭제', () => {
+    const m = run(base, { type: 'delete_sketch_entity', sketch: 'sk1', entity: 'c1' });
+    expect(m.sketches[0]!.entities.map((e) => e.id)).toEqual(['r1']);
+    expect(m.sketches[0]!.dimensions.map((d) => d.id)).toEqual(['r1.width', 'r1.height']);
+    expect(validateGraph(m)).toEqual([]);
+  });
+
+  it('돌출이 쓰는 요소·스케치는 삭제 거부, 돌출을 지운 뒤에는 삭제', () => {
+    for (const cmd of [
+      { type: 'delete_sketch_entity', sketch: 'sk1', entity: 'r1' },
+      { type: 'delete_sketch', sketch: 'sk1' },
+    ]) {
+      const r = executeCommand(base, cmd);
+      expect(!r.ok && r.error).toContain('쓰는 돌출이 있어 삭제할 수 없습니다: 판');
+    }
+    const m = run(base, { type: 'delete_object', target: 'plate' }, { type: 'delete_sketch', sketch: 'sk1' });
+    expect(m.sketches).toEqual([]);
+  });
+
+  it('이름 변경', () => {
+    const m = run(base, { type: 'rename_sketch', sketch: 'sk1', name: '  뚜껑  ' });
+    expect(m.sketches[0]!.name).toBe('뚜껑');
+  });
+
+  it('없는 요소', () => {
+    const r = executeCommand(base, { type: 'set_entity_center', sketch: 'sk1', entity: 'zz', center: [0, 0] });
+    expect(!r.ok && r.error).toContain('요소 zz 이(가) 없습니다 (있는 요소: r1, c1)');
+  });
 });

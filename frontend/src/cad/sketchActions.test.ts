@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { executeBatch, findObject } from './commandExecutor';
 import { emptyModel, type CadCommand, type ModelDefinition } from './commandTypes';
 import { validateGraph } from './modelGraph';
-import { rectangleSketchCommands, throughHoleCommands } from './sketchActions';
+import { drawShapeCommands, rectangleSketchCommands, throughHoleCommands } from './sketchActions';
 
 function run(m: ModelDefinition, cmds: unknown[]): ModelDefinition {
   const r = executeBatch(m, cmds);
@@ -75,5 +75,27 @@ describe('throughHoleCommands', () => {
   it('돌출이 아닌 객체는 거부', () => {
     const m = run(emptyModel(), [{ type: 'create_box', id: 'b', width: 10, depth: 10, height: 10 }]);
     expect(throughHoleCommands(m, 'b', { center: [0, 0], diameter: 2 })).toEqual({ ok: false, error: '돌출 객체에만 구멍을 낼 수 있습니다' });
+  });
+});
+
+describe('drawShapeCommands (뷰포트 그리기)', () => {
+  it('선택한 스케치가 없으면 새 스케치 + 사각형 (두 모서리 → 중심·폭·깊이)', () => {
+    const cmds = drawShapeCommands(emptyModel(), null, { type: 'rectangle', from: [10, 20], to: [-30, 0] })!;
+    expect(cmds).toEqual([
+      { type: 'create_sketch', id: 'sketch_1' },
+      { type: 'add_rectangle', sketch: 'sketch_1', id: 'r1', center: [-10, 10], width: 40, height: 20 },
+    ]);
+  });
+
+  it('선택한 스케치에 원 추가, 요소 ID 는 겹치지 않는다', () => {
+    const m = run(emptyModel(), [...rectangleSketchCommands(emptyModel()).commands, { type: 'add_circle', sketch: 'sketch_1', id: 'c1', diameter: 4 }]);
+    expect(drawShapeCommands(m, 'sketch_1', { type: 'circle', center: [5, 5], radius: 3 })).toEqual([
+      { type: 'add_circle', sketch: 'sketch_1', id: 'c2', center: [5, 5], diameter: 6 },
+    ]);
+  });
+
+  it('너무 작으면(클릭) 아무것도 만들지 않는다', () => {
+    expect(drawShapeCommands(emptyModel(), null, { type: 'rectangle', from: [0, 0], to: [10, 0.2] })).toBeNull();
+    expect(drawShapeCommands(emptyModel(), null, { type: 'circle', center: [0, 0], radius: 0.1 })).toBeNull();
   });
 });

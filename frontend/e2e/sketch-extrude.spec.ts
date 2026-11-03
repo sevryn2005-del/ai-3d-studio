@@ -135,3 +135,113 @@ test('엔진 오류에도 설계 원본은 남고, 고치면 다시 계산된다
   await setField(page, 'dim-r1.height', '30');
   await expectMesh(page, 'extrude_1', [-35, -15, 0], [35, 15, 4]);
 });
+
+test('스케치 관리: 이름 변경, 요소 추가·이동·삭제, 쓰이는 스케치는 삭제 불가', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '+ 사각형 스케치' }).click();
+
+  const name = page.getByLabel('이름');
+  await name.fill('뚜껑 윤곽');
+  await name.press('Enter');
+  await expect(page.locator('[data-sketch-id="sketch_1"]')).toContainText('뚜껑 윤곽');
+
+  await page.getByRole('button', { name: '+ 원', exact: true }).click();
+  await expect(page.getByTestId('dim-c1.diameter')).toHaveValue('10');
+  await setField(page, 'center-c1-x', '15');
+  await expect(page.getByTestId('center-c1-x')).toHaveValue('15');
+  expect((await scene(page)).command).toEqual({ type: 'set_entity_center', sketch: 'sketch_1', entity: 'c1', center: [15, 0] });
+  await page.getByTestId('delete-entity-c1').click();
+  await expect(page.getByTestId('dim-c1.diameter')).toHaveCount(0);
+
+  await page.getByTestId('extrude-r1').click(); // 돌출 객체가 선택됨
+  await page.locator('[data-sketch-id="sketch_1"]').click();
+  await expect(page.getByTestId('delete-sketch')).toBeDisabled();
+  await expect(page.getByTestId('delete-entity-r1')).toBeDisabled();
+
+  // 돌출 객체의 윤곽 중심 이동 → 메시가 따라 이동 (로컬 좌표 메시)
+  await page.locator('[data-object-id="extrude_1"]').click();
+  await setField(page, 'center-r1-x', '10');
+  await expectMesh(page, 'extrude_1', [-20, -20, 0], [40, 20, 4]);
+
+  // 돌출을 지우면 스케치도 지울 수 있다
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await page.locator('[data-sketch-id="sketch_1"]').click();
+  await page.getByTestId('delete-sketch').click();
+  await expect(page.locator('[data-sketch-id="sketch_1"]')).toHaveCount(0);
+  await page.keyboard.press('Control+z'); // 실행 취소로 복구
+  await expect(page.locator('[data-sketch-id="sketch_1"]')).toBeVisible();
+});
+
+test('뷰포트에서 직접 그리기: 사각형 드래그 → 같은 스케치에 원 → Esc → 돌출', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  const drag = async (a: [number, number], b: [number, number]) => {
+    const p = await at(...a);
+    const q = await at(...b);
+    await page.mouse.move(p.x, p.y);
+    await page.mouse.down();
+    await page.mouse.move((p.x + q.x) / 2, (p.y + q.y) / 2, { steps: 5 });
+    await page.mouse.move(q.x, q.y, { steps: 5 });
+  };
+
+  await page.keyboard.press('r');
+  await expect(page.getByTestId('viewport-hint')).toContainText('사각형');
+  const before = await scene(page);
+  await drag([-20, -10], [20, 10]);
+  await expect(page.getByTestId('draw-label')).toHaveText('40 × 20 mm');
+  expect(await scene(page)).toEqual(before); // 드래그 중에는 원본·이력 그대로
+  await page.mouse.up();
+  await expect(page.getByTestId('dim-r1.width')).toHaveValue('40'); // 새 스케치가 선택됨
+  await expect(page.getByTestId('dim-r1.height')).toHaveValue('20');
+  await expect(page.getByTestId('center-r1-x')).toHaveValue('0');
+
+  // 원 도구: 같은 스케치에 추가 (중심 → 반지름 드래그)
+  await page.getByRole('button', { name: /^원/ }).click();
+  await drag([10, 0], [13, 0]);
+  await page.mouse.up();
+  await expect(page.getByTestId('dim-c1.diameter')).toHaveValue('6');
+  await expect(page.getByTestId('center-c1-x')).toHaveValue('10');
+  expect(await page.evaluate(() => window.__AI3D_DEV__!.scene().past)).toBe(before.past + 2); // 도형마다 이력 1건
+
+  // 클릭만(드래그 없음)은 아무것도 만들지 않는다
+  const p = await at(-5, 5);
+  await page.mouse.click(p.x, p.y);
+  expect(await page.evaluate(() => window.__AI3D_DEV__!.scene().past)).toBe(before.past + 2);
+
+  // Esc: 그리기만 끝나고 스케치 선택은 유지
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('viewport-hint')).toContainText('회전');
+  await expect(page.getByTestId('sketch-properties')).toBeVisible();
+  await page.getByTestId('extrude-r1').click();
+  await expectMesh(page, 'extrude_1', [-20, -10, 0], [20, 10, 4]);
+});
+
+test('XZ 평면: 평면을 바꾸고 돌출 → 서버 메시가 정면 방향, 그 평면 위에 원을 그린다', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await page.getByRole('button', { name: '+ 사각형 스케치' }).click();
+  await page.getByTestId('sketch-plane').selectOption('XZ');
+  await setField(page, 'center-r1-y', '20'); // v = Z → 바닥 위로
+  await page.getByTestId('extrude-r1').click();
+  // 60×40 사각형, 중심 (0, 20) on XZ, 4mm 돌출 → X ±30, Y −4..0, Z 0..40
+  await expectMesh(page, 'extrude_1', [-30, -4, 0], [30, 0, 40]);
+  await expect(page.getByTestId('print-check')).toHaveText('출력 검사 ✓', { timeout: 20_000 });
+
+  // 스케치를 선택하고 원 도구: XZ 평면(y=0) 위의 점을 드래그
+  await page.locator('[data-sketch-id="sketch_1"]').click();
+  await page.keyboard.press('c');
+  const at = (x: number, z: number) => page.evaluate(([x, z]) => window.__AI3D_DEV__!.project(x!, 0, z!), [x, z]);
+  const a = await at(10, 20);
+  const b = await at(15, 20);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId('dim-c1.diameter')).toHaveValue('10');
+  await expect(page.getByTestId('center-c1-x')).toHaveValue('10');
+  await expect(page.getByTestId('center-c1-y')).toHaveValue('20');
+});
