@@ -38,7 +38,7 @@
     "resources": {
       "../../backend/dist/ai3d-engine/": "engine/"
     },
-    "licenseFile": "../../THIRD_PARTY_NOTICES.md",
+    "licenseFile": "../../LICENSE",
     "shortDescription": "AI 3D Studio",
     "longDescription": "자연어와 직접 편집으로 3D 프린팅용 모델을 만드는 로컬 CAD",
     "windows": {

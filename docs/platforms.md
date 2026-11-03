@@ -69,7 +69,8 @@ AI 3D Studio.exe (Tauri 2, desktop/src-tauri/src/main.rs)
 - 데이터(AI 설정·사용량)는 로컬 모드와 같은 `%APPDATA%\AI3DStudio`. 키는 엔진에만 있고 화면·기록에 노출되지 않는다.
 - 엔진 출력은 UTF-8 로 고정 (`packaging/desktop_entry.py`): Windows 기본 인코딩으로 한글 기록이 실패하지 않게.
 - 크기: 엔진 묶음 약 1.6GB (CadQuery/OCCT·VTK) → 설치 파일 NSIS 197MB, MSI 304MB (2026-11-03 CI).
-- 설치 프로그램 언어: 한국어 (MSI `ko-KR`, NSIS `Korean`). 라이선스 화면이 한글이라 MSI 기본 코드 페이지 1252 로는 빌드되지 않는다.
+- 설치 프로그램 언어: 한국어 (MSI `ko-KR`, NSIS `Korean`). 라이선스 화면은 프로젝트 라이선스 전문(`LICENSE`, GPL-3.0). 제3자 고지는 엔진 폴더의 `THIRD_PARTY_NOTICES.md`·`licenses/`.
+  (MSI 는 코드 페이지 949 에 없는 문자(— 등)가 라이선스 파일에 있으면 빌드가 실패한다.)
 - NSIS 는 사용자 단위 설치 (`%LOCALAPPDATA%\AI 3D Studio`, 관리자 권한 불필요).
 
 ### 빌드·검증 (GitHub Actions `.github/workflows/windows.yml`, windows-latest)
