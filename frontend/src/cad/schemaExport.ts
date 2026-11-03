@@ -117,6 +117,34 @@ export const FACE_SKETCH_COMMANDS: unknown[] = [
   { type: 'union', id: 'part', name: '부품', base: 'plate_cut', tools: ['boss', 'peg'] },
 ];
 
+/**
+ * 구속 해석기 (언어 간 계약 픽스처, docs/review-constraint-solver.md). 대충 그린 6각형을
+ * 고정·수평·수직·길이 구속으로 L자 브래킷으로 만든다 → (0,0) (60,0) (60,15) (20,15) (20,40) (0,40), 자유도 0.
+ * 구멍 Ø6 @ (40, 7.5) 을 5mm 판에서 뺀다. 부피 = (60·15 + 20·25)·5 − π·9·5.
+ * 백엔드는 저장된 좌표가 구속을 만족하는지 같은 잔차 식으로 검사한다 (app/cad/constraints.py).
+ */
+export const CONSTRAINT_BRACKET_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 'sk_l', name: 'L 브래킷' },
+  { type: 'add_polygon', sketch: 'sk_l', id: 'l', points: [[1, -1], [58, 2], [61, 14], [22, 17], [18, 38], [-2, 41]] },
+  { type: 'move_point', sketch: 'sk_l', point: 'l.p0', to: [0, 0] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'fix', refs: ['l.p0'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'horizontal', refs: ['l.e0'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'vertical', refs: ['l.e1'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'horizontal', refs: ['l.e2'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'vertical', refs: ['l.e3'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'horizontal', refs: ['l.e4'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'vertical', refs: ['l.e5'] },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'length', refs: ['l.e0'], value: 60 },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'length', refs: ['l.e1'], value: 15 },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'length', refs: ['l.e3'], value: 25 },
+  { type: 'add_constraint', sketch: 'sk_l', constraint: 'length', refs: ['l.e4'], value: 20 },
+  { type: 'extrude', id: 'bracket', name: '브래킷', sketch: 'sk_l', profile: 'l', distance: 5 },
+  { type: 'create_sketch', id: 'sk_hole', name: '구멍', plane: { type: 'XY', offset: -1 } },
+  { type: 'add_circle', sketch: 'sk_hole', id: 'c1', center: [40, 7.5], diameter: 6 },
+  { type: 'extrude', id: 'hole', name: '구멍', sketch: 'sk_hole', profile: 'c1', distance: 7 },
+  { type: 'cut', id: 'bracket_holed', name: '구멍 뚫린 브래킷', base: 'bracket', tools: ['hole'] },
+];
+
 export function buildSketchPlateFixture(commands: unknown[] = SKETCH_PLATE_COMMANDS) {
   let model = emptyModel();
   for (const cmd of commands) {
@@ -134,6 +162,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-sketch-plate.json': JSON.stringify(buildSketchPlateFixture(), null, 2) + '\n',
     'examples/model-sketch-planes.json': JSON.stringify(buildSketchPlateFixture(SKETCH_PLANES_COMMANDS), null, 2) + '\n',
     'examples/model-face-sketch.json': JSON.stringify(buildSketchPlateFixture(FACE_SKETCH_COMMANDS), null, 2) + '\n',
+    'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

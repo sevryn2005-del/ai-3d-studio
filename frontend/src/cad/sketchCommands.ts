@@ -7,10 +7,12 @@ import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
 import { findSketch, resolveProfile } from './sketch';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
+import { CONSTRAINT_LABEL, constraintError, polygonError, refKind, solveSketch } from './solver';
 
 const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
+  'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -43,6 +45,31 @@ function okUnlessCycle(next: ModelDefinition, command: CadCommand, affectedId: O
   return cycle ? fail(cycle) : ok(next, command, affectedId);
 }
 
+/**
+ * 구속을 다시 풀고 결과를 반영한다. pinned = 이번 편집에서 사용자가 정한 점(움직이지 않음).
+ * 풀 수 없거나 다각형이 꼬이면 실패 → 실행기가 원본을 그대로 둔다.
+ */
+function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, affectedId: ObjectId | null, pinned: Set<string> = new Set()): ExecuteResult {
+  const solved = solveSketch(next, pinned);
+  if (!solved.ok) return fail(solved.error);
+  for (const e of solved.sketch.entities) {
+    if (e.type !== 'polygon') continue;
+    const err = polygonError(e.points);
+    if (err) return fail(`${e.id}: ${err}`);
+  }
+  return ok(replaceSketch(model, solved.sketch), cmd, affectedId);
+}
+
+/** 고정(fix) 구속이 걸린 점 */
+function isFixed(sketch: Sketch, point: string): boolean {
+  return sketch.constraints.some((c) => c.type === 'fix' && c.refs[0] === point);
+}
+
+/** 요소를 참조하는 구속인가 (`r1`, `r1.center`, `poly.p0` …) */
+function refersTo(ref: string, entity: string): boolean {
+  return ref === entity || ref.startsWith(`${entity}.`);
+}
+
 function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
   let n = 1;
   while (sketch.entities.some((e) => e.id === `${prefix}${n}`)) n++;
@@ -70,6 +97,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         plane: cmd.plane ?? { type: 'XY', offset: 0 },
         entities: [],
         dimensions: [],
+        constraints: [],
       };
       return ok({ ...model, sketches: [...model.sketches, sketch] }, cmd, id);
     }
@@ -110,8 +138,8 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         return fail(`'${sketch.name}'에 치수 ${cmd.dimension} 이(가) 없습니다 (있는 치수: ${names})`);
       }
       const next = { ...sketch, dimensions: sketch.dimensions.map((d) => (d.id === dim.id ? { ...d, value: cmd.value } : d)) };
-      // 선택을 바꾸지 않는다 (돌출 객체를 보며 치수를 고치는 흐름)
-      return ok(replaceSketch(model, next), cmd, null);
+      // 선택을 바꾸지 않는다 (돌출 객체를 보며 치수를 고치는 흐름). 원 지름은 접선 구속에 쓰이므로 다시 푼다
+      return solvedResult(model, next, cmd, null);
     }
 
     case 'set_entity_center':
@@ -123,8 +151,23 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다 (있는 요소: ${names})`);
       }
       if (cmd.type === 'set_entity_center') {
-        const next = { ...sketch, entities: sketch.entities.map((e) => (e.id === cmd.entity ? { ...e, center: cmd.center } : e)) };
-        return ok(replaceSketch(model, next), cmd, null);
+        // 다각형은 바운딩 박스 중심이 center 가 되도록 통째로 옮긴다. 옮긴 점은 고정한 채 나머지 구속을 다시 푼다
+        const entity = sketch.entities.find((e) => e.id === cmd.entity)!;
+        const pins = new Set<string>();
+        let moved = entity;
+        if (entity.type === 'polygon') {
+          const prof = resolveProfile(sketch, entity.id)!;
+          const [dx, dy] = [cmd.center[0] - prof.center[0], cmd.center[1] - prof.center[1]];
+          moved = { ...entity, points: entity.points.map(([x, y]) => [x + dx, y + dy]) };
+          entity.points.forEach((_, k) => pins.add(`${entity.id}.p${k}`));
+        } else {
+          moved = { ...entity, center: cmd.center };
+          pins.add(`${entity.id}.center`);
+        }
+        const fixedPin = [...pins].find((p) => isFixed(sketch, p));
+        if (fixedPin) return fail(`${fixedPin} 은(는) 고정되어 있어 옮길 수 없습니다 (고정 구속을 먼저 지우세요)`);
+        const next = { ...sketch, entities: sketch.entities.map((e) => (e.id === cmd.entity ? moved : e)) };
+        return solvedResult(model, next, cmd, null, pins);
       }
       const users = extrudeUsers(model, sketch.id, cmd.entity);
       if (users.length) return fail(`${cmd.entity} 을(를) 쓰는 돌출이 있어 삭제할 수 없습니다: ${users.join(', ')}`);
@@ -132,6 +175,8 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         ...sketch,
         entities: sketch.entities.filter((e) => e.id !== cmd.entity),
         dimensions: sketch.dimensions.filter((d) => d.entity !== cmd.entity),
+        // 그 요소를 참조하던 구속도 함께 지운다
+        constraints: sketch.constraints.filter((c) => !c.refs.some((ref) => refersTo(ref, cmd.entity))),
       };
       return ok(replaceSketch(model, next), cmd, sketch.id);
     }
@@ -142,6 +187,65 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const planeErr = planeError(model, cmd.plane);
       if (planeErr) return fail(planeErr);
       return okUnlessCycle(replaceSketch(model, { ...sketch, plane: cmd.plane }), cmd, null);
+    }
+
+    case 'add_polygon': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+      const id = cmd.id ?? nextEntityId(sketch, 'poly');
+      if (sketch.entities.some((e) => e.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      const err = polygonError(cmd.points);
+      if (err) return fail(err);
+      const next: Sketch = { ...sketch, entities: [...sketch.entities, { id, type: 'polygon', points: cmd.points }] };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
+    }
+
+    case 'move_point': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (refKind(sketch, cmd.point) !== 'point') return fail(`점이 아닙니다: ${cmd.point} (꼭짓점 "poly1.p0" 또는 중심 "c1.center")`);
+      if (isFixed(sketch, cmd.point)) return fail(`${cmd.point} 은(는) 고정되어 있어 옮길 수 없습니다 (고정 구속을 먼저 지우세요)`);
+      const [id, part] = cmd.point.split('.') as [string, string];
+      const entities = sketch.entities.map((e) => {
+        if (e.id !== id) return e;
+        if (e.type === 'polygon') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) };
+        return { ...e, center: cmd.to };
+      });
+      return solvedResult(model, { ...sketch, entities }, cmd, null, new Set([cmd.point]));
+    }
+
+    case 'add_constraint': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (sketch.constraints.length >= LIMITS.maxSketchConstraints) return fail(`구속은 최대 ${LIMITS.maxSketchConstraints}개까지 가능합니다`);
+      let n = 1;
+      while (sketch.constraints.some((c) => c.id === `k${n}`)) n++;
+      const id = cmd.id ?? `k${n}`;
+      if (sketch.constraints.some((c) => c.id === id)) return fail(`이미 있는 구속 ID입니다: ${id}`);
+      const constraint = { id, type: cmd.constraint, refs: cmd.refs, ...(cmd.value !== undefined ? { value: cmd.value } : {}) };
+      const err = constraintError(sketch, constraint);
+      if (err) return fail(err);
+      if (cmd.constraint === 'fix' && isFixed(sketch, cmd.refs[0]!)) return fail(`${cmd.refs[0]} 은(는) 이미 고정되어 있습니다`);
+      const r = solvedResult(model, { ...sketch, constraints: [...sketch.constraints, constraint] }, cmd, null);
+      return r.ok ? r : fail(`${CONSTRAINT_LABEL[cmd.constraint]} 구속을 추가할 수 없습니다: ${r.error}`);
+    }
+
+    case 'set_constraint': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const c = sketch.constraints.find((x) => x.id === cmd.constraint);
+      if (!c) return fail(`'${sketch.name}'에 구속 ${cmd.constraint} 이(가) 없습니다`);
+      if (c.value === undefined) return fail(`${CONSTRAINT_LABEL[c.type]} 구속에는 값이 없습니다`);
+      const next = { ...sketch, constraints: sketch.constraints.map((x) => (x.id === c.id ? { ...x, value: cmd.value } : x)) };
+      return solvedResult(model, next, cmd, null);
+    }
+
+    case 'delete_constraint': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (!sketch.constraints.some((x) => x.id === cmd.constraint)) return fail(`'${sketch.name}'에 구속 ${cmd.constraint} 이(가) 없습니다`);
+      return ok(replaceSketch(model, { ...sketch, constraints: sketch.constraints.filter((x) => x.id !== cmd.constraint) }), cmd, null);
     }
 
     case 'rename_sketch': {

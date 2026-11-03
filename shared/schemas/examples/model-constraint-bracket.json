@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 4,
+  "units": "mm",
+  "sketches": [
+    {
+      "id": "sk_l",
+      "name": "L 브래킷",
+      "plane": {
+        "type": "XY",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "l",
+          "type": "polygon",
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              15
+            ],
+            [
+              20,
+              15
+            ],
+            [
+              20,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ],
+      "dimensions": [],
+      "constraints": [
+        {
+          "id": "k1",
+          "type": "fix",
+          "refs": [
+            "l.p0"
+          ]
+        },
+        {
+          "id": "k2",
+          "type": "horizontal",
+          "refs": [
+            "l.e0"
+          ]
+        },
+        {
+          "id": "k3",
+          "type": "vertical",
+          "refs": [
+            "l.e1"
+          ]
+        },
+        {
+          "id": "k4",
+          "type": "horizontal",
+          "refs": [
+            "l.e2"
+          ]
+        },
+        {
+          "id": "k5",
+          "type": "vertical",
+          "refs": [
+            "l.e3"
+          ]
+        },
+        {
+          "id": "k6",
+          "type": "horizontal",
+          "refs": [
+            "l.e4"
+          ]
+        },
+        {
+          "id": "k7",
+          "type": "vertical",
+          "refs": [
+            "l.e5"
+          ]
+        },
+        {
+          "id": "k8",
+          "type": "length",
+          "refs": [
+            "l.e0"
+          ],
+          "value": 60
+        },
+        {
+          "id": "k9",
+          "type": "length",
+          "refs": [
+            "l.e1"
+          ],
+          "value": 15
+        },
+        {
+          "id": "k10",
+          "type": "length",
+          "refs": [
+            "l.e3"
+          ],
+          "value": 25
+        },
+        {
+          "id": "k11",
+          "type": "length",
+          "refs": [
+            "l.e4"
+          ],
+          "value": 20
+        }
+      ]
+    },
+    {
+      "id": "sk_hole",
+      "name": "구멍",
+      "plane": {
+        "type": "XY",
+        "offset": -1
+      },
+      "entities": [
+        {
+          "id": "c1",
+          "type": "circle",
+          "center": [
+            40,
+            7.5
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "c1.diameter",
+          "entity": "c1",
+          "kind": "diameter",
+          "value": 6
+        }
+      ],
+      "constraints": []
+    }
+  ],
+  "objects": [
+    {
+      "id": "bracket",
+      "name": "브래킷",
+      "kind": "extrude",
+      "params": {
+        "distance": 5
+      },
+      "extrude": {
+        "sketch": "sk_l",
+        "profile": "l"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "hole",
+      "name": "구멍",
+      "kind": "extrude",
+      "params": {
+        "distance": 7
+      },
+      "extrude": {
+        "sketch": "sk_hole",
+        "profile": "c1"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "bracket_holed",
+      "name": "구멍 뚫린 브래킷",
+      "kind": "boolean",
+      "boolean": {
+        "operation": "cut",
+        "base": "bracket",
+        "tools": [
+          "hole"
+        ]
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 3
+      "const": 4
     },
     "units": {
       "type": "string",
@@ -172,6 +172,48 @@
                     "center"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "polygon"
+                    },
+                    "points": {
+                      "minItems": 3,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number",
+                            "minimum": -10000,
+                            "maximum": 10000
+                          },
+                          {
+                            "type": "number",
+                            "minimum": -10000,
+                            "maximum": 10000
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "points"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -212,6 +254,55 @@
               ],
               "additionalProperties": false
             }
+          },
+          "constraints": {
+            "maxItems": 300,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "fix",
+                    "coincident",
+                    "concentric",
+                    "horizontal",
+                    "vertical",
+                    "parallel",
+                    "perpendicular",
+                    "equal",
+                    "length",
+                    "distance",
+                    "tangent"
+                  ]
+                },
+                "refs": {
+                  "minItems": 1,
+                  "maxItems": 2,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(\\.(p|e)\\d{1,2}|\\.center)?$"
+                  }
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "refs"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -219,7 +310,8 @@
           "name",
           "plane",
           "entities",
-          "dimensions"
+          "dimensions",
+          "constraints"
         ],
         "additionalProperties": false
       }

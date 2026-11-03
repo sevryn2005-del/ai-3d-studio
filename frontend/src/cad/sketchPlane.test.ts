@@ -57,7 +57,7 @@ describe('기준 평면 (서버 test_sketch_extrude.py 와 같은 기대값)', (
   ] as const)('미리보기 배치: %s', (_, profile, plane, distance, expected) => {
     const p = { ...profile, z: plane.offset, plane } as unknown as Profile;
     const d = Math.abs(distance);
-    const geom = p.type === 'rectangle' ? new BoxGeometry(p.width, p.height, d) : new CylinderGeometry(p.diameter / 2, p.diameter / 2, d, 64);
+    const geom = p.type === 'circle' ? new CylinderGeometry(p.diameter / 2, p.diameter / 2, d, 64) : new BoxGeometry(p.width, p.height, d);
     const mesh = new Mesh(geom);
     mesh.applyMatrix4(extrudePreviewMatrix(p, distance, planeMatrix(plane as StandardPlane)));
     box(mesh).forEach((v, i) => expect(v).toBeCloseTo(expected[i]!, 1)); // 원통 다각형 근사 허용

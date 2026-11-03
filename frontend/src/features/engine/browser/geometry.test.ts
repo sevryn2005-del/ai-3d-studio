@@ -2,12 +2,13 @@ import fixture from '../../../../../shared/schemas/examples/model-cut-rotated.js
 import plateFixture from '../../../../../shared/schemas/examples/model-sketch-plate.json';
 import planesFixture from '../../../../../shared/schemas/examples/model-sketch-planes.json';
 import faceFixture from '../../../../../shared/schemas/examples/model-face-sketch.json';
+import bracketFixture from '../../../../../shared/schemas/examples/model-constraint-bracket.json';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema, type ModelDefinition } from '../../../cad/commandTypes';
 import { executeCommand } from '../../../cad/commandExecutor';
 import { emptyModel } from '../../../cad/commandTypes';
-import { byId, sketchIndex } from '../../../cad/modelGraph';
+import { byId, sketchIndex, validateGraph } from '../../../cad/modelGraph';
 import { toBinaryStl } from './exporters';
 import {
   circularSegments,
@@ -213,6 +214,22 @@ describe('스케치 돌출 (공유 픽스처: 서버 test_sketch_extrude.py 와 
     expect(p.inside([10, 8, 8])).toBe(true); // 기둥
     expect(p.inside([10, -43, 3])).toBe(true); // 옆면 돌기
     expect(p.inside([0, 30, 2])).toBe(true); // 판
+    p.dispose();
+  });
+
+  it('구속으로 만든 L 브래킷(다각형) − 구멍 (서버 test_constraints.py 와 같은 기대값)', () => {
+    const model = ModelDefinitionSchema.parse(bracketFixture);
+    expect(validateGraph(model)).toEqual([]);
+    const b = bbox(worldMeshes(wasm, model)[0]!.positions);
+    b.min.forEach((v, k) => expect(v).toBeCloseTo([0, 0, 0][k]!, 4));
+    b.max.forEach((v, k) => expect(v).toBeCloseTo([60, 40, 5][k]!, 4));
+    const p = probe(model, 'bracket_holed');
+    const exact = (60 * 15 + 20 * 25) * 5 - Math.PI * 9 * 5;
+    expect(Math.abs(p.volume - exact)).toBeLessThan(0.01 * 2 * Math.PI * 3 * 5 + 1e-3);
+    expect(p.inside([40, 7.5, 2.5])).toBe(false); // 구멍
+    expect(p.inside([40, 30, 2.5])).toBe(false); // L 의 빈 모서리
+    expect(p.inside([10, 30, 2.5])).toBe(true);
+    expect(p.inside([55, 10, 2.5])).toBe(true);
     p.dispose();
   });
 

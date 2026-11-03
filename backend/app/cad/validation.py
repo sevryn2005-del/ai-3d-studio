@@ -20,6 +20,7 @@ from app.cad.commands import (
     max_edge_size,
     resolve_profile,
 )
+from app.cad.constraints import constraint_errors
 from app.cad.frames import dependency_cycle, faces_of
 
 
@@ -31,7 +32,7 @@ def _literal(model: type, field: str) -> str:
 _UNION_TAGS: frozenset[str] = (
     frozenset(_literal(m, "kind") for m in OBJECT_MODELS)
     | frozenset(_literal(m, "type") for m in COMMAND_MODELS)
-    | frozenset({"XY", "XZ", "YZ", "face", "rectangle", "circle"})  # 스케치 평면·요소 유니온 태그
+    | frozenset({"XY", "XZ", "YZ", "face", "rectangle", "circle", "polygon"})  # 스케치 평면·요소 유니온 태그
 )
 
 
@@ -203,6 +204,7 @@ def sketch_errors(sk: Sketch) -> list[str]:
         for k in REQUIRED_DIMENSIONS[e.type]:
             if not any(d.entity == e.id and d.kind == k for d in sk.dimensions):
                 errors.append(f"{sk.id}: {e.id} 의 {k} 치수가 없습니다")
+    errors.extend(constraint_errors(sk))  # 다각형 형상 + 구속 만족 (constraints.py)
     return errors
 
 

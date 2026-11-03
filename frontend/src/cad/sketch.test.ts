@@ -28,6 +28,7 @@ describe('치수형 사각형 → 4 mm 돌출 → 폭 수정', () => {
         { id: 'r1.width', entity: 'r1', kind: 'width', value: 60 },
         { id: 'r1.height', entity: 'r1', kind: 'height', value: 40 },
       ],
+      constraints: [],
     }]);
     expect(findObject(m, 'plate')).toMatchObject({ kind: 'extrude', params: { distance: 4 }, extrude: { sketch: 'sk1', profile: 'r1' } });
     expect(sizeSummary(findObject(m, 'plate')!, m)).toBe('60×40×4');

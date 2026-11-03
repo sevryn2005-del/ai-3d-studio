@@ -1,6 +1,6 @@
 # 검토: 2D 스케치 구속 해석기 (라이선스·크기·통합 방식)
 
-상태: **검토 (구현 전)** · 2026-11-03 · 현재 스케치는 "치수형 사각형·원 + 고정 치수"만 있다 (구속 해석기 없음).
+상태: **✅ 1단계 구현 완료 (권장안: 자체 해석기)** · 결과는 7장
 
 ## 1. 무엇이 필요한가
 
@@ -48,3 +48,22 @@
 1. 1단계를 자체 해석기로 할지 (권장) / planegcs 를 법률 검토 후 바로 쓸지.
 2. 1단계 구속 범위 (위 5-1 목록).
 3. 상용 배포 형태 확정 시 LGPL 구성 요소(OCCT·casadi·planegcs 후보) 법률 검토를 한 번에 받을지.
+
+## 7. 1단계 구현 결과
+
+결정: 권장안 — 자체 TypeScript 해석기, 1단계 구속 범위 그대로. planegcs·법률 검토는 보류.
+
+| 항목 | 내용 | 파일 · 검사 |
+|------|------|-------------|
+| 형식 v4 | 스케치 `constraints`, 다각형 요소(`polygon`, 꼭짓점 = 풀린 좌표). v1~v3 → v4 마이그레이션 | `commandTypes.ts`, `commands.py`, `projectFile.ts` |
+| 해석기 | 최소 이동 감쇠 가우스-뉴턴 (Δ = −Jᵀ(JJᵀ+λI)⁻¹r) — 구속이 모자라면 그린 모양을 최대한 유지. 같은 점에서 시작하는 특이점은 작은 흔들기로 재시도. 고정점은 변수에서 제외 | `cad/solver.ts`, `solver.test.ts` |
+| 구속 | 고정·일치·동심·수평·수직·평행·직교·같은 길이·길이·거리·접선(변-원). 참조 형식 표 `CONSTRAINT_ARITY` | 같은 표: `app/cad/constraints.py` `ARITY` |
+| 자유도 | 자유 좌표 수 − 구속 자코비안 계수. 0 = 완전 구속 | 속성 패널 표시, `solver.test.ts` |
+| 명령 | `add_polygon`, `move_point`, `add_constraint`, `set_constraint`, `delete_constraint`. 풀 수 없으면(모순·과구속·꼬인 다각형) 거부, 원본 그대로. 요소 삭제 시 그 요소의 구속도 삭제 | `sketchCommands.ts` |
+| 엔진 | 다각형 돌출: manifold `CrossSection(points, NonZero)`, CadQuery `polyline().close()`. 해석기는 엔진에 없음 | 공유 픽스처 `model-constraint-bracket.json` (대충 그린 6각형 → L 브래킷), `geometry.test.ts`, `test_constraints.py` |
+| 백엔드 검사 | 저장된 좌표가 구속을 만족하는지(잔차 ≤ 1e-4), 다각형이 꼬이지 않았는지. 손으로 고친 좌표는 거부 | `constraints.py`, `validation.py` |
+| UI | 다각형 그리기(P), 꼭짓점 좌표·고정, 변별 수평·수직·길이, 구속 목록(값·삭제), 두 대상 구속 추가, 자유도 | `ConstraintFields.tsx`, `SketchDrawTool.tsx`, E2E "구속 해석기" |
+| AI | 프롬프트(참조 형식·예: L 브래킷), 검증기(참조 종류·값·꼬인 다각형·구속 id), 평가 케이스 `l-bracket-constraints` | `prompt_builder.py`, `validator.py`, `test_ai_chat.py` |
+
+남은 것 (2단계 후보): 호(arc)·직선 단독 요소와 열린 윤곽, 각도 구속, 뷰포트에서 꼭짓점 끌기, 구속 기호를 뷰포트에 표시,
+과구속 시 "어떤 구속끼리 충돌하는지" 진단. 실제 API 로 평가 케이스 녹화.

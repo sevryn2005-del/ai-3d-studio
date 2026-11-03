@@ -339,5 +339,27 @@
         }
       ]
     }
+  },
+  {
+    "id": "l-bracket-constraints",
+    "note": "사각형이 아닌 판은 다각형 + 구속으로 정확한 치수를 만든다",
+    "prompt": "가로 60mm, 세로 40mm인 L자 브래킷을 만들어줘. 아래 띠 높이는 15mm, 세로 띠 폭은 20mm, 두께 5mm. 나중에 치수를 바꿀 수 있게 해줘",
+    "objects": "empty",
+    "expect": {
+      "kind": "commands",
+      "has": [
+        {
+          "type": "add_polygon"
+        },
+        {
+          "type": "add_constraint",
+          "constraint": "fix"
+        },
+        {
+          "type": "extrude",
+          "distance": 5
+        }
+      ]
+    }
   }
 ]

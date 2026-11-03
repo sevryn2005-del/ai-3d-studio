@@ -7,6 +7,7 @@ import { nextId } from './commandExecutor';
 import { byId, parentMap } from './modelGraph';
 import { findSketch, resolveProfile } from './sketch';
 import { composeTransform } from './transformMath';
+import { polygonError } from './solver';
 
 /** 객체의 월드 변환과 그 객체를 포함한 최상위 객체 (불리언 자식이면 상위 변환을 합성) */
 export function worldPlacement(model: ModelDefinition, id: ObjectId): { world: Transform; root: ObjectId } {
@@ -36,6 +37,30 @@ export function rectangleSketchCommands(model: ModelDefinition, width = 60, heig
 /** 관통 구멍을 넣을 때 판 바깥과 남겨야 하는 최소 두께 (mm). 접하면 형상이 매니폴드가 아니게 된다. */
 export const HOLE_MIN_WALL = 0.5;
 
+/** 점이 다각형 안에 있는가 (짝-홀 규칙) */
+function pointInPolygon([x, y]: Point2, pts: Point2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i]!;
+    const [xj, yj] = pts[j]!;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** 점에서 다각형 변까지의 최소 거리 */
+function edgeDistance(p: Point2, pts: Point2[]): number {
+  let best = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    const [vx, vy] = [b[0] - a[0], b[1] - a[1]];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy || 1)));
+    best = Math.min(best, Math.hypot(p[0] - (a[0] + t * vx), p[1] - (a[1] + t * vy)));
+  }
+  return best;
+}
+
 export type HoleResult = { ok: true; commands: CadCommand[]; holeId: ObjectId; cutId: ObjectId } | { ok: false; error: string };
 
 /**
@@ -63,7 +88,9 @@ export function throughHoleCommands(
   const fits =
     profile.type === 'rectangle'
       ? Math.abs(dx) + r + HOLE_MIN_WALL <= profile.width / 2 && Math.abs(dy) + r + HOLE_MIN_WALL <= profile.height / 2
-      : Math.hypot(dx, dy) + r + HOLE_MIN_WALL <= profile.diameter / 2;
+      : profile.type === 'circle'
+        ? Math.hypot(dx, dy) + r + HOLE_MIN_WALL <= profile.diameter / 2
+        : pointInPolygon(hole.center, profile.points) && edgeDistance(hole.center, profile.points) >= r + HOLE_MIN_WALL;
   if (!fits) return { ok: false, error: `구멍이 판 가장자리에서 ${HOLE_MIN_WALL}mm 이상 안쪽에 있어야 합니다` };
 
   const { world, root } = worldPlacement(model, plate.id);
@@ -94,7 +121,8 @@ export function throughHoleCommands(
 /** 뷰포트에서 그린 도형 (스케치 평면 좌표, mm) */
 export type DrawnShape =
   | { type: 'rectangle'; from: Point2; to: Point2 }
-  | { type: 'circle'; center: Point2; radius: number };
+  | { type: 'circle'; center: Point2; radius: number }
+  | { type: 'polygon'; points: Point2[] };
 
 /** 그리기로 만들 수 있는 최소 크기 (mm). 이보다 작으면 클릭으로 보고 무시한다 */
 export const MIN_DRAWN_SIZE = 0.5;
@@ -114,7 +142,11 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
   };
   const round = (v: number) => Math.round(v * 1000) / 1000;
   let add: CadCommand;
-  if (shape.type === 'rectangle') {
+  if (shape.type === 'polygon') {
+    const points = shape.points.map(([x, y]) => [round(x), round(y)] as Point2);
+    if (points.length < 3 || polygonError(points)) return null; // 꼬였거나 넓이가 없으면 만들지 않는다
+    add = { type: 'add_polygon', sketch: sid, id: entityId('poly'), points };
+  } else if (shape.type === 'rectangle') {
     const width = round(Math.abs(shape.to[0] - shape.from[0]));
     const height = round(Math.abs(shape.to[1] - shape.from[1]));
     if (width < MIN_DRAWN_SIZE || height < MIN_DRAWN_SIZE) return null;

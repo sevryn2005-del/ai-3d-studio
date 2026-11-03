@@ -64,18 +64,26 @@ export function localManifold(
   const { Manifold, CrossSection } = wasm;
   switch (obj.kind) {
     case 'extrude': {
-      // 서버 CadQuery: Workplane(평면, origin=법선×offset).center(cx,cy).rect(w,h)|circle(r).extrude(d) 와 같은 형상
+      // 서버 CadQuery: 평면 좌표에서 rect·circle·polyline 을 돌출한 뒤 같은 행렬로 옮긴 형상
       const sk = sketches.get(obj.extrude.sketch);
       const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
-      const section =
-        p.type === 'rectangle'
-          ? scope.keep(CrossSection.square([p.width, p.height], true))
-          : scope.keep(CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)));
-      const placed = scope.keep(section.translate(p.center));
+      // 다각형은 꼭짓점 좌표 그대로 (구속 해석기가 푼 값). 감김 방향과 무관하게 채우도록 NonZero
+      const placed =
+        p.type === 'polygon'
+          ? scope.keep(new CrossSection([p.points], 'NonZero'))
+          : scope.keep(
+              scope
+                .keep(
+                  p.type === 'rectangle'
+                    ? CrossSection.square([p.width, p.height], true)
+                    : CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)),
+                )
+                .translate(p.center),
+            );
       // 평면 좌표(u, v, 법선) → 객체 로컬 (서버 cq.Plane.named 와 같은 기저). 열 우선 4×4.
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 3, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 4, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       const d = obj.params.distance;
       const solid = scope.keep(placed.extrude(Math.abs(d)));

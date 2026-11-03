@@ -5,7 +5,7 @@ import { openProject, saveProject } from './features/projects/projectActions';
 
 /**
  * Ctrl+Z 실행 취소, Ctrl+Shift+Z / Ctrl+Y 다시 실행, Delete 선택 객체 삭제, Esc 선택 해제,
- * W 이동 모드, E 회전 모드, S 스냅 전환, F 화면 맞춤, R 사각형 그리기, C 원 그리기 (Esc: 그리기 끝내기),
+ * W 이동 모드, E 회전 모드, S 스냅 전환, F 화면 맞춤, R 사각형 그리기, C 원 그리기, P 다각형 그리기 (Esc: 그리기 끝내기),
  * Ctrl+S 저장, Ctrl+Shift+S 다른 이름으로 저장, Ctrl+O 열기 (입력 중에도 동작)
  */
 export function useKeyboardShortcuts() {
@@ -60,6 +60,7 @@ export function useKeyboardShortcuts() {
         else if (key === 'f') editor.requestFit();
         else if (key === 'r') editor.setDrawTool(editor.drawTool === 'rectangle' ? null : 'rectangle');
         else if (key === 'c') editor.setDrawTool(editor.drawTool === 'circle' ? null : 'circle');
+        else if (key === 'p') editor.setDrawTool(editor.drawTool === 'polygon' ? null : 'polygon');
       }
     };
     window.addEventListener('keydown', onKey);

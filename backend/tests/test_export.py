@@ -67,7 +67,7 @@ def test_invalid_model_returns_issues(client, default_model):
 
 
 def test_empty_model(client):
-    r = client.post("/api/export/stl", json={"schemaVersion": 3, "units": "mm", "sketches": [], "objects": []})
+    r = client.post("/api/export/stl", json={"schemaVersion": 4, "units": "mm", "sketches": [], "objects": []})
     assert r.status_code == 422
     assert "내보낼 객체가 없습니다" in r.json()["issues"][0]["message"]
 

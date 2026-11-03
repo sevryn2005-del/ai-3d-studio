@@ -45,13 +45,16 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
 function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: SketchEntity; color: string }) {
   const geometry = useMemo(() => {
     const z = 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 평면에서 살짝 띄움
-    const [cx, cy] = entity.center;
     const pts: number[] = [];
-    if (entity.type === 'rectangle') {
+    if (entity.type === 'polygon') {
+      for (const [x, y] of entity.points) pts.push(x, y, z);
+    } else if (entity.type === 'rectangle') {
+      const [cx, cy] = entity.center;
       const w = (dimensionValue(sketch, entity.id, 'width') ?? 0) / 2;
       const h = (dimensionValue(sketch, entity.id, 'height') ?? 0) / 2;
       for (const [x, y] of [[-w, -h], [w, -h], [w, h], [-w, h]] as const) pts.push(cx + x, cy + y, z);
     } else {
+      const [cx, cy] = entity.center;
       const r = (dimensionValue(sketch, entity.id, 'diameter') ?? 0) / 2;
       for (let i = 0; i < 64; i++) {
         const a = (i / 64) * Math.PI * 2;

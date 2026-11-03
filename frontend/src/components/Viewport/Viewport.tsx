@@ -74,7 +74,7 @@ export function Viewport() {
       <ViewportToolbar />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
-          ? `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기 · 우클릭 드래그: 이동 · Esc: 그리기 끝내기`
+          ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · 우클릭 드래그: 이동 · Esc: 그리기 끝내기`
           : '드래그: 회전 · 우클릭 드래그: 이동 · 휠: 확대/축소'}
       </div>
     </section>

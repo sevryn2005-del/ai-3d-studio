@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "units": "mm",
   "sketches": [
     {
@@ -32,7 +32,8 @@
           "kind": "height",
           "value": 20
         }
-      ]
+      ],
+      "constraints": []
     },
     {
       "id": "sk_side",
@@ -58,7 +59,8 @@
           "kind": "diameter",
           "value": 10
         }
-      ]
+      ],
+      "constraints": []
     }
   ],
   "objects": [

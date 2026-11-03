@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Euler, Quaternion, Vector3, type BufferGeometry, type Matrix4 } from 'three';
+import { Euler, Matrix4, Quaternion, Shape, Vector2, Vector3, type BufferGeometry } from 'three';
 import { extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
@@ -25,7 +25,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 3, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 4, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -196,7 +196,11 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
     case 'extrude': {
       // 돌출: 평면 좌표에서 단면 중심 + 법선으로 distance/2 → 평면 기저로 객체 로컬에 놓는다
       if (!profile || !local) return { position: [0, 0, 0] };
-      const m = extrudePreviewMatrix(profile, o.params.distance, local);
+      // 다각형: 평면 좌표의 ExtrudeGeometry(z 0..|d|) → 음수 거리는 법선 반대쪽으로 내린다
+      const m =
+        profile.type === 'polygon'
+          ? local.clone().multiply(new Matrix4().makeTranslation(0, 0, Math.min(0, o.params.distance)))
+          : extrudePreviewMatrix(profile, o.params.distance, local);
       const pos = new Vector3();
       const q = new Quaternion();
       m.decompose(pos, q, new Vector3());
@@ -218,6 +222,10 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
     case 'sphere':
       return <sphereGeometry args={[o.params.radius, SEGMENTS, SEGMENTS / 2]} />;
     case 'extrude':
+      if (profile?.type === 'polygon') {
+        const shape = new Shape(profile.points.map(([x, y]) => new Vector2(x, y)));
+        return <extrudeGeometry args={[shape, { depth: Math.abs(o.params.distance), bevelEnabled: false }]} />;
+      }
       if (profile?.type === 'circle') {
         const r = profile.diameter / 2;
         return <cylinderGeometry args={[r, r, Math.abs(o.params.distance), SEGMENTS]} />;

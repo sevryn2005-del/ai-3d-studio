@@ -171,4 +171,8 @@
 ## 13. 면 위 스케치 (형식 v3) — ✅ 완료
 
 - 권장안 B (이름 있는 면) 구현. 두 엔진 교차 검증, UI·AI·마이그레이션 포함. 상세: `docs/design-face-sketch.md` 7장.
-- 다음 후보: 구속 해석기 1단계(자체 TypeScript, `docs/review-constraint-solver.md` 결정 대기), 뷰포트 면 클릭 선택.
+- 다음 후보: 뷰포트 면 클릭 선택.
+
+## 14. 구속 해석기 1단계 (형식 v4) — ✅ 완료
+
+- 자체 TypeScript 해석기 + 다각형 + 11가지 구속 + 자유도, 두 엔진 다각형 돌출, 백엔드 구속 검사, UI·AI. 상세: `docs/review-constraint-solver.md` 7장.

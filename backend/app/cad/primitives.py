@@ -101,8 +101,11 @@ def extrude_solid(obj: ExtrudeObject, index: dict[str, CadObject], sketches: dic
     if local is None:
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
     d = obj.params.distance
-    wp = cq.Workplane("XY").center(*p["center"])
-    wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
+    if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
+        wp = cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
+    else:
+        wp = cq.Workplane("XY").center(*p["center"])
+        wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
     solid = wp.extrude(abs(d)).val()
     if d < 0:
         solid = solid.translate(cq.Vector(0, 0, d))

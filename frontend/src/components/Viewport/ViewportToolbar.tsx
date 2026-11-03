@@ -29,6 +29,13 @@ export function ViewportToolbar() {
       >
         원 <kbd>C</kbd>
       </button>
+      <button
+        aria-pressed={drawTool === 'polygon'}
+        onClick={() => setDrawTool(drawTool === 'polygon' ? null : 'polygon')}
+        title="다각형 그리기 (P): 클릭으로 꼭짓점, 첫 점을 다시 클릭하거나 Enter 로 닫기. 치수는 구속으로 맞춥니다"
+      >
+        다각형 <kbd>P</kbd>
+      </button>
       <span className="sep" />
       <button aria-pressed={snapEnabled} onClick={toggleSnap} title="스냅: 1mm / 15° (S)">
         스냅 {snapEnabled ? '1mm·15°' : '끔'} <kbd>S</kbd>

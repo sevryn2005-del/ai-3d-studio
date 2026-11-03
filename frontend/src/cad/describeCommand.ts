@@ -1,4 +1,5 @@
 /** 명령을 사람이 읽을 수 있는 한국어 한 줄로 (AI 가 무엇을 바꿨는지 채팅에 표시) */
+import { CONSTRAINT_LABEL } from './solver';
 import type { CadCommand, ModelDefinition } from './commandTypes';
 import { OPERATION_INFO } from './objectKinds';
 import { formatMm } from './units';
@@ -41,6 +42,16 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${sketchName(cmd.sketch)}의 ${cmd.entity} 삭제`;
     case 'set_sketch_plane':
       return `${sketchName(cmd.sketch)} 평면 → ${cmd.plane.type}${cmd.plane.offset ? ` (${formatMm(cmd.plane.offset)}mm)` : ''}`;
+    case 'add_polygon':
+      return `${sketchName(cmd.sketch)}에 다각형 추가 (꼭짓점 ${cmd.points.length}개)`;
+    case 'move_point':
+      return `${sketchName(cmd.sketch)}의 ${cmd.point} → (${formatMm(cmd.to[0])}, ${formatMm(cmd.to[1])})`;
+    case 'add_constraint':
+      return `${sketchName(cmd.sketch)}에 ${CONSTRAINT_LABEL[cmd.constraint]} 구속 (${cmd.refs.join(', ')}${cmd.value !== undefined ? ` = ${formatMm(cmd.value)}mm` : ''})`;
+    case 'set_constraint':
+      return `${sketchName(cmd.sketch)} 구속 ${cmd.constraint} → ${formatMm(cmd.value)}mm`;
+    case 'delete_constraint':
+      return `${sketchName(cmd.sketch)} 구속 ${cmd.constraint} 삭제`;
     case 'rename_sketch':
       return `스케치 이름 → ${cmd.name}`;
     case 'delete_sketch':

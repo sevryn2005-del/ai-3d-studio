@@ -3,10 +3,12 @@
  * 치수는 이름 붙은 파라미터: 사각형 → `ID.width`, `ID.height`, 원 → `ID.diameter`.
  */
 import type { DimensionKind, ModelDefinition, ObjectId, Point2, Sketch, SketchEntity, SketchPlane } from './commandTypes';
+import { CHECK_TOLERANCE, constraintError, constraintResiduals, polygonError } from './solver';
 
 export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> = {
   rectangle: ['width', 'height'],
   circle: ['diameter'],
+  polygon: [], // 다각형은 꼭짓점 좌표 + 구속(constraints)
 };
 
 export function findSketch(model: ModelDefinition, id: ObjectId): Sketch | undefined {
@@ -20,13 +22,21 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
 /** 돌출 단면: 스케치 평면 좌표의 사각형·원 + 평면 (z = 평면 offset) */
 export type Profile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
-  | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane };
+  | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
+  | { type: 'polygon'; points: Point2[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane };
 
 export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | null {
   const e = sketch.entities.find((x) => x.id === entityId);
   if (!e) return null;
   const z = sketch.plane.offset;
   const plane = sketch.plane;
+  if (e.type === 'polygon') {
+    // center·width·height = 바운딩 박스 (크기 표시·구멍 위치 기본값용). 형상은 points 그대로
+    const xs = e.points.map((p) => p[0]);
+    const ys = e.points.map((p) => p[1]);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    return { type: 'polygon', points: e.points, center: [(x0 + x1) / 2, (y0 + y1) / 2], width: x1 - x0, height: y1 - y0, z, plane };
+  }
   if (e.type === 'rectangle') {
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
@@ -52,6 +62,23 @@ export function sketchErrors(sketch: Sketch): string[] {
     if (d.id !== `${d.entity}.${d.kind}`) errors.push(`${sketch.id}: 치수 ID 는 ${d.entity}.${d.kind} 이어야 합니다 (${d.id})`);
     if (seen.has(d.id)) errors.push(`${sketch.id}: 치수가 중복되었습니다: ${d.id}`);
     seen.add(d.id);
+  }
+  for (const e of sketch.entities) {
+    if (e.type === 'polygon') {
+      const err = polygonError(e.points);
+      if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
+    }
+  }
+  // 구속: 참조 형식 + 저장된 좌표가 구속을 만족하는지 (해석기가 푼 결과만 저장된다)
+  const cids = new Set<string>();
+  for (const c of sketch.constraints) {
+    if (cids.has(c.id)) errors.push(`${sketch.id}: 구속 ID 가 중복되었습니다: ${c.id}`);
+    cids.add(c.id);
+    const err = constraintError(sketch, c);
+    if (err) errors.push(`${sketch.id}: 구속 ${c.id}: ${err}`);
+  }
+  for (const [id, res] of constraintResiduals(sketch)) {
+    if (res > CHECK_TOLERANCE) errors.push(`${sketch.id}: 구속 ${id} 을(를) 만족하지 않습니다 (오차 ${res.toExponential(1)})`);
   }
   for (const e of sketch.entities) {
     for (const k of REQUIRED_DIMENSIONS[e.type]) {

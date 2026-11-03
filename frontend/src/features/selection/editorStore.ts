@@ -7,7 +7,7 @@ import { DEFAULT_SNAP, type SnapSettings } from '../../cad/transformUtils';
 
 export type TransformMode = 'translate' | 'rotate';
 /** 뷰포트 직접 그리기 도구 (null = 선택·이동 모드) */
-export type DrawTool = 'rectangle' | 'circle' | null;
+export type DrawTool = 'rectangle' | 'circle' | 'polygon' | null;
 
 interface EditorState {
   transformMode: TransformMode;

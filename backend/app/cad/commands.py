@@ -28,6 +28,8 @@ class Limits:
     MAX_BOOLEAN_DEPTH = 8
     MAX_SKETCHES = 200
     MAX_SKETCH_ENTITIES = 100
+    MAX_POLYGON_POINTS = 64
+    MAX_SKETCH_CONSTRAINTS = 300
 
 
 def _num(ge: float, le: float) -> object:
@@ -137,7 +139,29 @@ class CircleEntity(Strict):
     center: Point2
 
 
-SketchEntity = Annotated[Union[RectangleEntity, CircleEntity], Field(discriminator="type")]
+class PolygonEntity(Strict):
+    """닫힌 다각형 (형식 v4). 꼭짓점 = 구속 해석기가 푼 좌표. 꼭짓점 k = ID.pk, 변 k = ID.ek."""
+
+    id: ObjectId
+    type: Literal["polygon"]
+    points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
+
+
+SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity], Field(discriminator="type")]
+
+ConstraintType = Literal[
+    "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent"
+]
+GeomRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}(\.(p|e)\d{1,2}|\.center)?$")]
+
+
+class SketchConstraint(Strict):
+    """기하 구속 (frontend/src/cad/solver.ts). 값은 length·distance 만."""
+
+    id: ObjectId
+    type: ConstraintType
+    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=2)]
+    value: Annotated[Dimension | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 class SketchDimension(Strict):
@@ -176,9 +200,10 @@ class Sketch(Strict):
     plane: SketchPlane
     entities: Annotated[list[SketchEntity], Field(max_length=Limits.MAX_SKETCH_ENTITIES)]
     dimensions: Annotated[list[SketchDimension], Field(max_length=Limits.MAX_SKETCH_ENTITIES * 2)]
+    constraints: Annotated[list[SketchConstraint], Field(max_length=Limits.MAX_SKETCH_CONSTRAINTS)]
 
 
-REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",)}
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": ()}
 
 
 def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
@@ -188,6 +213,11 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
         return None
     dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
     z = sketch.plane.offset
+    if e.type == "polygon":
+        xs = [p[0] for p in e.points]
+        ys = [p[1] for p in e.points]
+        return {"type": "polygon", "points": list(e.points), "center": ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
+                "width": max(xs) - min(xs), "height": max(ys) - min(ys), "z": z, "plane": sketch.plane}
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
@@ -286,7 +316,7 @@ CadObject = Annotated[
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[3]
+    schemaVersion: Literal[4]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -374,6 +404,42 @@ class SetSketchPlane(Strict):
     type: Literal["set_sketch_plane"]
     sketch: ObjectId
     plane: SketchPlane
+
+
+class AddPolygon(Strict):
+    type: Literal["add_polygon"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
+
+
+class MovePoint(Strict):
+    type: Literal["move_point"]
+    sketch: ObjectId
+    point: GeomRef
+    to: Point2
+
+
+class AddConstraint(Strict):
+    type: Literal["add_constraint"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    constraint: ConstraintType
+    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=2)]
+    value: Dimension | None = None
+
+
+class SetConstraint(Strict):
+    type: Literal["set_constraint"]
+    sketch: ObjectId
+    constraint: ObjectId
+    value: Dimension
+
+
+class DeleteConstraint(Strict):
+    type: Literal["delete_constraint"]
+    sketch: ObjectId
+    constraint: ObjectId
 
 
 class RenameSketch(Strict):
@@ -496,6 +562,11 @@ CadCommand = Annotated[
         SetEntityCenter,
         DeleteSketchEntity,
         SetSketchPlane,
+        AddPolygon,
+        MovePoint,
+        AddConstraint,
+        SetConstraint,
+        DeleteConstraint,
         RenameSketch,
         DeleteSketch,
         Extrude,
@@ -528,6 +599,11 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetEntityCenter,
     DeleteSketchEntity,
     SetSketchPlane,
+    AddPolygon,
+    MovePoint,
+    AddConstraint,
+    SetConstraint,
+    DeleteConstraint,
     RenameSketch,
     DeleteSketch,
     Extrude,

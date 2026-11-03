@@ -20,6 +20,7 @@ from app.cad.commands import (
     PARAMS_MODELS,
     REQUIRED_DIMENSIONS,
 )
+from app.cad.constraints import ARITY as CONSTRAINT_ARITY, polygon_error
 from app.cad.validation import issues_from_validation_error
 
 _CREATE_KIND = {"create_box": "box", "create_cylinder": "cylinder", "create_sphere": "sphere", "create_cone": "cone"}
@@ -48,6 +49,40 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     kinds: dict[str, str] = {o.id: o.kind for o in model.objects}
     # 스케치 id → 요소 id → 요소 유형 (객체와 스케치는 ID 이름공간을 공유한다)
     sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
+    # 구속 해석기: 다각형 꼭짓점 수, 구속 id → 값이 있는지 (참조 형식은 app/cad/constraints.ARITY)
+    poly_sizes: dict[tuple[str, str], int] = {
+        (sk.id, e.id): len(e.points) for sk in model.sketches for e in sk.entities if e.type == "polygon"
+    }
+    constraint_ids: dict[str, dict[str, bool]] = {sk.id: {c.id: c.value is not None for c in sk.constraints} for sk in model.sketches}
+
+    def geom_kind(sid: str, ref: str) -> str | None:
+        eid, _, part = ref.partition(".")
+        etype = sketches.get(sid, {}).get(eid)
+        if etype is None:
+            return None
+        if not part:
+            return "circle" if etype == "circle" else None
+        if part == "center":
+            return None if etype == "polygon" else "point"
+        if etype != "polygon" or int(part[1:]) >= poly_sizes.get((sid, eid), 0):
+            return None
+        return "point" if part[0] == "p" else "edge"
+
+    def refs_ok(i: int, sid: str, ctype: str, refs: list[str], value) -> None:
+        kinds_ = [geom_kind(sid, r) for r in refs]
+        for r, k in zip(refs, kinds_):
+            if k is None:
+                errors.append(f"commands[{i}].refs: sketch '{sid}' has no point/edge/circle '{r}' "
+                              "(points: '<polygon>.p0', '<circle or rectangle>.center'; edges: '<polygon>.e0'; circles: '<circle id>')")
+                return
+        forms, needs_value = CONSTRAINT_ARITY[ctype]
+        if tuple(kinds_) not in forms:
+            expected = " or ".join(" + ".join(f) for f in forms)
+            errors.append(f"commands[{i}].refs: {ctype} needs {expected}, got {' + '.join(kinds_)}")
+        elif needs_value and value is None:
+            errors.append(f"commands[{i}].value: {ctype} needs a value in mm")
+        elif not needs_value and value is not None:
+            errors.append(f"commands[{i}].value: {ctype} takes no value")
     # 돌출 객체 id → (스케치, 프로파일): 참조 중인 스케치·요소 삭제를 막기 위해
     extrude_refs: dict[str, tuple[str, str]] = {
         o.id: (o.extrude.sketch, o.extrude.profile) for o in model.objects if isinstance(o, ExtrudeObject)
@@ -141,6 +176,43 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if eid in ents:
                     errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
                 ents[eid] = etype
+        elif t == "add_polygon":
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                eid = c.get("id") or next_entity_id(ents, "poly")
+                if eid in ents:
+                    errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                elif err := polygon_error(c["points"]):
+                    errors.append(f"commands[{i}].points: {err}")
+                ents[eid] = "polygon"
+                poly_sizes[(c["sketch"], eid)] = len(c["points"])
+        elif t == "move_point":
+            if sketch_exists(i, c["sketch"]) and geom_kind(c["sketch"], c["point"]) != "point":
+                errors.append(f"commands[{i}].point: '{c['point']}' is not a point of sketch '{c['sketch']}' "
+                              "(use '<polygon>.p0' or '<circle or rectangle>.center')")
+        elif t == "add_constraint":
+            if sketch_exists(i, c["sketch"]):
+                refs_ok(i, c["sketch"], c["constraint"], c["refs"], c.get("value"))
+                known = constraint_ids.setdefault(c["sketch"], {})
+                cid = c.get("id")
+                if cid is None:  # 프론트엔드 실행기와 같은 자동 이름: k1, k2, …
+                    n = 1
+                    while f"k{n}" in known:
+                        n += 1
+                    cid = f"k{n}"
+                elif cid in known:
+                    errors.append(f"commands[{i}].id: constraint id '{cid}' is already used in sketch '{c['sketch']}'")
+                known[cid] = c.get("value") is not None
+        elif t in ("set_constraint", "delete_constraint"):
+            if sketch_exists(i, c["sketch"]):
+                known = constraint_ids.setdefault(c["sketch"], {})
+                if c["constraint"] not in known:
+                    errors.append(f"commands[{i}].constraint: sketch '{c['sketch']}' has no constraint '{c['constraint']}' "
+                                  f"(existing: {', '.join(sorted(known)) or 'none'})")
+                elif t == "set_constraint" and not known[c["constraint"]]:
+                    errors.append(f"commands[{i}].constraint: '{c['constraint']}' has no value to set")
+                elif t == "delete_constraint":
+                    known.pop(c["constraint"])
         elif t == "set_dimension":
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]

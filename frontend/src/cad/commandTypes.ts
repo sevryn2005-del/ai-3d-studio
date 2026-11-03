@@ -28,6 +28,8 @@ export const LIMITS = {
   maxBooleanDepth: 8,
   maxSketches: 200,
   maxSketchEntities: 100,
+  maxPolygonPoints: 64,
+  maxSketchConstraints: 300,
 } as const;
 
 const dimension = z
@@ -129,6 +131,15 @@ export type Point2 = z.infer<typeof Point2Schema>;
 export const SketchEntitySchema = z.discriminatedUnion('type', [
   z.strictObject({ id: ObjectIdSchema, type: z.literal('rectangle'), center: Point2Schema }),
   z.strictObject({ id: ObjectIdSchema, type: z.literal('circle'), center: Point2Schema }),
+  /**
+   * 닫힌 다각형 (형식 v4). 꼭짓점 좌표는 구속 해석기가 푼 값을 저장한다 → CAD 엔진은 좌표만 읽는다.
+   * 꼭짓점 k = `ID.pk`, 변 k = `ID.ek` (pk → p(k+1), 마지막 변은 처음으로 닫힌다)
+   */
+  z.strictObject({
+    id: ObjectIdSchema,
+    type: z.literal('polygon'),
+    points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
+  }),
 ]);
 export type SketchEntity = z.infer<typeof SketchEntitySchema>;
 
@@ -178,12 +189,34 @@ export type SketchPlane = z.infer<typeof SketchPlaneSchema>;
 export type StandardPlane = z.infer<typeof StandardPlaneSchema>;
 export type FacePlane = z.infer<typeof FacePlaneSchema>;
 
+/**
+ * 기하 구속 (docs/review-constraint-solver.md 5장 1단계). 참조:
+ * - 점: 다각형 꼭짓점 `poly.p0`, 사각형·원의 중심 `c1.center`
+ * - 변: 다각형 변 `poly.e0` · 원: 원 ID `c1` (접선)
+ * value: length·distance 의 길이(mm). fix 는 value 없이 현재 위치에 고정.
+ */
+export const ConstraintTypeSchema = z.enum([
+  'fix', 'coincident', 'concentric', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'equal', 'length', 'distance', 'tangent',
+]);
+export type ConstraintType = z.infer<typeof ConstraintTypeSchema>;
+export const GeomRefSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,63}(\.(p|e)\d{1,2}|\.center)?$/, '참조는 "요소ID", "요소ID.center", "다각형ID.p0", "다각형ID.e0" 형식입니다');
+export const SketchConstraintSchema = z.strictObject({
+  id: ObjectIdSchema,
+  type: ConstraintTypeSchema,
+  refs: z.array(GeomRefSchema).min(1).max(2),
+  value: dimension.optional(),
+});
+export type SketchConstraint = z.infer<typeof SketchConstraintSchema>;
+
 export const SketchSchema = z.strictObject({
   id: ObjectIdSchema,
   name: z.string().min(1).max(100),
   plane: SketchPlaneSchema,
   entities: z.array(SketchEntitySchema).max(LIMITS.maxSketchEntities),
   dimensions: z.array(SketchDimensionSchema).max(LIMITS.maxSketchEntities * 2),
+  constraints: z.array(SketchConstraintSchema).max(LIMITS.maxSketchConstraints),
 });
 export type Sketch = z.infer<typeof SketchSchema>;
 
@@ -241,7 +274,7 @@ export type PrimitiveObject = Extract<CadObject, { kind: PrimitiveKind }>;
 export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 
-export const MODEL_SCHEMA_VERSION = 3;
+export const MODEL_SCHEMA_VERSION = 4;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -383,6 +416,46 @@ export const SetSketchPlaneCommandSchema = z.strictObject({
   plane: SketchPlaneSchema,
 });
 
+/** 닫힌 다각형 추가 (꼭짓점 3~64개, 스케치 평면 좌표). 구속은 add_constraint 로 */
+export const AddPolygonCommandSchema = z.strictObject({
+  type: z.literal('add_polygon'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
+});
+
+/** 점(다각형 꼭짓점·원/사각형 중심)을 옮기고 구속을 다시 푼다. 구속과 모순되면 거부 */
+export const MovePointCommandSchema = z.strictObject({
+  type: z.literal('move_point'),
+  sketch: ObjectIdSchema,
+  point: GeomRefSchema,
+  to: Point2Schema,
+});
+
+/** 구속 추가 → 해석기가 다시 푼다. 풀 수 없으면(모순·과구속) 거부하고 원본은 그대로 */
+export const AddConstraintCommandSchema = z.strictObject({
+  type: z.literal('add_constraint'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  constraint: ConstraintTypeSchema,
+  refs: z.array(GeomRefSchema).min(1).max(2),
+  value: dimension.optional(),
+});
+
+/** 길이·거리 구속 값 변경 */
+export const SetConstraintCommandSchema = z.strictObject({
+  type: z.literal('set_constraint'),
+  sketch: ObjectIdSchema,
+  constraint: ObjectIdSchema,
+  value: dimension,
+});
+
+export const DeleteConstraintCommandSchema = z.strictObject({
+  type: z.literal('delete_constraint'),
+  sketch: ObjectIdSchema,
+  constraint: ObjectIdSchema,
+});
+
 export const RenameSketchCommandSchema = z.strictObject({
   type: z.literal('rename_sketch'),
   sketch: ObjectIdSchema,
@@ -465,6 +538,11 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetEntityCenterCommandSchema,
   DeleteSketchEntityCommandSchema,
   SetSketchPlaneCommandSchema,
+  AddPolygonCommandSchema,
+  MovePointCommandSchema,
+  AddConstraintCommandSchema,
+  SetConstraintCommandSchema,
+  DeleteConstraintCommandSchema,
   RenameSketchCommandSchema,
   DeleteSketchCommandSchema,
   ExtrudeCommandSchema,

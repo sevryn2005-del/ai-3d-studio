@@ -15,7 +15,7 @@ def model_with(*objs) -> ModelDefinition:
         {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
     ]
-    return ModelDefinition.model_validate({"schemaVersion": 3, "units": "mm", "sketches": [], "objects": base + list(objs)})
+    return ModelDefinition.model_validate({"schemaVersion": 4, "units": "mm", "sketches": [], "objects": base + list(objs)})
 
 
 def chat(client, text_in="높이를 50mm로 바꿔줘", selected="box_1", history=(), model=None):
@@ -182,7 +182,8 @@ class TestValidator:
                              "entities": [{"id": "r1", "type": "rectangle", "center": [0, 0]}, {"id": "c1", "type": "circle", "center": [5, 0]}],
                              "dimensions": [{"id": "r1.width", "entity": "r1", "kind": "width", "value": 60},
                                             {"id": "r1.height", "entity": "r1", "kind": "height", "value": 40},
-                                            {"id": "c1.diameter", "entity": "c1", "kind": "diameter", "value": 3}]}]
+                                            {"id": "c1.diameter", "entity": "c1", "kind": "diameter", "value": 3}],
+                             "constraints": []}]
         data["objects"].append({"id": "plate", "name": "판", "kind": "extrude", "params": {"distance": 4},
                                 "extrude": {"sketch": "sk", "profile": "r1"}, "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}})
         m = ModelDefinition.model_validate(data)
@@ -233,6 +234,41 @@ class TestValidator:
             "commands[2].plane.face: box 'box_1' has no face 'end' (faces: top, bottom, +X, -X, +Y, -Y)",
             "commands[4].target: sketch c is attached to a face of 'box_1'; delete or move those sketches first",
         ]
+
+    def test_constraint_commands(self):
+        cmds, errors = validate_commands([
+            {"type": "create_sketch", "id": "sk"},
+            {"type": "add_polygon", "sketch": "sk", "id": "l", "points": [[0, 0], [60, 0], [60, 15], [20, 15], [20, 40], [0, 40]]},
+            {"type": "add_circle", "sketch": "sk", "id": "c1", "center": [40, 7], "diameter": 6},
+            {"type": "add_constraint", "sketch": "sk", "id": "k1", "constraint": "fix", "refs": ["l.p0"]},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "horizontal", "refs": ["l.e0"]},
+            {"type": "add_constraint", "sketch": "sk", "id": "k3", "constraint": "length", "refs": ["l.e0"], "value": 60},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "distance", "refs": ["l.p1", "c1.center"], "value": 21},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "tangent", "refs": ["l.e1", "c1"]},
+            {"type": "set_constraint", "sketch": "sk", "constraint": "k3", "value": 70},
+            {"type": "move_point", "sketch": "sk", "point": "l.p2", "to": [70, 15]},
+            {"type": "delete_constraint", "sketch": "sk", "constraint": "k1"},
+            {"type": "extrude", "id": "bracket", "sketch": "sk", "profile": "l", "distance": 5},
+        ], model_with())
+        assert errors == [] and len(cmds) == 12
+
+    def test_constraint_command_errors(self):
+        _, errors = validate_commands([
+            {"type": "create_sketch", "id": "sk"},
+            {"type": "add_polygon", "sketch": "sk", "id": "bad", "points": [[0, 0], [10, 10], [10, 0], [0, 10]]},
+            {"type": "add_polygon", "sketch": "sk", "id": "t", "points": [[0, 0], [10, 0], [5, 8]]},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "length", "refs": ["t.p0"], "value": 3},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "horizontal", "refs": ["t.e5"]},
+            {"type": "add_constraint", "sketch": "sk", "constraint": "length", "refs": ["t.e0"]},
+            {"type": "move_point", "sketch": "sk", "point": "t.e0", "to": [1, 1]},
+            {"type": "set_constraint", "sketch": "sk", "constraint": "k9", "value": 3},
+        ], model_with())
+        assert errors[0] == "commands[1].points: 변 e0 와 e2 가 교차합니다 (꼬인 다각형)"
+        assert errors[1] == "commands[3].refs: length needs edge, got point"
+        assert errors[2].startswith("commands[4].refs: sketch 'sk' has no point/edge/circle 't.e5'")
+        assert errors[3] == "commands[5].value: length needs a value in mm"
+        assert errors[4].startswith("commands[6].point: 't.e0' is not a point")
+        assert errors[5] == "commands[7].constraint: sketch 'sk' has no constraint 'k9' (existing: k1, k2, k3)"
 
     @pytest.mark.parametrize("raw", [None, [], "x", [{"type": "exec_python"}]])
     def test_malformed(self, raw):

@@ -5,11 +5,12 @@ import { useSceneStore } from '../../cad/sceneStore';
 import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
+import { ConstraintPanel, PolygonFields } from './ConstraintFields';
 
 /** 평면의 u·v 가 가리키는 축 이름 (sketchPlane.ts 규약, 면 평면은 u·v) */
 const dimLabel = (kind: DimensionKind, plane: SketchPlane) =>
   kind === 'diameter' ? '지름' : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
-const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원' };
+const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형' };
 
 /**
  * 스케치 요소 하나의 치수·중심 입력. 바꾸면 set_dimension / set_entity_center 1건
@@ -17,6 +18,7 @@ const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각�
  */
 function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEntity }) {
   const submitNow = useSceneStore((s) => s.submitNow);
+  if (entity.type === 'polygon') return <PolygonFields sketch={sketch} polygon={entity} />;
   const setCenter = (axis: 0 | 1) => (v: number) => {
     const center: Point2 = [...entity.center];
     center[axis] = v;
@@ -131,7 +133,16 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           + 사각형
         </button>
         <button onClick={() => submitNow({ type: 'add_circle', sketch: sketch.id, id: nextEntity('c'), diameter: 10 })}>+ 원</button>
+        <button
+          title="삼각형으로 시작하는 다각형 (꼭짓점을 옮기고 구속을 더해 모양을 정합니다). 뷰포트 다각형 도구(P)로도 그릴 수 있습니다"
+          onClick={() =>
+            submitNow({ type: 'add_polygon', sketch: sketch.id, id: nextEntity('poly'), points: [[-10, -8], [10, -8], [0, 10]] })
+          }
+        >
+          + 다각형
+        </button>
       </div>
+      <ConstraintPanel sketch={sketch} />
       {users.length > 0 && (
         <fieldset>
           <legend>이 스케치를 쓰는 돌출</legend>

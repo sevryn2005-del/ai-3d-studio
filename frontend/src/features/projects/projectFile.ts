@@ -14,9 +14,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 1: 객체(기본 도형·불리언·모서리 처리)
  * - 2: + 스케치(model.sketches)와 돌출 객체. model.schemaVersion 2
  * - 3: + 면 위 스케치(plane.type 'face'), 반대 방향 돌출(음수 거리). model.schemaVersion 3. v2 내용은 그대로 유효
- * 읽기는 1·2·3 모두, 쓰기는 항상 최신(3). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 4: + 스케치 다각형(polygon)과 기하 구속(sketch.constraints). model.schemaVersion 4
+ * 읽기는 1~4 모두, 쓰기는 항상 최신(4). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 3;
+export const PROJECT_FORMAT_VERSION = 4;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -85,8 +86,23 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 3) {
     // v2 → v3: 새 평면 종류·음수 거리만 추가되었으므로 내용은 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 2 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 2 ? { ...model, schemaVersion: 3 } : model;
     file = { ...file, formatVersion: 3, model: migrated };
+  }
+  if ((file.formatVersion as number) < 4) {
+    // v3 → v4: 스케치마다 빈 구속 목록. 나머지는 그대로
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated =
+      model && typeof model === 'object' && model.schemaVersion === 3
+        ? {
+            ...model,
+            schemaVersion: MODEL_SCHEMA_VERSION,
+            sketches: Array.isArray(model.sketches)
+              ? model.sketches.map((sk: unknown) => (sk && typeof sk === 'object' ? { ...sk, constraints: (sk as { constraints?: unknown }).constraints ?? [] } : sk))
+              : model.sketches,
+          }
+        : model;
+    file = { ...file, formatVersion: 4, model: migrated };
   }
   return file;
 }

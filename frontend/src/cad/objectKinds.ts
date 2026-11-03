@@ -73,7 +73,7 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       if (!p) return [0, 0, obj.params.distance];
       const d = obj.params.distance;
       const local = extrudeLocalMatrix(model, obj);
-      const size: [number, number, number] = p.type === 'rectangle' ? [p.width, p.height, Math.abs(d)] : [p.diameter, p.diameter, Math.abs(d)];
+      const size: [number, number, number] = p.type === 'circle' ? [p.diameter, p.diameter, Math.abs(d)] : [p.width, p.height, Math.abs(d)];
       return local ? extrudeLocalSize(local, size) : size;
     }
     case 'boolean': {
@@ -105,7 +105,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       const p = model ? extrudeProfile(obj, model) : null;
       const d = formatMm(obj.params.distance);
       if (!p) return `돌출 ${d}`;
-      return p.type === 'rectangle' ? `${formatMm(p.width)}×${formatMm(p.height)}×${d}` : `Ø${formatMm(p.diameter)}×${d}`;
+      return p.type === 'circle' ? `Ø${formatMm(p.diameter)}×${d}` : `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
     }
     case 'boolean': {
       const n = obj.boolean.tools.length;
