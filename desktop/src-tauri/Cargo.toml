@@ -3,6 +3,7 @@ name = "ai-3d-studio"
 version = "0.1.0"
 description = "AI 3D Studio 데스크톱 셸"
 edition = "2021"
+license = "GPL-3.0-or-later"
 rust-version = "1.80"
 publish = false
 

@@ -2,6 +2,7 @@
 name = "ai-3d-studio-backend"
 version = "0.1.0"
 description = "AI 3D Studio CAD/AI backend"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "anthropic>=1,<2",

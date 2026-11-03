@@ -1,6 +1,7 @@
 {
   "name": "ai-3d-studio-desktop",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "version": "0.1.0",
   "description": "Windows 데스크톱 셸 (Tauri): 로컬 모드 엔진(사이드카)을 실행하고 같은 화면을 띄운다",
   "scripts": {

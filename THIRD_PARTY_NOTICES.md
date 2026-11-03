@@ -1,6 +1,9 @@
 # 제3자 소프트웨어 고지
 
-> 이 문서는 개발 중 확인한 사항을 정리한 것이며 법률 자문이 아닙니다. **상용 배포 전 법률 검토가 필요합니다.**
+AI 3D Studio 자체는 **GPL-3.0-or-later** 로 배포한다 (`LICENSE`). 아래 구성 요소는 모두 GPL-3.0 과 함께 배포할 수 있는 라이선스다
+(MIT·BSD·Apache-2.0·PSF·LGPL — 2026-11-03 설치된 패키지 메타데이터로 확인, `license-check` 절 참고).
+
+> 이 문서는 개발 중 확인한 사항을 정리한 것이며 법률 자문이 아닙니다.
 
 ## 백엔드 CAD 엔진 (2주 차 확인, 설치된 패키지 메타데이터 기준)
 
@@ -35,3 +38,10 @@
 
 React, Three.js, @react-three/fiber, @react-three/drei, Zustand, Zod, fflate: 모두 MIT.
 manifold-3d (브라우저 CAD 엔진, WASM): Apache-2.0.
+
+## license-check (GPL-3.0 호환성, 2026-11-03)
+
+- 프론트엔드 런타임 의존성: three·@react-three/*·react·zod·zustand·fflate (MIT), manifold-3d (Apache-2.0 — GPL-3.0 과 호환, GPL-2.0 단독과는 비호환).
+- 백엔드: cadquery·cadquery-ocp (Apache-2.0), OCCT (LGPL-2.1 + 예외), casadi (LGPL-3.0+), FastAPI·Pydantic·uvicorn·anthropic (MIT/BSD).
+- 빌드 도구: PyInstaller (GPL-2.0-or-later + 부트로더 예외 — 묶은 프로그램의 라이선스에 영향 없음), Tauri (MIT/Apache-2.0).
+- 새 의존성을 추가할 때: GPL-3.0 과 호환되는 라이선스만 (CLAUDE.md 5장).

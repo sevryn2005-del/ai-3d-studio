@@ -104,4 +104,11 @@ npm run schema:export  # 명령 스키마 변경 후 shared/schemas 재생성
 
 문서: [docs/development-plan.md](docs/development-plan.md), [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md)
 
-라이선스 고지: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — Open CASCADE(LGPL) 포함, 상용 배포 전 법률 검토 필요.
+라이선스 고지: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — Open CASCADE(LGPL) 등 포함. 프로젝트 라이선스는 맨 아래 "라이선스" 절.
+
+## 라이선스
+
+**GNU General Public License v3.0 이상 (GPL-3.0-or-later)** — 전문은 `LICENSE`.
+누구나 무료로 쓰고, 고치고, 다시 배포할 수 있습니다. 고친 프로그램을 배포할 때는 같은 라이선스로 소스를 공개해야 합니다.
+함께 들어가는 다른 오픈소스(OCCT, CadQuery 등)의 라이선스와 고지는 `THIRD_PARTY_NOTICES.md`, `licenses/`.
+

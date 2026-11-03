@@ -1,6 +1,7 @@
 {
   "name": "ai-3d-studio-frontend",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
