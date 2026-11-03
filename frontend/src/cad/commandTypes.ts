@@ -125,8 +125,21 @@ export const BooleanDefSchema = z.strictObject({
   tools: z.array(ObjectIdSchema).min(1).max(LIMITS.maxBooleanTools),
 });
 
+/**
+ * 박스 모서리 처리. 필렛(둥글게: size = 반지름) 또는 모따기(size = 깎는 거리).
+ * edges: 'all' 모든 12개 모서리, 'vertical' 세로(Z 방향) 4개 모서리.
+ * size 는 해당 면의 가장 짧은 변의 절반보다 작아야 한다 (edgeFeature.ts, 실행기에서 검사).
+ */
+export const EdgeSelectionSchema = z.enum(['all', 'vertical']);
+export const EdgeFeatureSchema = z.strictObject({
+  type: z.enum(['fillet', 'chamfer']),
+  size: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension / 2),
+  edges: EdgeSelectionSchema,
+});
+export type EdgeFeature = z.infer<typeof EdgeFeatureSchema>;
+
 export const CadObjectSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ ...objectBase, kind: z.literal('box'), params: BoxParamsSchema }),
+  z.strictObject({ ...objectBase, kind: z.literal('box'), params: BoxParamsSchema, edgeFeature: EdgeFeatureSchema.optional() }),
   z.strictObject({ ...objectBase, kind: z.literal('cylinder'), params: CylinderParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('sphere'), params: SphereParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('cone'), params: ConeParamsSchema }),
@@ -218,6 +231,22 @@ export const SetParamsCommandSchema = z.strictObject({
   params: SetParamsParamsSchema,
 });
 
+/** 박스 모서리를 둥글게 (radius 0 = 모서리 처리 제거). edges 생략 시 모든 모서리 */
+export const FilletCommandSchema = z.strictObject({
+  type: z.literal('fillet'),
+  target: ObjectIdSchema,
+  radius: z.number().min(0).max(LIMITS.maxDimension / 2),
+  edges: EdgeSelectionSchema.optional(),
+});
+
+/** 박스 모서리를 비스듬히 깎기 (distance 0 = 모서리 처리 제거). edges 생략 시 모든 모서리 */
+export const ChamferCommandSchema = z.strictObject({
+  type: z.literal('chamfer'),
+  target: ObjectIdSchema,
+  distance: z.number().min(0).max(LIMITS.maxDimension / 2),
+  edges: EdgeSelectionSchema.optional(),
+});
+
 export const TranslateCommandSchema = z.strictObject({
   type: z.literal('translate'),
   target: ObjectIdSchema,
@@ -258,6 +287,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   UnionCommandSchema,
   IntersectCommandSchema,
   SetParamsCommandSchema,
+  FilletCommandSchema,
+  ChamferCommandSchema,
   TranslateCommandSchema,
   SetTransformCommandSchema,
   RenameObjectCommandSchema,

@@ -4,6 +4,10 @@ import { selectModel, selectSelectedObject, useSceneStore } from '../../cad/scen
 import { KIND_INFO, OPERATION_INFO, kindLabel, sizeSummary } from '../../cad/objectKinds';
 import { byId, childIds, parentMap, topLevelObjects } from '../../cad/modelGraph';
 import { NumberField } from './NumberField';
+import { dropToBedCommand } from '../../cad/printCheck';
+import { maxEdgeSize } from '../../cad/edgeFeature';
+import { formatMm } from '../../cad/units';
+import { usePrintCheck } from '../../features/print/usePrintCheck';
 
 export function PropertyPanel() {
   const model = useSceneStore(selectModel);
@@ -113,6 +117,8 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
         </fieldset>
       )}
 
+      {object.kind === 'box' && <EdgeFeatureFields object={object} />}
+
       <fieldset>
         <legend>{parent ? `위치 (${parent.name} 기준)` : '위치 (바닥면 중심)'}</legend>
         {(['X', 'Y', 'Z'] as const).map((a, i) => (
@@ -126,6 +132,8 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
           <NumberField key={a} label={a} unit="°" value={transform.rotation[i]!} onCommit={setVec('rotation', i as 0 | 1 | 2)} />
         ))}
       </fieldset>
+
+      {!parent && <DropToBed object={object} />}
 
       {!parent && <BooleanActions object={object} model={model} />}
 
@@ -200,6 +208,77 @@ function BooleanActions({ object, model }: { object: CadObject; model: ModelDefi
           </button>
         ))}
       </div>
+    </fieldset>
+  );
+}
+
+/** 선택한 최상위 객체의 가장 낮은 점을 바닥(z=0)에 맞춘다 (회전·불리언 결과 기준) */
+function DropToBed({ object }: { object: CadObject }) {
+  const { boxes } = usePrintCheck();
+  const dispatch = useSceneStore((s) => s.dispatch);
+  const box = boxes.get(object.id);
+  const cmd = box ? dropToBedCommand(object, box) : null;
+  return (
+    <button
+      className="drop-to-bed"
+      disabled={!cmd}
+      title={cmd ? '가장 낮은 점을 출력 베드(z=0)에 맞춥니다' : '이미 바닥에 놓여 있습니다'}
+      onClick={() => cmd && dispatch(cmd)}
+    >
+      바닥에 놓기
+    </button>
+  );
+}
+
+/** 박스 모서리 처리 (필렛·모따기). 바꿀 때마다 fillet/chamfer 명령 1개 → 실행 취소 가능 */
+function EdgeFeatureFields({ object }: { object: Extract<CadObject, { kind: 'box' }> }) {
+  const dispatch = useSceneStore((s) => s.dispatch);
+  const f = object.edgeFeature;
+  const type = f?.type ?? 'none';
+  const edges = f?.edges ?? 'all';
+  const apply = (t: 'fillet' | 'chamfer', size: number, e: 'all' | 'vertical') =>
+    dispatch(t === 'fillet' ? { type: 'fillet', target: object.id, radius: size, edges: e } : { type: 'chamfer', target: object.id, distance: size, edges: e });
+  const max = maxEdgeSize(object.params, edges);
+  const defaultSize = Math.min(2, Math.floor(max * 0.5 * 10) / 10 || 0.1);
+
+  return (
+    <fieldset>
+      <legend>모서리</legend>
+      <div className="field">
+        <label htmlFor="edge-type">처리</label>
+        <select
+          id="edge-type"
+          value={type}
+          onChange={(e) => {
+            const v = e.target.value as 'none' | 'fillet' | 'chamfer';
+            if (v === 'none') apply(f?.type ?? 'fillet', 0, edges);
+            else apply(v, f?.size ?? defaultSize, edges);
+          }}
+        >
+          <option value="none">없음 (각진 모서리)</option>
+          <option value="fillet">둥글게 (필렛)</option>
+          <option value="chamfer">비스듬히 깎기 (모따기)</option>
+        </select>
+      </div>
+      {f && (
+        <>
+          <div className="field">
+            <label htmlFor="edge-which">범위</label>
+            <select id="edge-which" value={edges} onChange={(e) => apply(f.type, f.size, e.target.value as 'all' | 'vertical')}>
+              <option value="all">모든 모서리</option>
+              <option value="vertical">세로 모서리만</option>
+            </select>
+          </div>
+          <NumberField
+            label={f.type === 'fillet' ? '반지름' : '거리'}
+            unit="mm"
+            value={f.size}
+            onCommit={(v) => apply(f.type, v, edges)}
+            testId="edge-size"
+          />
+          <div className="muted small">{formatMm(max)}mm 보다 작게</div>
+        </>
+      )}
     </fieldset>
   );
 }

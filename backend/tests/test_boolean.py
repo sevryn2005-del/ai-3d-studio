@@ -124,3 +124,11 @@ def test_api_returns_single_mesh_for_boolean(client):
     body = client.post("/api/model/evaluate", json=load_json("examples/model-cut-rotated.json")).json()
     assert body["ok"], body["issues"]
     assert [m["objectId"] for m in body["meshes"]] == ["cut_1"]
+
+
+def test_edge_feature_too_large_is_reported():
+    m = model(obj("b", "box", {"width": 30, "depth": 20, "height": 10}))
+    bad = m.model_dump(mode="json")
+    bad["objects"][0]["edgeFeature"] = {"type": "fillet", "size": 5, "edges": "all"}
+    issues = check_model(ModelDefinition.model_validate(bad))
+    assert issues and "너무 큽니다" in issues[0].message

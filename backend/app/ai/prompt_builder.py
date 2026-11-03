@@ -82,6 +82,7 @@ Model rules (the commands follow them exactly)
 - cut / union / intersect create a new boolean object whose children are the base and tools. The children are kept, so their dimensions can still be edited. Their transforms become relative to the new boolean object's frame, which is the base object's transform at creation time.
 - Only top-level objects (not already inside a boolean) can be used as base or tools.
 - Give every object you create an explicit lowercase id (letters, digits, underscore), so later commands in the same batch can refer to it.
+- fillet (round) and chamfer (bevel) work on boxes only. edges "all" = all 12 edges, "vertical" = the 4 vertical edges (good for a smooth top-down outline). The size must be less than half of the shortest side involved (all: min of width/depth/height; vertical: min of width/depth). Size 0 removes it. To round a hollowed box, fillet the outer box before cutting.
 - A through-hole: make the cutting cylinder at least 2 mm taller than the part and start it 1 mm below the part's bottom (z = part_z − 1), then cut.
 - Commands in one call run in order. Prefer a single call with all commands for one request.
 - Keep dimensions between 0.1 and 1000 mm and coordinates within ±10000 mm."""

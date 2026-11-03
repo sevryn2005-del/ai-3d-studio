@@ -26,6 +26,7 @@ from app.cad.commands import (
 )
 
 _ORIGIN = cq.Vector(0, 0, 0)
+_VERTICAL = cq.selectors.ParallelDirSelector(cq.Vector(0, 0, 1))
 _AXES = {"x": cq.Vector(1, 0, 0), "y": cq.Vector(0, 1, 0), "z": cq.Vector(0, 0, 1)}
 
 
@@ -36,8 +37,16 @@ class GeometryError(Exception):
 def local_solid(obj: CadObject) -> cq.Shape:
     """변환을 적용하지 않은 로컬 좌표계의 솔리드."""
     match obj:
-        case BoxObject(params=p):
-            return cq.Solid.makeBox(p.width, p.depth, p.height, pnt=cq.Vector(-p.width / 2, -p.depth / 2, 0))
+        case BoxObject(params=p, edgeFeature=f):
+            solid = cq.Solid.makeBox(p.width, p.depth, p.height, pnt=cq.Vector(-p.width / 2, -p.depth / 2, 0))
+            if f is None:
+                return solid
+            edges = solid.Edges() if f.edges == "all" else _VERTICAL.filter(solid.Edges())
+            try:
+                return solid.fillet(f.size, edges) if f.type == "fillet" else solid.chamfer(f.size, None, edges)
+            except Exception as e:  # OCCT 실패 → 사용자 메시지
+                what = "모서리를 둥글게" if f.type == "fillet" else "모따기를"
+                raise GeometryError(f"'{obj.name}': {what} 할 수 없습니다 (크기를 줄여 보세요)") from e
         case CylinderObject(params=p):
             return cq.Solid.makeCylinder(p.radius, p.height)
         case SphereObject(params=p):

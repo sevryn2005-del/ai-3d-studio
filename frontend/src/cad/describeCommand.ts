@@ -26,6 +26,15 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${OPERATION_INFO[cmd.type].label}: ${name(cmd.base)} ${OPERATION_INFO[cmd.type].symbol} ${cmd.tools.map(name).join(', ')}`;
     case 'set_params':
       return `${name(cmd.target)} ${Object.entries(cmd.params).map(([k, v]) => `${PARAM_LABEL[k] ?? k} ${formatMm(v)}mm`).join(', ')}`;
+    case 'fillet':
+    case 'chamfer': {
+      const size = cmd.type === 'fillet' ? cmd.radius : cmd.distance;
+      if (size === 0) return `${name(cmd.target)} 모서리 처리 제거`;
+      const which = cmd.edges === 'vertical' ? '세로 모서리' : '모든 모서리';
+      return cmd.type === 'fillet'
+        ? `${name(cmd.target)} ${which} 둥글게 R${formatMm(size)}mm`
+        : `${name(cmd.target)} ${which} 모따기 ${formatMm(size)}mm`;
+    }
     case 'translate':
       return `${name(cmd.target)} 이동 ${vec(cmd.offset)}mm`;
     case 'set_transform':

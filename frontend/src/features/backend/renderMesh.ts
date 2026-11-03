@@ -23,7 +23,8 @@ export function geometryKey(obj: CadObject, index: Map<ObjectId, CadObject>): st
   const sorted = Object.keys(params)
     .sort()
     .map((k) => `${k}=${params[k]}`);
-  return `${obj.kind}:${sorted.join(',')}`;
+  const edge = obj.kind === 'box' && obj.edgeFeature ? `|${obj.edgeFeature.type}:${obj.edgeFeature.size}:${obj.edgeFeature.edges}` : '';
+  return `${obj.kind}:${sorted.join(',')}${edge}`;
 }
 
 function transformKey(t: Transform): string {

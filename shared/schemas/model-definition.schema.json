@@ -113,6 +113,36 @@
                   "height"
                 ],
                 "additionalProperties": false
+              },
+              "edgeFeature": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fillet",
+                      "chamfer"
+                    ]
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 500
+                  },
+                  "edges": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "vertical"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "size",
+                  "edges"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

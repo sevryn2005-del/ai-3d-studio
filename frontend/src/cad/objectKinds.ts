@@ -4,6 +4,7 @@
  */
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectKind } from './commandTypes';
 import { formatMm } from './units';
+import { describeEdgeFeature } from './edgeFeature';
 
 export interface ParamField {
   key: string;
@@ -74,8 +75,10 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
 /** 목록 표시용 크기 요약. 예: "20×20×50", "Ø20×30", "Ø40", "− 1개" */
 export function sizeSummary(obj: CadObject): string {
   switch (obj.kind) {
-    case 'box':
-      return `${formatMm(obj.params.width)}×${formatMm(obj.params.depth)}×${formatMm(obj.params.height)}`;
+    case 'box': {
+      const dims = `${formatMm(obj.params.width)}×${formatMm(obj.params.depth)}×${formatMm(obj.params.height)}`;
+      return obj.edgeFeature ? `${dims} ${describeEdgeFeature(obj.edgeFeature)}` : dims;
+    }
     case 'cylinder':
       return `Ø${formatMm(obj.params.radius * 2)}×${formatMm(obj.params.height)}`;
     case 'sphere':

@@ -31,6 +31,7 @@ import {
 import { KIND_INFO, OPERATION_INFO } from './objectKinds';
 import { byId, depthOf, parentMap, subtreeIds } from './modelGraph';
 import { IDENTITY, relativeTransform } from './transformMath';
+import { edgeFeatureError } from './edgeFeature';
 
 export type ExecuteResult =
   | { ok: true; model: ModelDefinition; command: CadCommand; affectedId: ObjectId | null }
@@ -83,7 +84,31 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         params: { ...target.params, ...cmd.params },
       });
       if (!merged.ok) return merged;
+      // 박스를 줄여 기존 모서리 처리가 들어가지 않게 되면 거부
+      if (merged.object.kind === 'box' && target.kind === 'box' && target.edgeFeature) {
+        const err = edgeFeatureError(merged.object.params, target.edgeFeature);
+        if (err) return fail(`${err}. 모서리 처리를 먼저 줄이세요`);
+        merged.object.edgeFeature = target.edgeFeature;
+      }
       return done(model, replaceObject(model, merged.object), cmd, target.id);
+    }
+
+    case 'fillet':
+    case 'chamfer': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'box') return fail('모서리 처리(필렛·모따기)는 현재 박스에만 할 수 있습니다');
+      const size = cmd.type === 'fillet' ? cmd.radius : cmd.distance;
+      if (size === 0) {
+        const { edgeFeature: _removed, ...rest } = target;
+        void _removed;
+        return done(model, replaceObject(model, rest), cmd, target.id);
+      }
+      if (size < LIMITS.minDimension) return fail(`크기는 ${LIMITS.minDimension}mm 이상이어야 합니다 (0 은 제거)`);
+      const feature = { type: cmd.type, size, edges: cmd.edges ?? 'all' } as const;
+      const err = edgeFeatureError(target.params, feature);
+      if (err) return fail(err);
+      return done(model, replaceObject(model, { ...target, edgeFeature: feature }), cmd, target.id);
     }
 
     case 'translate': {

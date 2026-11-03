@@ -6,7 +6,7 @@ from collections import Counter
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.cad.commands import COMMAND_MODELS, OBJECT_MODELS, BooleanObject, Limits, ModelDefinition
+from app.cad.commands import COMMAND_MODELS, OBJECT_MODELS, BooleanObject, BoxObject, Limits, ModelDefinition, max_edge_size
 
 
 def _literal(model: type, field: str) -> str:
@@ -83,6 +83,13 @@ def check_model(model: ModelDefinition) -> list[Issue]:
     for i, obj in enumerate(model.objects):
         if counts[obj.id] > 1:
             issues.append(Issue(path=f"objects.{i}.id", message=f"중복된 객체 ID입니다: {obj.id}"))
+
+    for i, obj in enumerate(model.objects):
+        if isinstance(obj, BoxObject) and obj.edgeFeature:
+            limit = max_edge_size(obj.params, obj.edgeFeature.edges)
+            if obj.edgeFeature.size >= limit:
+                issues.append(Issue(path=f"objects.{i}.edgeFeature.size",
+                                    message=f"{obj.id}: 모서리 크기 {obj.edgeFeature.size:g}mm 가 너무 큽니다 ({limit:g}mm 보다 작아야 합니다)"))
 
     index = {o.id: o for o in model.objects}
     parent_of: dict[str, str] = {}

@@ -84,3 +84,24 @@ def test_rotation_matches_threejs(rotation):
     expected = sorted(tuple(np.round(R @ c + position, 6)) for c in corners)
     actual = sorted(tuple(np.round(v.toTuple(), 6)) for v in (vv.Center() for vv in s.Vertices()))
     np.testing.assert_allclose(actual, expected, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "feature,volume",
+    [
+        # 해석해 (30×20×10, 크기 2) — 브라우저 엔진(geometry.test.ts)도 같은 값과 비교한다
+        ({"type": "fillet", "size": 2, "edges": "all"}, 5804.6961),
+        ({"type": "fillet", "size": 2, "edges": "vertical"}, 5965.6637),
+        ({"type": "chamfer", "size": 2, "edges": "all"}, 5562.6667),
+        ({"type": "chamfer", "size": 2, "edges": "vertical"}, 5920.0),
+    ],
+)
+def test_edge_features(feature, volume):
+    o = ObjectAdapter.validate_python({
+        "id": "b", "name": "함", "kind": "box", "params": {"width": 30, "depth": 20, "height": 10},
+        "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}, "edgeFeature": feature,
+    })
+    s = local_solid(o)
+    assert s.isValid()
+    assert s.Volume() == pytest.approx(volume, abs=1e-3)
+    np.testing.assert_allclose(bbox(s), [-15, -10, 0, 15, 10, 10], atol=1e-6)  # 원점 규칙 유지

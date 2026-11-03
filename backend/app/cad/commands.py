@@ -117,9 +117,27 @@ class _ObjectBase(Strict):
     transform: Transform
 
 
+EdgeSelection = Literal["all", "vertical"]
+
+
+class EdgeFeature(Strict):
+    """박스 모서리 처리: fillet(size = 반지름) / chamfer(size = 깎는 거리), edges: all | vertical"""
+
+    type: Literal["fillet", "chamfer"]
+    size: Annotated[float, _num(Limits.MIN_DIMENSION, Limits.MAX_DIMENSION / 2)]
+    edges: EdgeSelection
+
+
+def max_edge_size(p: BoxParams, edges: str) -> float:
+    dims = [p.width, p.depth, p.height] if edges == "all" else [p.width, p.depth]
+    return min(dims) / 2
+
+
 class BoxObject(_ObjectBase):
     kind: Literal["box"]
     params: BoxParams
+    # 없으면 직렬화에서 필드를 뺀다 (Zod 의 optional 과 같은 의미: null 이 아니라 "없음")
+    edgeFeature: EdgeFeature | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class CylinderObject(_ObjectBase):
@@ -244,6 +262,20 @@ class SetParams(Strict):
     params: SetParamsParams
 
 
+class Fillet(Strict):
+    type: Literal["fillet"]
+    target: ObjectId
+    radius: Annotated[float, _num(0, Limits.MAX_DIMENSION / 2)]
+    edges: EdgeSelection | None = None
+
+
+class Chamfer(Strict):
+    type: Literal["chamfer"]
+    target: ObjectId
+    distance: Annotated[float, _num(0, Limits.MAX_DIMENSION / 2)]
+    edges: EdgeSelection | None = None
+
+
 class Translate(Strict):
     type: Literal["translate"]
     target: ObjectId
@@ -285,6 +317,8 @@ CadCommand = Annotated[
         Union_,
         Intersect,
         SetParams,
+        Fillet,
+        Chamfer,
         Translate,
         SetTransform,
         RenameObject,
@@ -305,6 +339,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     Union_,
     Intersect,
     SetParams,
+    Fillet,
+    Chamfer,
     Translate,
     SetTransform,
     RenameObject,

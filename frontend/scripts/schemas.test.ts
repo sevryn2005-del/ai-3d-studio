@@ -30,6 +30,8 @@ describe('shared/schemas 동기화', () => {
       'union',
       'intersect',
       'set_params',
+      'fillet',
+      'chamfer',
       'translate',
       'set_transform',
       'rename_object',

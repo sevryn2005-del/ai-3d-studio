@@ -19,9 +19,13 @@ export function AiSettingsDialog() {
     setError(null);
     setSaved(null);
     getAiUsage().then(setUsage).catch(() => setUsage(null));
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSettingsOpen(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault(); // 전역 Esc(선택 해제)가 함께 동작하지 않도록
+      setSettingsOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [open, setSettingsOpen]);
 
   if (!open) return null;

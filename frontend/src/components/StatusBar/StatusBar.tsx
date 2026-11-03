@@ -3,6 +3,7 @@ import { useBackendStore, type Evaluation } from '../../features/backend/backend
 import { useProjectStore } from '../../features/projects/projectStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import { appConfig } from '../../api/config';
+import { PrintCheckStatus } from '../PrintCheck/PrintCheckStatus';
 
 export function StatusBar() {
   const model = useSceneStore(selectModel);
@@ -26,6 +27,7 @@ export function StatusBar() {
         CAD: {engineId ? getActiveEngine(engineId).label : '연결 확인 중'}
       </span>
       {engineId && <EvaluationStatus evaluation={evaluation} />}
+      <PrintCheckStatus />
       {notice && (
         <span className="notice" role="status" data-testid="notice">
           {notice}

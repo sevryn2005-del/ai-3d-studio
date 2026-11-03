@@ -62,7 +62,27 @@ export function localManifold(
   switch (obj.kind) {
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;
-      return scope.keep(scope.keep(Manifold.cube([w, d, h], false)).translate([-w / 2, -d / 2, 0]));
+      const f = obj.edgeFeature;
+      const block = (bw: number, bd: number, bh: number, z0 = 0) =>
+        scope.keep(scope.keep(Manifold.cube([bw, bd, bh], false)).translate([-bw / 2, -bd / 2, z0]));
+      if (!f) return block(w, d, h);
+      // 모서리 처리 = 볼록 껍질(hull). 서버 OCCT 필렛·모따기와 같은 형상임을 측정으로 확인함 (docs/architecture.md)
+      const r = f.size;
+      const corners = (fn: (x: number, y: number) => Manifold[]) =>
+        [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) => fn(sx * (w / 2 - r), sy * (d / 2 - r))));
+      let parts: Manifold[];
+      if (f.type === 'fillet' && f.edges === 'all') {
+        const n = sphereSegments(r, tol);
+        parts = corners((x, y) => [r, h - r].map((z) => scope.keep(scope.keep(Manifold.sphere(r, n)).translate([x, y, z]))));
+      } else if (f.type === 'fillet') {
+        const n = circularSegments(r, tol);
+        parts = corners((x, y) => [scope.keep(scope.keep(Manifold.cylinder(h, r, r, n)).translate([x, y, 0]))]);
+      } else if (f.edges === 'all') {
+        parts = [block(w, d - 2 * r, h - 2 * r, r), block(w - 2 * r, d, h - 2 * r, r), block(w - 2 * r, d - 2 * r, h)];
+      } else {
+        parts = [block(w, d - 2 * r, h), block(w - 2 * r, d, h)];
+      }
+      return scope.keep(Manifold.hull(parts));
     }
     case 'cylinder':
       return scope.keep(Manifold.cylinder(obj.params.height, obj.params.radius, obj.params.radius, circularSegments(obj.params.radius, tol)));

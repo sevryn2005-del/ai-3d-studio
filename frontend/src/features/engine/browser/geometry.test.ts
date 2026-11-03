@@ -172,3 +172,26 @@ describe('메시 계약', () => {
     for (let i = 0; i < 50; i++) evaluateMeshes(wasm, m); // 누수 시 메모리 오류
   });
 });
+
+describe('모서리 처리 (서버 OCCT 와 같은 형상: 부피로 비교)', () => {
+  // 30×20×10 박스, 크기 2. 서버(CadQuery) 측정값: test_primitives.py 와 같은 수치
+  const SERVER = { 'fillet all': 5804.6961, 'fillet vertical': 5965.6637, 'chamfer all': 5562.6667, 'chamfer vertical': 5920 };
+  it.each(Object.entries(SERVER))('%s', (name, expected) => {
+    const [type, edges] = name.split(' ') as ['fillet' | 'chamfer', 'all' | 'vertical'];
+    const m = build(
+      { type: 'create_box', id: 'b', width: 30, depth: 20, height: 10 },
+      type === 'fillet' ? { type, target: 'b', radius: 2, edges } : { type, target: 'b', distance: 2, edges },
+    );
+    const p = probe(m, 'b');
+    // 곡면 다각형 근사의 부피 오차 ≤ 허용 오차(0.01mm) × 곡면 넓이. 모따기는 평면뿐이라 정확히 같아야 한다.
+    const r = 2, a = 26, b2 = 16, c = 6;
+    const curvedArea = name === 'fillet all' ? 2 * Math.PI * r * (a + b2 + c) + 4 * Math.PI * r * r
+      : name === 'fillet vertical' ? 2 * Math.PI * r * 10 : 0;
+    expect(Math.abs(p.volume - expected)).toBeLessThanOrEqual(0.01 * curvedArea + 1e-3);
+    const [mesh] = evaluateMeshes(wasm, m, 0.01);
+    const b = bbox(mesh!.positions);
+    b.min.forEach((v, i) => expect(v).toBeCloseTo([-15, -10, 0][i]!, 3)); // 원점 규칙 유지
+    b.max.forEach((v, i) => expect(v).toBeCloseTo([15, 10, 10][i]!, 3));
+    p.dispose();
+  });
+});

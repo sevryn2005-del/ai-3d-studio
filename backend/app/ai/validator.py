@@ -86,6 +86,9 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if bad:
                     hint = ", ".join(sorted(allowed)) or "none (edit its child objects instead)"
                     errors.append(f"commands[{i}].params: {kind} '{c['target']}' has no parameter {', '.join(bad)} (allowed: {hint})")
+        elif t in ("fillet", "chamfer"):
+            if exists(i, c["target"], "target") and kinds[c["target"]] != "box":
+                errors.append(f"commands[{i}].target: fillet/chamfer only works on boxes; '{c['target']}' is a {kinds[c['target']]}")
         elif t == "delete_object":
             if exists(i, c["target"], "target"):
                 if c["target"] in parent:

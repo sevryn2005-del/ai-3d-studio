@@ -11,6 +11,8 @@ import { openProject, saveProject } from './features/projects/projectActions';
 export function useKeyboardShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 팝업·메뉴·대화상자가 이미 처리한 키(예: Esc 로 닫기)는 무시 → 선택이 풀리지 않는다
+      if (e.defaultPrevented) return;
       const modKey = e.ctrlKey || e.metaKey;
       if (modKey && e.key.toLowerCase() === 's') {
         e.preventDefault(); // 브라우저의 "페이지 저장" 대신

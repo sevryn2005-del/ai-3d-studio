@@ -139,6 +139,14 @@ class TestValidator:
         assert any("already used" in e for e in errors)
         assert any("does not exist" in e for e in errors)
 
+    def test_fillet_only_on_box(self):
+        _, errors = validate_commands([
+            {"type": "create_sphere", "id": "s", "radius": 5},
+            {"type": "fillet", "target": "s", "radius": 1},
+            {"type": "chamfer", "target": "box_1", "distance": 1, "edges": "vertical"},
+        ], model_with())
+        assert errors == ["commands[1].target: fillet/chamfer only works on boxes; 's' is a sphere"]
+
     @pytest.mark.parametrize("raw", [None, [], "x", [{"type": "exec_python"}]])
     def test_malformed(self, raw):
         assert validate_commands(raw, model_with())[1]

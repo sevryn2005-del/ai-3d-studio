@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import { downloadExport, EXPORT_FORMATS } from '../../features/projects/exportModel';
+import { currentPrintCheck } from '../../features/print/usePrintCheck';
+import { confirmDialog } from '../../features/dialogs/confirmStore';
 
 /** 내보내기 형식 선택 메뉴. 활성 CAD 엔진(서버 또는 브라우저)이 파일을 만든다. */
 export function ExportMenu() {
@@ -15,7 +17,11 @@ export function ExportMenu() {
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false);
+      if (e instanceof KeyboardEvent) {
+        if (e.key !== 'Escape') return;
+        e.preventDefault(); // 전역 Esc(선택 해제)가 함께 동작하지 않도록
+        setOpen(false);
+      } else if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', close);
@@ -50,6 +56,15 @@ export function ExportMenu() {
                   onClick={async () => {
                     if (!engineId) return;
                     setOpen(false);
+                    // 출력 불가 문제(오류)가 있으면 한 번 확인한다. 경고는 막지 않는다.
+                    const errors = currentPrintCheck().issues.filter((i) => i.severity === 'error');
+                    if (errors.length > 0) {
+                      const go = await confirmDialog(
+                        `출력 전 검사에서 오류 ${errors.length}건이 있습니다: ${errors[0]!.message}. 그래도 내보낼까요?`,
+                        '그래도 내보내기',
+                      );
+                      if (!go) return;
+                    }
                     setBusy(f.label);
                     await downloadExport(engineId, f.format);
                     setBusy(null);

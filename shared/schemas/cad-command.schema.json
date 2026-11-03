@@ -414,6 +414,68 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "fillet"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "edges": {
+          "type": "string",
+          "enum": [
+            "all",
+            "vertical"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "radius"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chamfer"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "distance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "edges": {
+          "type": "string",
+          "enum": [
+            "all",
+            "vertical"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "distance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "translate"
         },
         "target": {

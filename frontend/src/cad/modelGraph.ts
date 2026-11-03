@@ -4,6 +4,7 @@
  */
 import type { CadObject, ModelDefinition, ObjectId } from './commandTypes';
 import { LIMITS } from './commandTypes';
+import { edgeFeatureError } from './edgeFeature';
 
 export function childIds(obj: CadObject): ObjectId[] {
   return obj.kind === 'boolean' ? [obj.boolean.base, ...obj.boolean.tools] : [];
@@ -56,6 +57,12 @@ export function validateGraph(model: ModelDefinition): string[] {
   for (const o of model.objects) {
     if (index.has(o.id)) errors.push(`중복된 객체 ID입니다: ${o.id}`);
     index.set(o.id, o);
+  }
+  for (const o of model.objects) {
+    if (o.kind === 'box' && o.edgeFeature) {
+      const err = edgeFeatureError(o.params, o.edgeFeature);
+      if (err) errors.push(`${o.id}: ${err}`);
+    }
   }
   const parentOf = new Map<ObjectId, ObjectId>();
   for (const o of model.objects) {

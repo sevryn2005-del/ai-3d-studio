@@ -197,5 +197,30 @@
         0
       ]
     }
+  },
+  {
+    "reason": "지원하지 않는 모서리 범위",
+    "command": {
+      "type": "fillet",
+      "target": "box_1",
+      "radius": 2,
+      "edges": "top"
+    }
+  },
+  {
+    "reason": "음수 모따기",
+    "command": {
+      "type": "chamfer",
+      "target": "box_1",
+      "distance": -1
+    }
+  },
+  {
+    "reason": "필렛에 distance 사용",
+    "command": {
+      "type": "fillet",
+      "target": "box_1",
+      "distance": 2
+    }
   }
 ]

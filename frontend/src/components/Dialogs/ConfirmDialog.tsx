@@ -11,6 +11,7 @@ export function ConfirmDialog() {
     confirmRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopPropagation();
         answer(false);
       }

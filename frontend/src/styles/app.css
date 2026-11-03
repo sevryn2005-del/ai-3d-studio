@@ -232,3 +232,27 @@ table.usage th:first-child { text-align: left; }
 .ok-text { color: var(--ok); margin: 0; }
 .row.end { justify-content: flex-end; }
 .row.end button { flex: 0 0 auto; }
+
+/* ---- 출력 전 검사 ---- */
+.print-check { position: relative; }
+.print-check-button { padding: 1px 8px; font-size: 12px; background: transparent; }
+.print-check-button.ok { color: var(--ok); border-color: transparent; }
+.print-check-button.has-warning { color: #d4a72c; border-color: #d4a72c; }
+.print-check-button.has-error { color: var(--danger); border-color: var(--danger); }
+.print-check-panel {
+  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20;
+  width: min(460px, calc(100vw - 32px)); padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: 8px; font-size: 12px;
+}
+.print-check-panel header { display: flex; justify-content: space-between; align-items: center; }
+.print-check-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.print-check-panel li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.print-check-panel .sev { font-weight: 600; }
+.print-check-panel li.error .sev { color: var(--danger); }
+.print-check-panel li.warning .sev { color: #d4a72c; }
+.print-check-panel .actions { display: flex; gap: 6px; align-items: center; }
+.print-check-panel .actions button:not(.link) { padding: 2px 8px; }
+.print-check-panel p { margin: 0; }
+.drop-to-bed { width: 100%; }
