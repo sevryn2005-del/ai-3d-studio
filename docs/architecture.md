@@ -24,7 +24,7 @@ Three.js 뷰포트 ◀───────────────────�
 
 | 데이터 | 위치 | 설명 |
 |--------|------|------|
-| ModelDefinition | `cad/commandTypes.ts` | 설계 원본. 객체·파라미터·변환. 프로젝트 파일에 저장되는 것. |
+| ModelDefinition | `cad/commandTypes.ts` | 설계 원본 (형식 v2). 스케치(`sketches`)·객체·파라미터·변환. 프로젝트 파일에 저장되는 것. |
 | FeatureHistory | `cad/history.ts` | 실행된 명령 목록 + 스냅샷. undo/redo, 설계 재생성의 근거. |
 | RenderMesh | 백엔드 `app/cad/mesh.py` → 프론트 `features/backend/` | 화면 표시용 삼각형 메시 (객체 로컬 좌표). **저장하지 않고 언제든 재계산 가능.** 형상 키(종류+치수, 불리언은 하위 트리 포함)로 캐시. |
 
@@ -38,6 +38,20 @@ Three.js 뷰포트 ◀───────────────────�
 - 새 도형 추가 절차: `commandTypes.ts`(파라미터·명령 스키마) → `objectKinds.ts`(표시 이름·파라미터·크기) → `commandExecutor.ts`(create 분기) → `CadObjectMesh.tsx`(미리보기) → 스키마 재생성.
 - 범위: 치수 0.1–1000mm, 반지름 0.05–500mm(원뿔은 0 허용), 좌표 ±10000mm, 회전 ±360°.
 - 명령 객체는 strict: 정의되지 않은 필드가 있으면 거부.
+
+## 스케치와 돌출 (형식 v2, `cad/sketch.ts`, `cad/sketchCommands.ts`)
+
+- `model.sketches[]`: XY 평면(높이 `plane.offset`)의 사각형·원 + **치수**(이름 붙은 값 `요소ID.width|height|diameter`). 구속 해석기는 없다 (고정 치수만).
+- `kind: "extrude"` 객체: `extrude: {sketch, profile}` 로 스케치 요소를 **참조**하고 `params.distance` 만큼 +Z 로 돌출.
+  로컬 원점 = 스케치 평면 원점. 치수를 바꾸면(`set_dimension`) 참조하는 돌출이 모두 다시 계산된다.
+- 명령: `create_sketch`, `add_rectangle`, `add_circle`, `set_dimension`, `extrude` (+ `set_params {distance}`). 객체와 스케치는 ID 이름공간을 공유한다.
+- 형상 키에 참조 프로파일(종류·치수·중심·평면 높이)을 넣는다 → 관련 치수가 바뀔 때만 재계산 (`renderMesh.geometryKey`).
+- 엔진: 서버 `cq.Workplane("XY", origin=(0,0,z)).center(cx,cy).rect|circle.extrude(d)`, 브라우저 `CrossSection.square|circle → extrude`.
+  공유 픽스처 `shared/schemas/examples/model-sketch-plate.json` 을 `tests/test_sketch_extrude.py` 와 `geometry.test.ts` 가 같은 값으로 검사.
+- 관통 구멍(`cad/sketchActions.throughHoleCommands`): 판 스케치 평면 −1mm 에 원 스케치, 두께 +2mm 돌출, 판의 월드 변환을 그대로 받아
+  최상위 객체에서 `cut`. 가장자리에서 0.5mm 이상 안쪽이어야 한다. 한 묶음(실행 취소 1번).
+- 기존 `box` 는 그대로 유지한다 (v1 파일 호환). v1 파일은 열 때 `sketches: []` 를 붙여 v2 로 마이그레이션, 저장은 항상 v2.
+- 스케치 삭제·이름 변경 명령은 아직 없다 (실행 취소로만 되돌림).
 
 ## 불리언 트리
 
@@ -79,8 +93,10 @@ Three.js 뷰포트 ◀───────────────────�
 - 봉투 `{commandId, baseRevision, command}`. 대상 ID·입력 파라미터는 `command` 안에 있다.
 - 처리 순서: 이미 적용한 `commandId` → `duplicate`(무시) · `baseRevision ≠ 현재` → `stale`(거부) · 실행기 검증 실패 → `rejected` · 적용 → 이력 1건 + 새 리비전.
 - 리비전은 커밋마다 새 번호(재사용 안 함). 실행 취소하면 이전 항목의 번호로 돌아간다. 적용한 명령 ID 는 실행 취소와 무관하게 남는다.
-- 세션 메모리에만 있다 (프로젝트 형식 v1 변경 없음).
-- 적용 경로: **이동·회전 기즈모** (드래그 시작 때 ID·기준 리비전 결정, 드래그 중에는 화면만 움직이고, 놓을 때 submit).
-  나머지 편집 경로(속성 패널, 툴바, AI)는 기존 `dispatch` / `dispatchBatch` 를 쓰며, 리비전은 함께 올라간다.
+- 세션 메모리에만 있다 (프로젝트 파일에 저장하지 않음).
+- 적용 경로: **이동·회전 기즈모** (드래그 시작 때 ID·기준 리비전 결정, 드래그 중에는 화면만 움직이고, 놓을 때 submit),
+  스케치 치수·돌출·도형 치수 입력 (`submitNow`: 확정 순간의 리비전을 기준으로 봉투 제출).
+  나머지 편집 경로(위치·회전 입력, 툴바, 여러 명령 묶음)는 기존 `dispatch` / `dispatchBatch` 를 쓰며, 리비전은 함께 올라간다.
+- AI 응답: 요청을 보낼 때의 설계 원본과 응답 도착 시점의 원본이 다르면(직접 편집·실행 취소·다른 파일 열기) 명령을 적용하지 않고 다시 요청하라고 안내한다 (`aiStore.STALE_RESPONSE`).
 - 오래된 계산 결과: `runEvaluation` 은 취소된 요청의 결과·오류를 버리고, 메시는 보낸 모델의 형상 키로만 저장한다 (설계 원본은 바꾸지 않음).
 - 저장 실패: 쓰기 실패 시 `writable.abort()` 로 임시 사본을 버려 기존 파일이 그대로 남는다.

@@ -16,6 +16,7 @@ from app.cad.commands import (
     CadCommandAdapter,
     ModelDefinition,
     PARAMS_MODELS,
+    REQUIRED_DIMENSIONS,
 )
 from app.cad.validation import issues_from_validation_error
 
@@ -43,6 +44,23 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
 
     # 현재 모델 상태를 따라가며 참조 검사
     kinds: dict[str, str] = {o.id: o.kind for o in model.objects}
+    # 스케치 id → 요소 id → 요소 유형 (객체와 스케치는 ID 이름공간을 공유한다)
+    sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
+
+    def id_used(oid: str) -> bool:
+        return oid in kinds or oid in sketches
+
+    def sketch_exists(i: int, sid: str) -> bool:
+        if sid in sketches:
+            return True
+        errors.append(f"commands[{i}].sketch: sketch '{sid}' does not exist (existing: {', '.join(sorted(sketches)) or 'none'})")
+        return False
+
+    def next_entity_id(entities: dict[str, str], prefix: str) -> str:
+        n = 1
+        while f"{prefix}{n}" in entities:
+            n += 1
+        return f"{prefix}{n}"
     parent: dict[str, str] = {}
     for o in model.objects:
         if isinstance(o, BooleanObject):
@@ -61,9 +79,42 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             oid = c.get("id")
             if oid is None:
                 continue  # 이름 자동 생성: 이후 참조할 수 없음
-            if oid in kinds:
+            if id_used(oid):
                 errors.append(f"commands[{i}].id: id '{oid}' is already used")
             kinds[oid] = _CREATE_KIND[t]
+        elif t == "create_sketch":
+            sid = c.get("id")
+            if sid is None:
+                continue  # 자동 이름: 같은 묶음에서 참조할 수 없음
+            if id_used(sid):
+                errors.append(f"commands[{i}].id: id '{sid}' is already used")
+            sketches[sid] = {}
+        elif t in ("add_rectangle", "add_circle"):
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                etype = "rectangle" if t == "add_rectangle" else "circle"
+                eid = c.get("id") or next_entity_id(ents, "rect" if etype == "rectangle" else "circle")
+                if eid in ents:
+                    errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                ents[eid] = etype
+        elif t == "set_dimension":
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                eid, kind = c["dimension"].split(".", 1)
+                allowed = [f"{e}.{k}" for e, et in sorted(ents.items()) for k in REQUIRED_DIMENSIONS[et]]
+                if ents.get(eid) is None or kind not in REQUIRED_DIMENSIONS[ents[eid]]:
+                    errors.append(
+                        f"commands[{i}].dimension: sketch '{c['sketch']}' has no dimension '{c['dimension']}' (existing: {', '.join(allowed) or 'none'})"
+                    )
+        elif t == "extrude":
+            if sketch_exists(i, c["sketch"]) and c["profile"] not in sketches[c["sketch"]]:
+                existing = ", ".join(sorted(sketches[c["sketch"]])) or "none"
+                errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no element '{c['profile']}' (existing: {existing})")
+            new_id = c.get("id")
+            if new_id is not None:
+                if id_used(new_id):
+                    errors.append(f"commands[{i}].id: id '{new_id}' is already used")
+                kinds[new_id] = "extrude"
         elif t in ("cut", "union", "intersect"):
             ids = [c["base"], *c["tools"]]
             if len(set(ids)) != len(ids):
@@ -73,7 +124,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(f"commands[{i}].{role}: '{oid}' is already inside boolean '{parent[oid]}'; use '{parent[oid]}' instead")
             new_id = c.get("id")
             if new_id is not None:
-                if new_id in kinds:
+                if id_used(new_id):
                     errors.append(f"commands[{i}].id: id '{new_id}' is already used")
                 kinds[new_id] = "boolean"
                 for oid in ids:
@@ -96,6 +147,8 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 kinds.pop(c["target"], None)
         elif t == "duplicate_object":
             if exists(i, c["target"], "target") and c.get("newId"):
+                if id_used(c["newId"]):
+                    errors.append(f"commands[{i}].newId: id '{c['newId']}' is already used")
                 kinds[c["newId"]] = kinds[c["target"]]
         else:  # translate, set_transform, rename_object
             exists(i, c["target"], "target")

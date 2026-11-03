@@ -1,10 +1,12 @@
 import fixture from '../../../../../shared/schemas/examples/model-cut-rotated.json';
+import plateFixture from '../../../../../shared/schemas/examples/model-sketch-plate.json';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema, type ModelDefinition } from '../../../cad/commandTypes';
 import { executeCommand } from '../../../cad/commandExecutor';
 import { emptyModel } from '../../../cad/commandTypes';
-import { byId } from '../../../cad/modelGraph';
+import { byId, sketchIndex } from '../../../cad/modelGraph';
+import { toBinaryStl } from './exporters';
 import {
   circularSegments,
   evaluateMeshes,
@@ -47,7 +49,7 @@ function bbox(positions: Float32Array) {
 function probe(model: ModelDefinition, id: string) {
   const scope = new Scope();
   const index = byId(model);
-  const solid = worldManifold(wasm, index.get(id)!, index, 0.01, scope);
+  const solid = worldManifold(wasm, index.get(id)!, index, 0.01, scope, sketchIndex(model));
   const volume = solid.volume();
   const inside = (p: [number, number, number]) => {
     const s = new Scope();
@@ -146,6 +148,66 @@ describe('불리언', () => {
     expect(p.inside([50, 0, 2.5])).toBe(true);
     expect(p.volume).toBeCloseTo(40 * 20 * 5 - Math.PI * 9 * 5, -1);
     p.dispose();
+  });
+});
+
+describe('스케치 돌출 (공유 픽스처: 서버 test_sketch_extrude.py 와 같은 검사)', () => {
+  const PLATE_VOLUME = 80 * 40 * 4 - Math.PI * 9 * 4;
+
+  it('기준 판 80×40×4 + 관통 구멍 Ø6 이 (18, 0) 에 있다', () => {
+    const model = ModelDefinitionSchema.parse(plateFixture);
+    expect(evaluateMeshes(wasm, model).map((x) => x.objectId)).toEqual(['plate_holed']);
+    const p = probe(model, 'plate_holed');
+    expect(p.inside([18, 0, 2])).toBe(false);
+    expect(p.inside([18, 3.5, 2])).toBe(true);
+    expect(p.inside([-18, 0, 2])).toBe(true);
+    expect(Math.abs(p.volume - PLATE_VOLUME)).toBeLessThan(0.01 * 2 * Math.PI * 3 * 4 + 1e-3);
+    p.dispose();
+    const b = bbox(worldMeshes(wasm, model)[0]!.positions);
+    expect(b.min).toEqual([-40, -20, 0]);
+    expect(b.max).toEqual([40, 20, 4]);
+  });
+
+  it('원본 치수만 바꾸면 결과가 다시 계산된다 (폭 90)', () => {
+    const m = build(
+      { type: 'create_sketch', id: 'sk' },
+      { type: 'add_rectangle', sketch: 'sk', width: 60, height: 40 },
+      { type: 'extrude', id: 'plate', sketch: 'sk', profile: 'rect1', distance: 4 },
+      { type: 'set_dimension', sketch: 'sk', dimension: 'rect1.width', value: 90 },
+    );
+    const b = bbox(evaluateMeshes(wasm, m)[0]!.positions);
+    expect(b.min).toEqual([-45, -20, 0]);
+    expect(b.max).toEqual([45, 20, 4]);
+  });
+
+  it('스케치가 없으면 형상 오류', () => {
+    const model = ModelDefinitionSchema.parse(plateFixture);
+    const scope = new Scope();
+    const index = byId(model);
+    expect(() => localManifold(wasm, index.get('plate')!, index, 0.05, scope)).toThrow(GeometryError);
+    scope.dispose();
+  });
+
+  it('STL 출력: 월드 치수·부피·닫힌 메시', () => {
+    const data = toBinaryStl(worldMeshes(wasm, ModelDefinitionSchema.parse(plateFixture)));
+    const dv = new DataView(data.buffer);
+    const count = dv.getUint32(80, true);
+    const edges = new Map<string, number>();
+    let vol = 0;
+    const key = (o: number) => [0, 1, 2].map((k) => dv.getFloat32(o + k * 4, true).toFixed(4)).join(',');
+    for (let i = 0; i < count; i++) {
+      const o = 84 + i * 50 + 12;
+      const v = [0, 1, 2].map((j) => [0, 1, 2].map((k) => dv.getFloat32(o + j * 12 + k * 4, true)));
+      const [a, b, c] = v as [number[], number[], number[]];
+      vol += a[0]! * (b[1]! * c[2]! - b[2]! * c[1]!) - a[1]! * (b[0]! * c[2]! - b[2]! * c[0]!) + a[2]! * (b[0]! * c[1]! - b[1]! * c[0]!);
+      const ks = [0, 1, 2].map((j) => key(o + j * 12));
+      for (let j = 0; j < 3; j++) {
+        const e = [ks[j]!, ks[(j + 1) % 3]!].sort().join('|');
+        edges.set(e, (edges.get(e) ?? 0) + 1);
+      }
+    }
+    expect(Math.abs(vol / 6 - PLATE_VOLUME) / PLATE_VOLUME).toBeLessThan(2e-3);
+    expect([...edges.values()].every((n) => n === 2)).toBe(true); // 닫힌(새지 않는) 메시
   });
 });
 

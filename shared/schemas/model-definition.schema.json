@@ -4,11 +4,175 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "units": {
       "type": "string",
       "const": "mm"
+    },
+    "sketches": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "plane": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "XY"
+              },
+              "offset": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "type",
+              "offset"
+            ],
+            "additionalProperties": false
+          },
+          "entities": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "rectangle"
+                    },
+                    "center": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        },
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "center"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "circle"
+                    },
+                    "center": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        },
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "center"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "dimensions": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter)$"
+                },
+                "entity": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "width",
+                    "height",
+                    "diameter"
+                  ]
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "id",
+                "entity",
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plane",
+          "entities",
+          "dimensions"
+        ],
+        "additionalProperties": false
+      }
     },
     "objects": {
       "maxItems": 1000,
@@ -534,6 +698,122 @@
               },
               "kind": {
                 "type": "string",
+                "const": "extrude"
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "distance": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 1000
+                  }
+                },
+                "required": [
+                  "distance"
+                ],
+                "additionalProperties": false
+              },
+              "extrude": {
+                "type": "object",
+                "properties": {
+                  "sketch": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  }
+                },
+                "required": [
+                  "sketch",
+                  "profile"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "transform",
+              "kind",
+              "params",
+              "extrude"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "\\S"
+              },
+              "transform": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "rotation": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "position",
+                  "rotation"
+                ],
+                "additionalProperties": false
+              },
+              "kind": {
+                "type": "string",
                 "const": "boolean"
               },
               "boolean": {
@@ -585,6 +865,7 @@
   "required": [
     "schemaVersion",
     "units",
+    "sketches",
     "objects"
   ],
   "additionalProperties": false,

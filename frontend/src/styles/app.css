@@ -102,6 +102,8 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
 
 /* ---- 속성 패널 ---- */
 .properties { border-left: 1px solid var(--border); overflow-y: auto; }
+/* 패널 전체가 스크롤되므로 목록·속성이 줄어들어 사라지지 않게 한다 (목록은 max-height 안에서 자체 스크롤) */
+.properties > * { flex-shrink: 0; }
 .object-list { list-style: none; margin: 0; padding: 6px; max-height: 30%; overflow-y: auto; }
 .object-list button {
   width: 100%; display: flex; justify-content: space-between; gap: 8px;

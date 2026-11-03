@@ -1,6 +1,6 @@
 # 다음 변경 단위 계획: 치수형 사각형 → 4 mm 돌출 → 폭 수정 → 재계산 → 저장·재열기
 
-상태: **계획 (구현 전)**. 전제: `docs/baseline.md` 의 기준선과 첫 명령 경로(명령 봉투·리비전)가 통과한 상태.
+상태: **✅ 구현 완료** (4장의 권장안대로 결정). 결과·검증은 5장. 전제: `docs/baseline.md` 의 기준선과 첫 명령 경로(명령 봉투·리비전)가 통과한 상태.
 
 ## 1. 목표 시나리오 (완료 기준)
 
@@ -82,3 +82,26 @@
 3. **리비전·명령 기록 저장 여부**: 형식 2 에 리비전(또는 명령 로그)을 함께 저장할지. 권장: 아직 저장하지 않음 (이력은 세션 메모리).
 4. **AI 적용의 오래된 결과 정책**: AI 요청 후 사용자가 편집해 리비전이 바뀐 경우, AI 명령을 거부하고 다시 요청을 안내할지(권장, 이번 봉투 경로와 일관) 또는 최신 모델에 재적용할지.
 5. **기존 박스와의 관계**: 기존 `box` 는 유지하고 돌출은 새 종류로 추가(권장, 기존 파일 호환), 또는 박스를 "사각형 스케치 + 돌출"로 통일할지.
+
+결정(사용자 확인): 1~5 모두 권장안. 구속 해석기 없음 · 숫자 입력 UI 먼저 · 리비전 미저장 · 늦은 AI 응답 거부 · `box` 유지 + `extrude` 추가.
+
+## 5. 구현 결과
+
+계획과 달라진 점
+- 돌출 거리는 `extrude.distance` 대신 `params.distance` 에 둔다 → 기존 `set_params`·파라미터 패널·형상 키를 그대로 쓴다.
+- `add_circle` 명령을 같은 단계에서 추가 (관통 구멍용). 스케치 평면 높이 `plane.offset` 사용 (구멍은 −1mm).
+- 스케치/프로파일 삭제 명령은 만들지 않았다 (참조 무결성은 열기·검증 단계에서 거부).
+
+| 항목 | 파일 | 검사 |
+|------|------|------|
+| 형식 v2 스키마·명령 | `cad/commandTypes.ts`, `app/cad/commands.py`, `shared/schemas/` | `schemas.test.ts`, `test_contract.py` |
+| 실행기·검증 | `cad/sketchCommands.ts`, `cad/sketch.ts`, `modelGraph.ts`, `app/cad/validation.py` | `sketch.test.ts`, `test_sketch_extrude.py::TestValidation` |
+| 두 엔진 | `browser/geometry.ts`, `app/cad/primitives.py` | 공유 픽스처 80×40×4 − Ø6@(18,0): 바운딩 박스·부피·구멍 위치 |
+| UI | 툴바 `+ 사각형 스케치`, `PropertyPanel/SketchFields.tsx`, `Viewport/SketchOutlines.tsx` | `e2e/sketch-extrude.spec.ts` |
+| 관통 구멍 | `cad/sketchActions.ts` | `sketchActions.test.ts` (회전·두 번째 구멍·가장자리 거부) |
+| 마이그레이션·샘플 | `projectFile.ts`, `shared/samples/project-v2-plate.ai3d` | `projectFile.test.ts`, `e2e/legacy-project.spec.ts` |
+| 실패 복구 | 엔진 요청 차단 → 원본 유지·오류 표시 → 복구 후 재계산 / 깨진 v2 파일 거부 | `sketch-extrude.spec.ts`, `legacy-project.spec.ts` |
+| STL 출력 | 서버·브라우저 모두 치수·닫힌 메시·부피 | `test_sketch_extrude.py`, `geometry.test.ts`, E2E (90×40×4) |
+| AI | 프롬프트·검증기(스케치 참조), 늦은 응답 거부, 평가 케이스 2개 | `test_ai_chat.py::TestValidator`, `aiStore.test.ts` |
+
+검증하지 못한 것: AI 평가 실제 실행(사용자 키·비용, 새 케이스 2개 포함 녹화 없음), 실제 3D 프린터 출력, Windows 실기 실행.

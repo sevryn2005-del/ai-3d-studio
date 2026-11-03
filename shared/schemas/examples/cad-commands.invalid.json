@@ -222,5 +222,55 @@
       "target": "box_1",
       "distance": 2
     }
+  },
+  {
+    "reason": "지원하지 않는 스케치 평면",
+    "command": {
+      "type": "create_sketch",
+      "plane": {
+        "type": "XZ",
+        "offset": 0
+      }
+    }
+  },
+  {
+    "reason": "치수 ID 형식 오류",
+    "command": {
+      "type": "set_dimension",
+      "sketch": "sk1",
+      "dimension": "width",
+      "value": 80
+    }
+  },
+  {
+    "reason": "음수 돌출 거리",
+    "command": {
+      "type": "extrude",
+      "sketch": "sk1",
+      "profile": "r1",
+      "distance": -4
+    }
+  },
+  {
+    "reason": "원에 width 사용",
+    "command": {
+      "type": "add_circle",
+      "sketch": "sk1",
+      "width": 6
+    }
+  },
+  {
+    "reason": "사각형 중심이 3차원",
+    "command": {
+      "type": "add_rectangle",
+      "sketch": "sk1",
+      "center": [
+        0,
+        0,
+        0
+      ],
+      "width": 1,
+      "height": 1
+    }
   }
 ]

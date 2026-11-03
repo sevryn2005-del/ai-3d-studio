@@ -16,6 +16,9 @@ from __future__ import annotations
 import cadquery as cq
 
 from app.cad.commands import (
+    ExtrudeObject,
+    Sketch,
+    resolve_profile,
     BooleanObject,
     BoxObject,
     CadObject,
@@ -57,8 +60,8 @@ def local_solid(obj: CadObject) -> cq.Shape:
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
-        case BooleanObject():
-            raise GeometryError("불리언 객체는 build_solid 로 계산해야 합니다")
+        case BooleanObject() | ExtrudeObject():
+            raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
 
@@ -80,14 +83,28 @@ def world_solid(obj: CadObject) -> cq.Shape:
 _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"}
 
 
-def build_solid(obj: CadObject, index: dict[str, CadObject]) -> cq.Shape:
+def extrude_solid(obj: ExtrudeObject, sketches: dict[str, Sketch]) -> cq.Shape:
+    """스케치 프로파일 돌출. 로컬 원점 = 스케치 평면 원점, 방향 +Z (브라우저 엔진 geometry.ts 와 같은 형상)."""
+    sk = sketches.get(obj.extrude.sketch)
+    p = resolve_profile(sk, obj.extrude.profile) if sk else None
+    if p is None:
+        raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
+    wp = cq.Workplane("XY", origin=(0, 0, p["z"])).center(*p["center"])
+    wp = wp.rect(p["width"], p["height"]) if p["type"] == "rectangle" else wp.circle(p["diameter"] / 2)
+    return wp.extrude(obj.params.distance).val()
+
+
+def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """객체의 로컬 좌표계 솔리드. 불리언은 자식들을 (부모 기준 변환을 적용해) 재귀적으로 결합한다."""
+    sketches = sketches or {}
+    if isinstance(obj, ExtrudeObject):
+        return extrude_solid(obj, sketches)
     if not isinstance(obj, BooleanObject):
         return local_solid(obj)
 
     def placed(child_id: str) -> cq.Shape:
         child = index[child_id]
-        return apply_transform(build_solid(child, index), child.transform)
+        return apply_transform(build_solid(child, index, sketches), child.transform)
 
     result = placed(obj.boolean.base)
     op = obj.boolean.operation

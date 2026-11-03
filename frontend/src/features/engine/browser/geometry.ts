@@ -9,8 +9,9 @@
  * 차이: 서버는 정확한 곡면(B-rep), 브라우저는 다각형 근사 메시. 분할 수는 허용 오차(현의 오차)로 정한다.
  * 주의: manifold 객체는 WASM 메모리에 있으므로 반드시 delete() 해야 한다 (Scope 가 모아서 해제).
  */
-import type { CadObject, ModelDefinition, ObjectId } from '../../../cad/commandTypes';
-import { byId, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
+import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
+import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
+import { resolveProfile } from '../../../cad/sketch';
 import { toMatrix } from '../../../cad/transformMath';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
@@ -38,10 +39,10 @@ export function sphereSegments(radius: number, tolerance: number): number {
   return Math.min(MAX_SEGMENTS, Math.ceil((circularSegments(radius, tolerance) * 1.6) / 4) * 4);
 }
 
-/** 생성한 manifold 객체를 모아 한 번에 해제한다. */
+/** 생성한 manifold 객체(Manifold·CrossSection)를 모아 한 번에 해제한다. */
 export class Scope {
-  private items: Manifold[] = [];
-  keep<T extends Manifold>(m: T): T {
+  private items: { delete(): void }[] = [];
+  keep<T extends { delete(): void }>(m: T): T {
     this.items.push(m);
     return m;
   }
@@ -57,9 +58,22 @@ export function localManifold(
   index: Map<ObjectId, CadObject>,
   tol: number,
   scope: Scope,
+  sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
-  const { Manifold } = wasm;
+  const { Manifold, CrossSection } = wasm;
   switch (obj.kind) {
+    case 'extrude': {
+      // 서버 CadQuery: Workplane("XY", origin=(0,0,z)).center(cx,cy).rect(w,h)|circle(r).extrude(d) 와 같은 형상
+      const sk = sketches.get(obj.extrude.sketch);
+      const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+      if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
+      const section =
+        p.type === 'rectangle'
+          ? scope.keep(CrossSection.square([p.width, p.height], true))
+          : scope.keep(CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)));
+      const placed = scope.keep(section.translate(p.center));
+      return scope.keep(scope.keep(placed.extrude(obj.params.distance)).translate([0, 0, p.z]));
+    }
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;
       const f = obj.edgeFeature;
@@ -98,7 +112,7 @@ export function localManifold(
       const placed = (id: ObjectId) => {
         const child = index.get(id);
         if (!child) throw new GeometryError(`존재하지 않는 객체입니다: ${id}`);
-        const local = localManifold(wasm, child, index, tol, scope);
+        const local = localManifold(wasm, child, index, tol, scope, sketches);
         return scope.keep(local.transform(toMatrix(child.transform).elements as unknown as Parameters<Manifold['transform']>[0]));
       };
       let result = placed(obj.boolean.base);
@@ -121,8 +135,9 @@ export function worldManifold(
   index: Map<ObjectId, CadObject>,
   tol: number,
   scope: Scope,
+  sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
-  const local = localManifold(wasm, obj, index, tol, scope);
+  const local = localManifold(wasm, obj, index, tol, scope, sketches);
   return scope.keep(local.transform(toMatrix(obj.transform).elements as unknown as Parameters<Manifold['transform']>[0]));
 }
 
@@ -145,11 +160,12 @@ export function modelIssues(model: ModelDefinition): string[] {
 /** 최상위 객체별 로컬 메시 (서버 /api/model/evaluate 와 같은 계약) */
 export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = DISPLAY_TOLERANCE) {
   const index = byId(model);
+  const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
     return topLevelObjects(model).map((obj) => ({
       objectId: obj.id,
-      ...toPlainMesh(localManifold(wasm, obj, index, tol, scope)),
+      ...toPlainMesh(localManifold(wasm, obj, index, tol, scope, sketches)),
     }));
   } finally {
     scope.dispose();
@@ -159,11 +175,12 @@ export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, t
 /** 최상위 객체별 월드 좌표 메시 (내보내기용) */
 export function worldMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = EXPORT_TOLERANCE) {
   const index = byId(model);
+  const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
     return topLevelObjects(model).map((obj) => ({
       name: obj.name,
-      ...toPlainMesh(worldManifold(wasm, obj, index, tol, scope)),
+      ...toPlainMesh(worldManifold(wasm, obj, index, tol, scope, sketches)),
     }));
   } finally {
     scope.dispose();

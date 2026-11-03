@@ -35,7 +35,7 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
     for oid in top_level_ids(model):
         obj = index[oid]
         try:
-            solid = build_solid(obj, index)
+            solid = build_solid(obj, index, {sk.id: sk for sk in model.sketches})
         except GeometryError:
             raise
         except Exception as e:  # OCCT 예외 → 사용자 메시지
@@ -58,7 +58,7 @@ def export_file(payload: dict[str, Any]) -> bytes:
     for oid in top_level_ids(model):
         obj = index[oid]
         try:
-            objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index), obj.transform)))
+            objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform)))
         except GeometryError:
             raise
         except Exception as e:

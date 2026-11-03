@@ -2,6 +2,7 @@ import type { CreateCommand } from '../../cad/commandTypes';
 import { nextFreePosition } from '../../cad/placement';
 import { selectCanRedo, selectCanUndo, useSceneStore } from '../../cad/sceneStore';
 import { ExportMenu } from './ExportMenu';
+import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
 import { useIsDirty, useProjectStore } from '../../features/projects/projectStore';
 
@@ -16,7 +17,7 @@ const PRIMITIVES: { label: string; sizeX: number; command: CreateCommand }[] = [
 export function Toolbar() {
   const canUndo = useSceneStore(selectCanUndo);
   const canRedo = useSceneStore(selectCanRedo);
-  const { undo, redo, dispatch } = useSceneStore.getState();
+  const { undo, redo, dispatch, dispatchBatch } = useSceneStore.getState();
   const projectName = useProjectStore((s) => s.name);
   const dirty = useIsDirty();
 
@@ -54,6 +55,12 @@ export function Toolbar() {
             + {p.label}
           </button>
         ))}
+        <button
+          onClick={() => dispatchBatch(rectangleSketchCommands(useSceneStore.getState().history.present.model).commands)}
+          title="XY 평면에 치수가 있는 사각형(60×40mm)을 그립니다. 속성 패널에서 치수를 바꾸고 돌출합니다."
+        >
+          + 사각형 스케치
+        </button>
         <span className="sep" />
         <ExportMenu />
       </nav>

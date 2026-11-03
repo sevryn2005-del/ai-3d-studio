@@ -30,7 +30,8 @@ CAD 명령 하나의 스키마 검증 (객체 존재 여부는 검사하지 않�
 응답: `{ "ok": true, "issues": [], "command": { ... } }`
 
 ### `POST /api/model/evaluate`
-ModelDefinition 검증(스키마 + 그래프 규칙) → CadQuery 형상 계산 → **최상위 객체별 RenderMesh**.
+ModelDefinition(형식 v2: `schemaVersion: 2`, `sketches`, `objects`) 검증(스키마 + 그래프·스케치 참조 규칙) → CadQuery 형상 계산 → **최상위 객체별 RenderMesh**.
+예: `shared/schemas/examples/model-sketch-plate.json` (스케치 사각형 돌출 판 − 원 스케치 돌출 구멍).
 
 ```json
 {

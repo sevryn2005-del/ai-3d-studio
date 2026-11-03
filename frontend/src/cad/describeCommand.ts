@@ -11,6 +11,7 @@ const vec = (v: readonly number[]) => `(${v.map(formatMm).join(', ')})`;
 
 export function describeCommand(cmd: CadCommand, model: ModelDefinition): string {
   const name = (id: string) => model.objects.find((o) => o.id === id)?.name ?? id;
+  const sketchName = (id: string) => model.sketches.find((sk) => sk.id === id)?.name ?? id;
   switch (cmd.type) {
     case 'create_box':
       return `박스 추가 ${formatMm(cmd.width)}×${formatMm(cmd.depth)}×${formatMm(cmd.height)}mm`;
@@ -26,6 +27,16 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${OPERATION_INFO[cmd.type].label}: ${name(cmd.base)} ${OPERATION_INFO[cmd.type].symbol} ${cmd.tools.map(name).join(', ')}`;
     case 'set_params':
       return `${name(cmd.target)} ${Object.entries(cmd.params).map(([k, v]) => `${PARAM_LABEL[k] ?? k} ${formatMm(v)}mm`).join(', ')}`;
+    case 'create_sketch':
+      return `스케치 추가${cmd.name ? ` "${cmd.name}"` : ''}${cmd.plane?.offset ? ` (높이 ${formatMm(cmd.plane.offset)}mm)` : ''}`;
+    case 'add_rectangle':
+      return `${sketchName(cmd.sketch)}에 사각형 ${formatMm(cmd.width)}×${formatMm(cmd.height)}mm`;
+    case 'add_circle':
+      return `${sketchName(cmd.sketch)}에 원 지름 ${formatMm(cmd.diameter)}mm`;
+    case 'set_dimension':
+      return `${sketchName(cmd.sketch)} 치수 ${cmd.dimension} → ${formatMm(cmd.value)}mm`;
+    case 'extrude':
+      return `${sketchName(cmd.sketch)}의 ${cmd.profile} 을(를) ${formatMm(cmd.distance)}mm 돌출`;
     case 'fillet':
     case 'chamfer': {
       const size = cmd.type === 'fillet' ? cmd.radius : cmd.distance;

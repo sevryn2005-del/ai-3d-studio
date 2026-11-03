@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectId, Vec3 } from '../../cad/commandTypes';
-import { selectModel, selectSelectedObject, useSceneStore } from '../../cad/sceneStore';
+import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { KIND_INFO, OPERATION_INFO, kindLabel, sizeSummary } from '../../cad/objectKinds';
 import { byId, childIds, parentMap, topLevelObjects } from '../../cad/modelGraph';
 import { NumberField } from './NumberField';
@@ -8,10 +8,14 @@ import { dropToBedCommand } from '../../cad/printCheck';
 import { maxEdgeSize } from '../../cad/edgeFeature';
 import { formatMm } from '../../cad/units';
 import { usePrintCheck } from '../../features/print/usePrintCheck';
+import { ExtrudeFields, SketchProperties } from './SketchFields';
 
 export function PropertyPanel() {
   const model = useSceneStore(selectModel);
   const selected = useSceneStore(selectSelectedObject);
+  const selectedSketch = useSceneStore(selectSelectedSketch);
+  const selectedId = useSceneStore((s) => s.selectedId);
+  const select = useSceneStore((s) => s.select);
   const index = useMemo(() => byId(model), [model]);
   const roots = useMemo(() => topLevelObjects(model), [model]);
 
@@ -25,9 +29,27 @@ export function PropertyPanel() {
         ))}
       </ul>
 
+      {model.sketches.length > 0 && (
+        <>
+          <header className="panel-header">스케치</header>
+          <ul className="object-list" aria-label="스케치 목록">
+            {model.sketches.map((sk) => (
+              <li key={sk.id}>
+                <button className={sk.id === selectedId ? 'active' : ''} onClick={() => select(sk.id)} data-sketch-id={sk.id}>
+                  <span>{sk.name}</span>
+                  <span className="muted">{sk.entities.length}개 요소</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <header className="panel-header">속성</header>
       {selected ? (
         <ObjectProperties key={selected.id} object={selected} model={model} />
+      ) : selectedSketch ? (
+        <SketchProperties key={selectedSketch.id} sketch={selectedSketch} model={model} />
       ) : (
         <p className="empty">뷰포트나 목록에서 객체를 선택하세요.</p>
       )}
@@ -36,6 +58,7 @@ export function PropertyPanel() {
 }
 
 function ObjectTreeItem({ object, index, depth }: { object: CadObject; index: Map<ObjectId, CadObject>; depth: number }) {
+  const model = useSceneStore(selectModel);
   const selectedId = useSceneStore((s) => s.selectedId);
   const select = useSceneStore((s) => s.select);
   const children = childIds(object);
@@ -52,7 +75,7 @@ function ObjectTreeItem({ object, index, depth }: { object: CadObject; index: Ma
             {depth > 0 && <span className="muted">↳ </span>}
             {object.name}
           </span>
-          <span className="muted">{sizeSummary(object)}</span>
+          <span className="muted">{sizeSummary(object, model)}</span>
         </button>
       </li>
       {children.map((id) => {
@@ -65,6 +88,7 @@ function ObjectTreeItem({ object, index, depth }: { object: CadObject; index: Ma
 
 function ObjectProperties({ object, model }: { object: CadObject; model: ModelDefinition }) {
   const dispatch = useSceneStore((s) => s.dispatch);
+  const submitNow = useSceneStore((s) => s.submitNow);
   const { transform } = object;
   const [name, setName] = useState(object.name);
   useEffect(() => setName(object.name), [object.name]);
@@ -110,7 +134,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
               label={f.label}
               unit="mm"
               value={(object.params as Record<string, number>)[f.key]!}
-              onCommit={(v) => dispatch({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
+              onCommit={(v) => submitNow({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
               testId={`param-${f.key}`}
             />
           ))}
@@ -118,6 +142,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
       )}
 
       {object.kind === 'box' && <EdgeFeatureFields object={object} />}
+      {object.kind === 'extrude' && <ExtrudeFields object={object} model={model} />}
 
       <fieldset>
         <legend>{parent ? `위치 (${parent.name} 기준)` : '위치 (바닥면 중심)'}</legend>

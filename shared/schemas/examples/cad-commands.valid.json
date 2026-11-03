@@ -128,5 +128,53 @@
     "type": "fillet",
     "target": "box_1",
     "radius": 0
+  },
+  {
+    "type": "create_sketch",
+    "id": "sk1",
+    "name": "판 윤곽"
+  },
+  {
+    "type": "create_sketch",
+    "plane": {
+      "type": "XY",
+      "offset": -1
+    }
+  },
+  {
+    "type": "add_rectangle",
+    "sketch": "sk1",
+    "id": "r1",
+    "width": 60,
+    "height": 40
+  },
+  {
+    "type": "add_circle",
+    "sketch": "sk1",
+    "center": [
+      18,
+      0
+    ],
+    "diameter": 6
+  },
+  {
+    "type": "set_dimension",
+    "sketch": "sk1",
+    "dimension": "r1.width",
+    "value": 80
+  },
+  {
+    "type": "extrude",
+    "id": "plate",
+    "sketch": "sk1",
+    "profile": "r1",
+    "distance": 4
+  },
+  {
+    "type": "set_params",
+    "target": "plate",
+    "params": {
+      "distance": 6
+    }
   }
 ]

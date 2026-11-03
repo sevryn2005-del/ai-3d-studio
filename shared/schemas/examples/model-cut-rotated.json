@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "units": "mm",
+  "sketches": [],
   "objects": [
     {
       "id": "plate",

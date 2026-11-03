@@ -9,15 +9,32 @@ import { BufferAttribute, BufferGeometry } from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { RenderMesh } from '../../api/backend';
 import type { EngineMesh } from '../engine/types';
-import type { CadObject, ObjectId, Transform } from '../../cad/commandTypes';
+import type { CadObject, ObjectId, Sketch, Transform } from '../../cad/commandTypes';
+import { resolveProfile } from '../../cad/sketch';
 
-export function geometryKey(obj: CadObject, index: Map<ObjectId, CadObject>): string {
+/**
+ * 형상 키. 돌출은 참조한 스케치 프로파일(치수·중심·평면 높이)을 포함 → 스케치 치수를 바꾸면 다시 계산된다.
+ * sketches 를 넘기지 않으면 돌출 키는 프로파일 없이 만들어지므로, 돌출이 있는 모델에서는 항상 넘긴다.
+ */
+export function geometryKey(
+  obj: CadObject,
+  index: Map<ObjectId, CadObject>,
+  sketches: Map<ObjectId, Sketch> = new Map(),
+): string {
   if (obj.kind === 'boolean') {
     const parts = [obj.boolean.base, ...obj.boolean.tools].map((id) => {
       const child = index.get(id);
-      return child ? `${geometryKey(child, index)}@${transformKey(child.transform)}` : `missing:${id}`;
+      return child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${id}`;
     });
     return `${obj.boolean.operation}(${parts.join(';')})`;
+  }
+  if (obj.kind === 'extrude') {
+    const sk = sketches.get(obj.extrude.sketch);
+    const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+    const prof = !p ? 'missing'
+      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}`
+      : `circle:${p.diameter}@${p.center.join(',')},${p.z}`;
+    return `extrude:${prof}|d=${obj.params.distance}`;
   }
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)

@@ -2,7 +2,7 @@ import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { executeCommand } from '../../cad/commandExecutor';
 import { emptyModel, type ModelDefinition } from '../../cad/commandTypes';
-import { byId } from '../../cad/modelGraph';
+import { byId, sketchIndex } from '../../cad/modelGraph';
 import { buildGeometry, geometryKey } from '../backend/renderMesh';
 import { evaluateMeshes } from '../engine/browser/geometry';
 import { worldBoxes } from './worldBoxes';
@@ -27,7 +27,7 @@ function build(...cmds: unknown[]): ModelDefinition {
 function engineGeometries(m: ModelDefinition) {
   const index = byId(m);
   return Object.fromEntries(
-    evaluateMeshes(wasm, m).map((mesh) => [geometryKey(index.get(mesh.objectId)!, index), buildGeometry({ ...mesh, welded: true })]),
+    evaluateMeshes(wasm, m).map((mesh) => [geometryKey(index.get(mesh.objectId)!, index, sketchIndex(m)), buildGeometry({ ...mesh, welded: true })]),
   );
 }
 

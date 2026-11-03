@@ -10,7 +10,7 @@ import type { CadCommand, ModelDefinition, ObjectId } from './commandTypes';
 import { executeBatch, executeCommand, type BatchResult, type ExecuteResult } from './commandExecutor';
 import { canRedo, canUndo, createHistory, pushHistory, redo, undo, type HistoryState } from './history';
 import { createDefaultModel } from './defaultModel';
-import { CommandEnvelopeSchema, type SubmitResult } from './commandEnvelope';
+import { CommandEnvelopeSchema, newCommandId, type SubmitResult } from './commandEnvelope';
 
 interface SceneState {
   history: HistoryState;
@@ -20,6 +20,8 @@ interface SceneState {
   dispatch: (command: CadCommand | unknown) => ExecuteResult;
   /** 명령 봉투 적용: 중복 → 오래된 리비전 → 검증 순으로 거른 뒤 이력 1건으로 커밋 */
   submit: (envelope: unknown) => SubmitResult;
+  /** 지금 리비전을 기준으로 새 명령 ID 를 붙여 submit (입력 필드·버튼처럼 즉시 확정되는 편집) */
+  submitNow: (command: CadCommand) => SubmitResult;
   /** 여러 명령을 한 단계로 적용 (전부 성공해야 적용, 실행 취소 1번으로 되돌림) */
   dispatchBatch: (commands: unknown[], source?: 'user' | 'ai') => BatchResult;
   select: (id: ObjectId | null) => void;
@@ -85,6 +87,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     return { status: 'applied', revision: next.present.revision, affectedId: result.affectedId };
   },
 
+  submitNow: (command) =>
+    get().submit({ commandId: newCommandId(), baseRevision: get().history.present.revision, command }),
+
   dispatchBatch: (commands, source = 'user') => {
     const { history } = get();
     const result = executeBatch(history.present.model, commands);
@@ -96,9 +101,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((s) => ({
       history: pushHistory(history, last, result.model, { batch: result.commands, source }),
       lastError: null,
-      selectedId: result.model.objects.some((o) => o.id === result.affectedId)
+      selectedId: selectable(result.model, result.affectedId)
         ? result.affectedId
-        : result.model.objects.some((o) => o.id === s.selectedId)
+        : selectable(result.model, s.selectedId)
           ? s.selectedId
           : null,
     }));
@@ -126,8 +131,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   reportError: (message) => set({ lastError: message }),
 }));
 
+/** 선택 가능한 ID: 객체 또는 스케치 (같은 ID 이름공간) */
+function selectable(model: ModelDefinition, id: ObjectId | null): id is ObjectId {
+  return !!id && (model.objects.some((o) => o.id === id) || model.sketches.some((s) => s.id === id));
+}
+
 function keepSelection(h: HistoryState, id: ObjectId | null): ObjectId | null {
-  return id && h.present.model.objects.some((o) => o.id === id) ? id : null;
+  return selectable(h.present.model, id) ? id : null;
 }
 
 // ---- 셀렉터 ---------------------------------------------------------------
@@ -137,3 +147,5 @@ export const selectCanUndo = (s: SceneState) => canUndo(s.history);
 export const selectCanRedo = (s: SceneState) => canRedo(s.history);
 export const selectSelectedObject = (s: SceneState) =>
   s.history.present.model.objects.find((o) => o.id === s.selectedId) ?? null;
+export const selectSelectedSketch = (s: SceneState) =>
+  s.history.present.model.sketches.find((k) => k.id === s.selectedId) ?? null;

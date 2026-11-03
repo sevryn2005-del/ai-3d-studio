@@ -7,6 +7,8 @@
  *   (CadQuery: box(..., centered=(True, True, False)), sphere(..., centered=(True, True, False)),
  *    Solid.makeCylinder / makeCone 은 원래 밑면 중심이 원점)
  * - 원통·원뿔의 축은 로컬 Z축이다.
+ * - 스케치(형식 v2)는 객체와 별도 원본(model.sketches). 돌출 객체가 스케치의 프로파일(사각형·원)을 참조하며,
+ *   치수를 바꾸면 돌출이 다시 계산된다. 돌출 객체의 로컬 원점 = 스케치 평면의 원점, 방향 = 로컬 +Z.
  * - 불리언 객체(합치기/빼기/교차)는 피연산자를 자식으로 참조한다. 자식의 transform 은 부모 좌표계 기준이며,
  *   world = parent ∘ child 로 합성한다 (transformMath.ts).
  *
@@ -24,6 +26,8 @@ export const LIMITS = {
   maxObjects: 1000,
   maxBooleanTools: 50,
   maxBooleanDepth: 8,
+  maxSketches: 200,
+  maxSketchEntities: 100,
 } as const;
 
 const dimension = z
@@ -87,12 +91,18 @@ export const ConeParamsSchema = z
     message: '원뿔의 위·아래 반지름 중 하나는 0보다 커야 합니다',
   });
 
+/** 돌출 객체의 파라미터: 돌출 거리. 단면은 참조한 스케치 프로파일이 정한다 */
+export const ExtrudeParamsSchema = z.strictObject({
+  distance: dimension,
+});
+
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
 export const PARAMS_SCHEMAS = {
   box: BoxParamsSchema,
   cylinder: CylinderParamsSchema,
   sphere: SphereParamsSchema,
   cone: ConeParamsSchema,
+  extrude: ExtrudeParamsSchema,
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
@@ -102,6 +112,43 @@ export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
 export type SphereParams = z.infer<typeof SphereParamsSchema>;
 export type ConeParams = z.infer<typeof ConeParamsSchema>;
+
+// ---- 스케치 (형식 v2) ----------------------------------------------------------
+export const Point2Schema = z.tuple([coordinate, coordinate]);
+export type Point2 = z.infer<typeof Point2Schema>;
+
+export const SketchEntitySchema = z.discriminatedUnion('type', [
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('rectangle'), center: Point2Schema }),
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('circle'), center: Point2Schema }),
+]);
+export type SketchEntity = z.infer<typeof SketchEntitySchema>;
+
+export const DimensionKindSchema = z.enum(['width', 'height', 'diameter']);
+export type DimensionKind = z.infer<typeof DimensionKindSchema>;
+/** 치수 ID = `요소ID.종류` (예: r1.width) */
+export const DimensionIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,63}\.(width|height|diameter)$/, '치수 ID 는 "요소ID.width|height|diameter" 형식입니다');
+
+export const SketchDimensionSchema = z.strictObject({
+  id: DimensionIdSchema,
+  entity: ObjectIdSchema,
+  kind: DimensionKindSchema,
+  value: dimension,
+});
+export type SketchDimension = z.infer<typeof SketchDimensionSchema>;
+
+/** 지금은 XY 평면(높이 offset)만 지원 */
+export const SketchPlaneSchema = z.strictObject({ type: z.literal('XY'), offset: coordinate });
+
+export const SketchSchema = z.strictObject({
+  id: ObjectIdSchema,
+  name: z.string().min(1).max(100),
+  plane: SketchPlaneSchema,
+  entities: z.array(SketchEntitySchema).max(LIMITS.maxSketchEntities),
+  dimensions: z.array(SketchDimensionSchema).max(LIMITS.maxSketchEntities * 2),
+});
+export type Sketch = z.infer<typeof SketchSchema>;
 
 export const TransformSchema = z.strictObject({
   position: Vec3Schema,
@@ -143,16 +190,26 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...objectBase, kind: z.literal('cylinder'), params: CylinderParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('sphere'), params: SphereParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('cone'), params: ConeParamsSchema }),
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('extrude'),
+    params: ExtrudeParamsSchema,
+    extrude: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
+  }),
   z.strictObject({ ...objectBase, kind: z.literal('boolean'), boolean: BooleanDefSchema }),
 ]);
 export type CadObject = z.infer<typeof CadObjectSchema>;
 export type CadObjectOf<K extends ObjectKind> = Extract<CadObject, { kind: K }>;
 export type PrimitiveObject = Extract<CadObject, { kind: PrimitiveKind }>;
 export type BooleanObject = CadObjectOf<'boolean'>;
+export type ExtrudeObject = CadObjectOf<'extrude'>;
+
+export const MODEL_SCHEMA_VERSION = 2;
 
 export const ModelDefinitionSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
   units: z.literal('mm'),
+  sketches: z.array(SketchSchema).max(LIMITS.maxSketches),
   objects: z.array(CadObjectSchema).max(LIMITS.maxObjects, `객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
@@ -221,6 +278,7 @@ export const SetParamsParamsSchema = z
     radius,
     radiusBottom: radiusOrZero,
     radiusTop: radiusOrZero,
+    distance: dimension,
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -229,6 +287,52 @@ export const SetParamsCommandSchema = z.strictObject({
   type: z.literal('set_params'),
   target: ObjectIdSchema,
   params: SetParamsParamsSchema,
+});
+
+/** 새 스케치 (XY 평면, 높이 offset). 요소는 add_rectangle / add_circle 로 추가 */
+export const CreateSketchCommandSchema = z.strictObject({
+  type: z.literal('create_sketch'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  plane: SketchPlaneSchema.optional(),
+});
+
+/** 스케치에 치수형 사각형 추가 (치수 `ID.width`, `ID.height` 가 생긴다). center 는 스케치 평면 좌표 */
+export const AddRectangleCommandSchema = z.strictObject({
+  type: z.literal('add_rectangle'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  center: Point2Schema.optional(),
+  width: dimension,
+  height: dimension,
+});
+
+/** 스케치에 치수형 원 추가 (치수 `ID.diameter`) */
+export const AddCircleCommandSchema = z.strictObject({
+  type: z.literal('add_circle'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  center: Point2Schema.optional(),
+  diameter: dimension,
+});
+
+/** 스케치 치수 변경 → 이 스케치를 참조하는 돌출이 다시 계산된다 */
+export const SetDimensionCommandSchema = z.strictObject({
+  type: z.literal('set_dimension'),
+  sketch: ObjectIdSchema,
+  dimension: DimensionIdSchema,
+  value: dimension,
+});
+
+/** 스케치 프로파일(사각형·원)을 +Z 방향으로 distance 만큼 돌출해 새 객체를 만든다 */
+export const ExtrudeCommandSchema = z.strictObject({
+  type: z.literal('extrude'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  sketch: ObjectIdSchema,
+  profile: ObjectIdSchema,
+  distance: dimension,
+  position: Vec3Schema.optional(),
 });
 
 /** 박스 모서리를 둥글게 (radius 0 = 모서리 처리 제거). edges 생략 시 모든 모서리 */
@@ -283,6 +387,11 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   CreateCylinderCommandSchema,
   CreateSphereCommandSchema,
   CreateConeCommandSchema,
+  CreateSketchCommandSchema,
+  AddRectangleCommandSchema,
+  AddCircleCommandSchema,
+  SetDimensionCommandSchema,
+  ExtrudeCommandSchema,
   CutCommandSchema,
   UnionCommandSchema,
   IntersectCommandSchema,
@@ -296,9 +405,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   DeleteObjectCommandSchema,
 ]);
 export type CadCommand = z.infer<typeof CadCommandSchema>;
-export type CreateCommand = Extract<CadCommand, { type: `create_${string}` }>;
+export type CreateCommand = Extract<CadCommand, { type: 'create_box' | 'create_cylinder' | 'create_sphere' | 'create_cone' }>;
 export type BooleanCommand = Extract<CadCommand, { type: BooleanOperation }>;
 
 export function emptyModel(): ModelDefinition {
-  return { schemaVersion: 1, units: 'mm', objects: [] };
+  return { schemaVersion: MODEL_SCHEMA_VERSION, units: 'mm', sketches: [], objects: [] };
 }

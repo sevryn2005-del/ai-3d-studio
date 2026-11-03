@@ -4,7 +4,7 @@ import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { useBackendStore } from './backendStore';
 import { buildGeometry, geometryKey } from './renderMesh';
 import type { ModelDefinition } from '../../cad/commandTypes';
-import { byId } from '../../cad/modelGraph';
+import { byId, sketchIndex } from '../../cad/modelGraph';
 import type { CadEngine, EngineEvaluation } from '../engine/types';
 import { getActiveEngine, useActiveEngineId } from '../engine/engines';
 import { appConfig } from '../../api/config';
@@ -88,7 +88,8 @@ export async function runEvaluation(
 /** 응답 메시를 "요청에 보낸 모델" 기준의 형상 키로 캐시에 넣는다. */
 function storeMeshes(sent: ModelDefinition, result: EngineEvaluation) {
   const sentIndex = byId(sent);
-  const keyById = new Map(sent.objects.map((o) => [o.id, geometryKey(o, sentIndex)]));
+  const sentSketches = sketchIndex(sent);
+  const keyById = new Map(sent.objects.map((o) => [o.id, geometryKey(o, sentIndex, sentSketches)]));
   const entries = result.meshes.flatMap((m) => {
     const key = keyById.get(m.objectId);
     if (!key) return [];
@@ -98,5 +99,5 @@ function storeMeshes(sent: ModelDefinition, result: EngineEvaluation) {
   });
   const current = useSceneStore.getState().history.present.model;
   const index = byId(current);
-  useBackendStore.getState().addGeometries(entries, new Set(current.objects.map((o) => geometryKey(o, index))));
+  useBackendStore.getState().addGeometries(entries, new Set(current.objects.map((o) => geometryKey(o, index, sketchIndex(current)))));
 }

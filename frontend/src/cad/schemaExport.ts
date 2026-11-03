@@ -60,10 +60,36 @@ export function buildBooleanFixture() {
   return model;
 }
 
+/**
+ * 스케치 기준 판 (언어 간 계약 픽스처): 60×40 사각형 → 4 mm 돌출 → 폭을 80 으로 수정 → 지름 6 관통 구멍.
+ * 백엔드·브라우저 엔진은 이 파일로 판이 80×40×4 이고 구멍이 (18, 0) 에 있는지 검사한다.
+ */
+export const SKETCH_PLATE_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 'sk_plate', name: '판 윤곽' },
+  { type: 'add_rectangle', sketch: 'sk_plate', id: 'r1', width: 60, height: 40 },
+  { type: 'extrude', id: 'plate', name: '기준 판', sketch: 'sk_plate', profile: 'r1', distance: 4 },
+  { type: 'set_dimension', sketch: 'sk_plate', dimension: 'r1.width', value: 80 },
+  { type: 'create_sketch', id: 'sk_hole', name: '구멍', plane: { type: 'XY', offset: -1 } },
+  { type: 'add_circle', sketch: 'sk_hole', id: 'c1', center: [18, 0], diameter: 6 },
+  { type: 'extrude', id: 'hole', name: '관통 구멍', sketch: 'sk_hole', profile: 'c1', distance: 6 },
+  { type: 'cut', id: 'plate_holed', name: '구멍 뚫린 판', base: 'plate', tools: ['hole'] },
+];
+
+export function buildSketchPlateFixture() {
+  let model = emptyModel();
+  for (const cmd of SKETCH_PLATE_COMMANDS) {
+    const r = executeCommand(model, cmd);
+    if (!r.ok) throw new Error(`픽스처 생성 실패: ${r.error}`);
+    model = r.model;
+  }
+  return model;
+}
+
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */
 export function generateSchemas(): Record<string, string> {
   return {
     'examples/model-cut-rotated.json': JSON.stringify(buildBooleanFixture(), null, 2) + '\n',
+    'examples/model-sketch-plate.json': JSON.stringify(buildSketchPlateFixture(), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

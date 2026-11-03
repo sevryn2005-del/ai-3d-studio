@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useThree } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import type { Object3D } from 'three';
@@ -30,11 +30,13 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
   const dragRef = useRef<{ commandId: string; baseRevision: number; objectId: string } | null>(null);
 
   // 객체 그룹은 같은 커밋에서 마운트되므로 effect 시점에는 씬에 존재한다.
-  useEffect(() => {
+  // 레이아웃 effect: 다음 프레임이 그려지기 전에 대상을 바꿔, 지워진 객체가 한 프레임이라도 붙어 있지 않게 한다.
+  useLayoutEffect(() => {
     setTarget(selectedId ? (scene.getObjectByName(selectedId) ?? null) : null);
   }, [scene, selectedId, model]);
 
-  if (!target || !selectedId) return null;
+  // 불리언 생성 등으로 객체 그룹이 다시 만들어진 직후에는 effect 가 새 대상을 찾기 전까지 이전 객체를 가리킨다
+  if (!target || !selectedId || !inScene(target, scene)) return null;
 
   const commit = () => {
     const drag = dragRef.current;
@@ -82,6 +84,11 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
       }}
     />
   );
+}
+
+function inScene(obj: Object3D, scene: Object3D): boolean {
+  for (let o: Object3D | null = obj; o; o = o.parent) if (o === scene) return true;
+  return false;
 }
 
 function applyTransform(obj: Object3D, t: { position: number[]; rotation: number[] }) {

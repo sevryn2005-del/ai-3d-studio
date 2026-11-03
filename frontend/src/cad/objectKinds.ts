@@ -5,6 +5,7 @@
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectKind } from './commandTypes';
 import { formatMm } from './units';
 import { describeEdgeFeature } from './edgeFeature';
+import { findSketch, resolveProfile } from './sketch';
 
 export interface ParamField {
   key: string;
@@ -39,6 +40,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
       { key: 'height', label: '높이 (Z)' },
     ],
   },
+  extrude: { label: '돌출', params: [{ key: 'distance', label: '돌출 거리' }] },
   boolean: { label: '불리언', params: [] },
 };
 
@@ -65,6 +67,11 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const d = Math.max(obj.params.radiusBottom, obj.params.radiusTop) * 2;
       return [d, d, obj.params.height];
     }
+    case 'extrude': {
+      const p = extrudeProfile(obj, model);
+      if (!p) return [0, 0, obj.params.distance];
+      return p.type === 'rectangle' ? [p.width, p.height, obj.params.distance] : [p.diameter, p.diameter, obj.params.distance];
+    }
     case 'boolean': {
       const base = model.objects.find((o) => o.id === obj.boolean.base);
       return base ? localSize(base, model) : [0, 0, 0];
@@ -72,8 +79,13 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
   }
 }
 
+export function extrudeProfile(obj: Extract<CadObject, { kind: 'extrude' }>, model: ModelDefinition) {
+  const sketch = findSketch(model, obj.extrude.sketch);
+  return sketch ? resolveProfile(sketch, obj.extrude.profile) : null;
+}
+
 /** 목록 표시용 크기 요약. 예: "20×20×50", "Ø20×30", "Ø40", "− 1개" */
-export function sizeSummary(obj: CadObject): string {
+export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
   switch (obj.kind) {
     case 'box': {
       const dims = `${formatMm(obj.params.width)}×${formatMm(obj.params.depth)}×${formatMm(obj.params.height)}`;
@@ -85,6 +97,12 @@ export function sizeSummary(obj: CadObject): string {
       return `Ø${formatMm(obj.params.radius * 2)}`;
     case 'cone':
       return `Ø${formatMm(obj.params.radiusBottom * 2)}→Ø${formatMm(obj.params.radiusTop * 2)}×${formatMm(obj.params.height)}`;
+    case 'extrude': {
+      const p = model ? extrudeProfile(obj, model) : null;
+      const d = formatMm(obj.params.distance);
+      if (!p) return `돌출 ${d}`;
+      return p.type === 'rectangle' ? `${formatMm(p.width)}×${formatMm(p.height)}×${d}` : `Ø${formatMm(p.diameter)}×${d}`;
+    }
     case 'boolean': {
       const n = obj.boolean.tools.length;
       return `${OPERATION_INFO[obj.boolean.operation].symbol} ${n}개`;

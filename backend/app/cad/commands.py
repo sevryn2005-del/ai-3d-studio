@@ -26,6 +26,8 @@ class Limits:
     MAX_OBJECTS = 1000
     MAX_BOOLEAN_TOOLS = 50
     MAX_BOOLEAN_DEPTH = 8
+    MAX_SKETCHES = 200
+    MAX_SKETCH_ENTITIES = 100
 
 
 def _num(ge: float, le: float) -> object:
@@ -98,12 +100,78 @@ class ConeParams(Strict):
         return self
 
 
+class ExtrudeParams(Strict):
+    distance: Dimension
+
+
 PARAMS_MODELS: dict[str, type[Strict]] = {
     "box": BoxParams,
     "cylinder": CylinderParams,
     "sphere": SphereParams,
     "cone": ConeParams,
+    "extrude": ExtrudeParams,
 }
+
+
+# ---- 스케치 (형식 v2) ----------------------------------------------------------------
+
+Point2 = tuple[Coordinate, Coordinate]
+DimensionKind = Literal["width", "height", "diameter"]
+DimensionId = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}\.(width|height|diameter)$")]
+
+
+class RectangleEntity(Strict):
+    id: ObjectId
+    type: Literal["rectangle"]
+    center: Point2
+
+
+class CircleEntity(Strict):
+    id: ObjectId
+    type: Literal["circle"]
+    center: Point2
+
+
+SketchEntity = Annotated[Union[RectangleEntity, CircleEntity], Field(discriminator="type")]
+
+
+class SketchDimension(Strict):
+    id: DimensionId
+    entity: ObjectId
+    kind: DimensionKind
+    value: Dimension
+
+
+class SketchPlane(Strict):
+    type: Literal["XY"]
+    offset: Coordinate
+
+
+class Sketch(Strict):
+    id: ObjectId
+    name: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=100)]
+    plane: SketchPlane
+    entities: Annotated[list[SketchEntity], Field(max_length=Limits.MAX_SKETCH_ENTITIES)]
+    dimensions: Annotated[list[SketchDimension], Field(max_length=Limits.MAX_SKETCH_ENTITIES * 2)]
+
+
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",)}
+
+
+def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
+    """돌출 단면 (프론트엔드 cad/sketch.ts 의 resolveProfile 과 같은 규칙)."""
+    e = next((x for x in sketch.entities if x.id == entity_id), None)
+    if e is None:
+        return None
+    dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
+    z = sketch.plane.offset
+    if e.type == "rectangle":
+        if "width" in dims and "height" in dims:
+            return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z}
+        return None
+    if "diameter" in dims:
+        return {"type": "circle", "center": e.center, "diameter": dims["diameter"], "z": z}
+    return None
 
 
 class Transform(Strict):
@@ -159,6 +227,17 @@ BooleanOperation = Literal["union", "cut", "intersect"]
 ToolList = Annotated[list[ObjectId], Field(min_length=1, max_length=Limits.MAX_BOOLEAN_TOOLS)]
 
 
+class ExtrudeRef(Strict):
+    sketch: ObjectId
+    profile: ObjectId
+
+
+class ExtrudeObject(_ObjectBase):
+    kind: Literal["extrude"]
+    params: ExtrudeParams
+    extrude: ExtrudeRef
+
+
 class BooleanDef(Strict):
     operation: BooleanOperation
     base: ObjectId
@@ -174,17 +253,18 @@ class BooleanObject(_ObjectBase):
         return [self.boolean.base, *self.boolean.tools]
 
 
-PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject]
-OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (BoxObject, CylinderObject, SphereObject, ConeObject, BooleanObject)
+PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject]
+OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, BooleanObject)
 
 CadObject = Annotated[
-    Union[BoxObject, CylinderObject, SphereObject, ConeObject, BooleanObject], Field(discriminator="kind")
+    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, BooleanObject], Field(discriminator="kind")
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[1]
+    schemaVersion: Literal[2]
     units: Literal["mm"]
+    sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
 
 
@@ -222,6 +302,47 @@ class CreateCone(_CreateBase):
     height: Dimension
 
 
+class CreateSketch(Strict):
+    type: Literal["create_sketch"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    plane: SketchPlane | None = None
+
+
+class AddRectangle(Strict):
+    type: Literal["add_rectangle"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    center: Point2 | None = None
+    width: Dimension
+    height: Dimension
+
+
+class AddCircle(Strict):
+    type: Literal["add_circle"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    center: Point2 | None = None
+    diameter: Dimension
+
+
+class SetDimension(Strict):
+    type: Literal["set_dimension"]
+    sketch: ObjectId
+    dimension: DimensionId
+    value: Dimension
+
+
+class Extrude(Strict):
+    type: Literal["extrude"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    sketch: ObjectId
+    profile: ObjectId
+    distance: Dimension
+    position: Vec3 | None = None
+
+
 class _BooleanCommandBase(Strict):
     id: ObjectId | None = None
     name: Name | None = None
@@ -248,6 +369,7 @@ class SetParamsParams(Strict):
     radius: Radius | None = None
     radiusBottom: RadiusOrZero | None = None
     radiusTop: RadiusOrZero | None = None
+    distance: Dimension | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:
@@ -313,6 +435,11 @@ CadCommand = Annotated[
         CreateCylinder,
         CreateSphere,
         CreateCone,
+        CreateSketch,
+        AddRectangle,
+        AddCircle,
+        SetDimension,
+        Extrude,
         Cut,
         Union_,
         Intersect,
@@ -335,6 +462,11 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     CreateCylinder,
     CreateSphere,
     CreateCone,
+    CreateSketch,
+    AddRectangle,
+    AddCircle,
+    SetDimension,
+    Extrude,
     Cut,
     Union_,
     Intersect,

@@ -15,7 +15,7 @@ def model_with(*objs) -> ModelDefinition:
         {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
     ]
-    return ModelDefinition.model_validate({"schemaVersion": 1, "units": "mm", "objects": base + list(objs)})
+    return ModelDefinition.model_validate({"schemaVersion": 2, "units": "mm", "sketches": [], "objects": base + list(objs)})
 
 
 def chat(client, text_in="높이를 50mm로 바꿔줘", selected="box_1", history=(), model=None):
@@ -146,6 +146,34 @@ class TestValidator:
             {"type": "chamfer", "target": "box_1", "distance": 1, "edges": "vertical"},
         ], model_with())
         assert errors == ["commands[1].target: fillet/chamfer only works on boxes; 's' is a sphere"]
+
+    def test_sketch_plate_batch(self):
+        cmds, errors = validate_commands([
+            {"type": "create_sketch", "id": "sk_plate"},
+            {"type": "add_rectangle", "sketch": "sk_plate", "id": "r1", "width": 60, "height": 40},
+            {"type": "extrude", "id": "plate", "sketch": "sk_plate", "profile": "r1", "distance": 4},
+            {"type": "set_dimension", "sketch": "sk_plate", "dimension": "r1.width", "value": 80},
+            {"type": "set_params", "target": "plate", "params": {"distance": 5}},
+        ], model_with())
+        assert errors == [] and len(cmds) == 5
+
+    def test_sketch_reference_errors(self):
+        _, errors = validate_commands([
+            {"type": "create_sketch", "id": "box_1"},
+            {"type": "add_circle", "sketch": "ghost", "diameter": 3},
+            {"type": "create_sketch", "id": "sk"},
+            {"type": "add_circle", "sketch": "sk", "diameter": 3},
+            {"type": "set_dimension", "sketch": "sk", "dimension": "circle1.width", "value": 3},
+            {"type": "extrude", "sketch": "sk", "profile": "r1", "distance": 2},
+            {"type": "set_params", "target": "box_1", "params": {"distance": 2}},
+        ], model_with())
+        assert errors == [
+            "commands[0].id: id 'box_1' is already used",
+            "commands[1].sketch: sketch 'ghost' does not exist (existing: box_1)",
+            "commands[4].dimension: sketch 'sk' has no dimension 'circle1.width' (existing: circle1.diameter)",
+            "commands[5].profile: sketch 'sk' has no element 'r1' (existing: circle1)",
+            "commands[6].params: box 'box_1' has no parameter distance (allowed: depth, height, width)",
+        ]
 
     @pytest.mark.parametrize("raw", [None, [], "x", [{"type": "exec_python"}]])
     def test_malformed(self, raw):

@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { BufferGeometry } from 'three';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
-import { childIds } from '../../cad/modelGraph';
+import { childIds, sketchIndex } from '../../cad/modelGraph';
+import { resolveProfile, type Profile } from '../../cad/sketch';
 import { useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
 import { useBackendStore } from '../../features/backend/backendStore';
@@ -19,10 +20,17 @@ type Index = Map<ObjectId, CadObject>;
  *   선택되었을 때만 "고스트"로 표시한다. 그룹은 항상 존재하므로 기즈모로 자식을 직접 옮길 수 있다
  *   (그룹 계층 = 부모 기준 변환 → 기즈모 결과가 그대로 부모 좌표계 값).
  */
+/** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
+function useSketches() {
+  const sketches = useSceneStore((s) => s.history.present.model.sketches);
+  return useMemo(() => sketchIndex({ schemaVersion: 2, units: 'mm', sketches, objects: [] }), [sketches]);
+}
+
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
   const selected = useSceneStore((s) => s.selectedId === object.id);
+  const sketches = useSketches();
   const serverGeometry = useBackendStore((s) =>
-    mode === 'solid' ? s.geometries[geometryKey(object, index)] : undefined,
+    mode === 'solid' ? s.geometries[geometryKey(object, index, sketches)] : undefined,
   );
   const { position, rotation } = object.transform;
 
@@ -73,8 +81,17 @@ function PreviewBody({
   selectId: ObjectId;
   variant: Variant;
 }) {
+  const sketches = useSketches();
   if (object.kind !== 'boolean') {
-    return <ObjectMesh key="preview" selectId={selectId} primitive={object} variant={variant} source={variant === 'ghost' ? 'ghost' : 'preview'} />;
+    let profile: Profile | null = null;
+    if (object.kind === 'extrude') {
+      const sk = sketches.get(object.extrude.sketch);
+      profile = sk ? resolveProfile(sk, object.extrude.profile) : null;
+      if (!profile) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
+    }
+    return (
+      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} variant={variant} source={variant === 'ghost' ? 'ghost' : 'preview'} />
+    );
   }
   return (
     <>
@@ -96,12 +113,15 @@ function ObjectMesh({
   selectId,
   geometry,
   primitive,
+  profile,
   variant,
   source,
 }: {
   selectId: ObjectId;
   geometry?: BufferGeometry;
   primitive?: PrimitiveObject;
+  /** 돌출 미리보기용 단면 */
+  profile?: Profile | null;
   variant: Variant;
   source: 'server' | 'browser' | 'preview' | 'ghost';
 }) {
@@ -114,7 +134,7 @@ function ObjectMesh({
 
   return (
     <mesh
-      {...(primitive ? primitivePlacement(primitive) : {})}
+      {...(primitive ? primitivePlacement(primitive, profile ?? null) : {})}
       geometry={geometry}
       userData={{ source }}
       onClick={(e) => {
@@ -131,7 +151,7 @@ function ObjectMesh({
         document.body.style.cursor = '';
       }}
     >
-      {primitive && <PrimitiveGeometry object={primitive} />}
+      {primitive && <PrimitiveGeometry object={primitive} profile={profile ?? null} />}
       <meshStandardMaterial
         color={color}
         roughness={0.55}
@@ -152,7 +172,7 @@ const SEGMENTS = 64;
  * 원점 규칙(바운딩 박스 바닥면 중심)에 맞추는 메시 배치.
  * Three.js 기본 도형은 중심이 원점이고, 원통은 Y축 방향이므로 Z축으로 눕힌다.
  */
-function primitivePlacement(o: PrimitiveObject): {
+function primitivePlacement(o: PrimitiveObject, profile: Profile | null): {
   position: [number, number, number];
   rotation?: [number, number, number];
 } {
@@ -164,10 +184,16 @@ function primitivePlacement(o: PrimitiveObject): {
       return { position: [0, 0, o.params.height / 2], rotation: [Math.PI / 2, 0, 0] };
     case 'sphere':
       return { position: [0, 0, o.params.radius] };
+    case 'extrude': {
+      // 돌출: 스케치 평면 좌표의 단면 중심 + 평면 높이에서 +Z 로 distance
+      const [cx, cy] = profile?.center ?? [0, 0];
+      const z = (profile?.z ?? 0) + o.params.distance / 2;
+      return profile?.type === 'circle' ? { position: [cx, cy, z], rotation: [Math.PI / 2, 0, 0] } : { position: [cx, cy, z] };
+    }
   }
 }
 
-function PrimitiveGeometry({ object: o }: { object: PrimitiveObject }) {
+function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; profile: Profile | null }) {
   switch (o.kind) {
     case 'box':
       return <boxGeometry args={[o.params.width, o.params.depth, o.params.height]} />;
@@ -178,5 +204,11 @@ function PrimitiveGeometry({ object: o }: { object: PrimitiveObject }) {
       return <cylinderGeometry args={[o.params.radiusTop, o.params.radiusBottom, o.params.height, SEGMENTS]} />;
     case 'sphere':
       return <sphereGeometry args={[o.params.radius, SEGMENTS, SEGMENTS / 2]} />;
+    case 'extrude':
+      if (profile?.type === 'circle') {
+        const r = profile.diameter / 2;
+        return <cylinderGeometry args={[r, r, o.params.distance, SEGMENTS]} />;
+      }
+      return <boxGeometry args={[profile?.width ?? 1, profile?.height ?? 1, o.params.distance]} />;
   }
 }

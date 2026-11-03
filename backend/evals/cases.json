@@ -270,5 +270,46 @@
         }
       ]
     }
+  },
+  {
+    "id": "sketch-plate",
+    "note": "평판은 스케치(사각형) + 돌출로 만든다 (원본 치수를 나중에 고칠 수 있도록)",
+    "prompt": "가로 80mm, 세로 40mm, 두께 4mm 판을 만들어줘. 나중에 크기를 바꿀 수 있게 스케치로 만들어줘",
+    "objects": "empty",
+    "expect": {
+      "kind": "commands",
+      "has": [
+        {
+          "type": "create_sketch"
+        },
+        {
+          "type": "add_rectangle",
+          "width": 80,
+          "height": 40
+        },
+        {
+          "type": "extrude",
+          "distance": 4
+        }
+      ]
+    }
+  },
+  {
+    "id": "plate-width-dim",
+    "note": "스케치로 만든 판의 폭 변경 = 원본 치수(set_dimension) 수정",
+    "prompt": "판 폭을 90mm로 바꿔줘",
+    "objects": "fixture:model-sketch-plate.json",
+    "selected": "plate",
+    "expect": {
+      "kind": "commands",
+      "has": [
+        {
+          "type": "set_dimension",
+          "sketch": "sk_plate",
+          "dimension": "r1.width",
+          "value": 90
+        }
+      ]
+    }
   }
 ]

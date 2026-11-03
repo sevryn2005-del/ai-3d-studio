@@ -5,11 +5,17 @@
  * 형식 버전이 바뀌면 PROJECT_FORMAT_VERSION 을 올리고 migrate() 에 변환을 추가한다.
  */
 import { z } from 'zod';
-import { ModelDefinitionSchema, type ModelDefinition } from '../../cad/commandTypes';
+import { MODEL_SCHEMA_VERSION, ModelDefinitionSchema, type ModelDefinition } from '../../cad/commandTypes';
 import { validateGraph } from '../../cad/modelGraph';
 
 export const PROJECT_FORMAT = 'ai3d-project';
-export const PROJECT_FORMAT_VERSION = 1;
+/**
+ * 형식 버전
+ * - 1: 객체(기본 도형·불리언·모서리 처리)
+ * - 2: + 스케치(model.sketches)와 돌출 객체. model.schemaVersion 2
+ * 읽기는 1·2 모두, 쓰기는 항상 최신(2). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ */
+export const PROJECT_FORMAT_VERSION = 2;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -51,7 +57,7 @@ export function parseProject(text: string): ParseResult {
   if (head.data.formatVersion > PROJECT_FORMAT_VERSION) {
     return { ok: false, error: '더 새로운 버전의 앱에서 저장된 파일입니다. 앱을 업데이트하세요' };
   }
-  const parsed = ProjectFileSchema.safeParse(raw);
+  const parsed = ProjectFileSchema.safeParse(migrate(raw as Record<string, unknown>, head.data.formatVersion));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { ok: false, error: `파일 내용이 올바르지 않습니다 (${issue?.path.join('.')}: ${issue?.message})` };
@@ -59,6 +65,23 @@ export function parseProject(text: string): ParseResult {
   const graphErrors = validateGraph(parsed.data.model);
   if (graphErrors.length > 0) return { ok: false, error: `파일 내용이 올바르지 않습니다: ${graphErrors[0]}` };
   return { ok: true, project: parsed.data };
+}
+
+/**
+ * 이전 형식을 현재 형식으로 (입력은 바꾸지 않고 새 객체를 돌려준다).
+ * 알 수 없는 구조는 그대로 두어 이후 스키마 검증이 정확한 오류를 내게 한다.
+ */
+export function migrate(raw: Record<string, unknown>, fromVersion: number): unknown {
+  let file = raw;
+  if (fromVersion < 2) {
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated =
+      model && typeof model === 'object' && model.schemaVersion === 1
+        ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION, sketches: model.sketches ?? [] }
+        : model;
+    file = { ...file, formatVersion: 2, model: migrated };
+  }
+  return file;
 }
 
 /** 파일 이름에서 프로젝트 이름 추출: "받침대.ai3d" → "받침대" */

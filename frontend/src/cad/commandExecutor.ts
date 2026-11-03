@@ -32,6 +32,7 @@ import { KIND_INFO, OPERATION_INFO } from './objectKinds';
 import { byId, depthOf, parentMap, subtreeIds } from './modelGraph';
 import { IDENTITY, relativeTransform } from './transformMath';
 import { edgeFeatureError } from './edgeFeature';
+import { executeSketchCommand, isSketchCommand } from './sketchCommands';
 
 export type ExecuteResult =
   | { ok: true; model: ModelDefinition; command: CadCommand; affectedId: ObjectId | null }
@@ -45,6 +46,8 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
     return { ok: false, error: `잘못된 명령${where}: ${issue?.message ?? '알 수 없는 오류'}` };
   }
   const cmd = parsed.data;
+
+  if (isSketchCommand(cmd)) return executeSketchCommand(model, cmd);
 
   switch (cmd.type) {
     case 'create_box':
@@ -155,7 +158,7 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
       if (parent) return fail(`'${target.name}'은(는) 불리언에 포함되어 있어 복제할 수 없습니다. 상위 객체를 복제하세요`);
       const ids = subtreeIds(model, target.id);
       if (model.objects.length + ids.length > LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
-      if (cmd.newId && findObject(model, cmd.newId)) return fail(`이미 존재하는 객체 ID입니다: ${cmd.newId}`);
+      if (cmd.newId && idTaken(model, cmd.newId)) return fail(`이미 존재하는 ID입니다: ${cmd.newId}`);
       const position = addVec(target.transform.position, cmd.offset ?? [10, 10, 0]);
       if (!withinBounds(position)) return fail('복제 위치가 허용 작업 영역을 벗어납니다');
 
@@ -235,7 +238,7 @@ function create(
 ): ExecuteResult {
   if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
   const id = cmd.id ?? nextId(model, kind);
-  if (findObject(model, id)) return fail(`이미 존재하는 객체 ID입니다: ${id}`);
+  if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
   const built = buildObject(kind, {
     id,
     name: cmd.name ?? `${KIND_INFO[kind].label} ${countKind(model, kind) + 1}`,
@@ -264,7 +267,7 @@ function createBoolean(model: ModelDefinition, cmd: BooleanCommand): ExecuteResu
   }
 
   const id = cmd.id ?? nextId(model, cmd.type);
-  if (findObject(model, id)) return fail(`이미 존재하는 객체 ID입니다: ${id}`);
+  if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
 
   const index = byId(model);
   const depth = 1 + Math.max(...operandIds.map((o) => depthOf(model, o, index)));
@@ -307,6 +310,11 @@ function buildObject(
   return { ok: true, object: { ...fields, kind, params: parsed.data } as CadObject };
 }
 
+/** 객체·스케치 ID 는 한 이름 공간을 쓴다 (AI·사용자가 ID 하나로 무엇을 가리키는지 분명하도록) */
+export function idTaken(model: ModelDefinition, id: ObjectId): boolean {
+  return model.objects.some((o) => o.id === id) || model.sketches.some((s) => s.id === id);
+}
+
 export function findObject(model: ModelDefinition, id: ObjectId): CadObject | undefined {
   return model.objects.find((o) => o.id === id);
 }
@@ -319,11 +327,11 @@ function countKind(model: ModelDefinition, kind: PrimitiveKind): number {
   return model.objects.filter((o) => o.kind === kind).length;
 }
 
-/** `${kind}_${n}` 형식에서 사용되지 않은 가장 작은 다음 번호를 반환한다. */
-function nextId(model: ModelDefinition, kind: string): ObjectId {
+/** `${kind}_${n}` 형식에서 사용되지 않은 다음 번호 (객체·스케치 ID 를 모두 피한다) */
+export function nextId(model: ModelDefinition, kind: string): ObjectId {
   const re = new RegExp(`^${kind}_(\\d+)$`);
   let max = 0;
-  for (const o of model.objects) {
+  for (const o of [...model.objects, ...model.sketches]) {
     const m = re.exec(o.id);
     if (m?.[1]) max = Math.max(max, Number(m[1]));
   }

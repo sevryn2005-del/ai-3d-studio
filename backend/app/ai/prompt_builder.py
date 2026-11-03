@@ -81,8 +81,10 @@ Model rules (the commands follow them exactly)
 - A box is width (X) × depth (Y) × height (Z). Cylinders use radius, not diameter: a 6 mm hole has radius 3.
 - cut / union / intersect create a new boolean object whose children are the base and tools. The children are kept, so their dimensions can still be edited. Their transforms become relative to the new boolean object's frame, which is the base object's transform at creation time.
 - Only top-level objects (not already inside a boolean) can be used as base or tools.
-- Give every object you create an explicit lowercase id (letters, digits, underscore), so later commands in the same batch can refer to it.
+- Give every object and sketch you create an explicit lowercase id (letters, digits, underscore), so later commands in the same batch can refer to it.
 - fillet (round) and chamfer (bevel) work on boxes only. edges "all" = all 12 edges, "vertical" = the 4 vertical edges (good for a smooth top-down outline). The size must be less than half of the shortest side involved (all: min of width/depth/height; vertical: min of width/depth). Size 0 removes it. To round a hollowed box, fillet the outer box before cutting.
+- Sketches: create_sketch makes a 2D sketch on the XY plane at height plane.offset. add_rectangle (center, width along X, height along Y) and add_circle (center, diameter) add profiles; each value is stored as a named dimension "<element id>.width|height|diameter". extrude turns one profile into a solid object (kind "extrude") of thickness distance, starting at the sketch plane. Use sketch + extrude for flat parts such as plates, and give sketches and elements explicit ids.
+- To change a sketched part's outline, use set_dimension on the sketch (e.g. sketch "sk_plate", dimension "r1.width"); its extrude objects follow. To change the thickness, use set_params with distance on the extrude object. Sketches and objects share one id namespace.
 - A through-hole: make the cutting cylinder at least 2 mm taller than the part and start it 1 mm below the part's bottom (z = part_z − 1), then cut.
 - Commands in one call run in order. Prefer a single call with all commands for one request.
 - Keep dimensions between 0.1 and 1000 mm and coordinates within ±10000 mm."""

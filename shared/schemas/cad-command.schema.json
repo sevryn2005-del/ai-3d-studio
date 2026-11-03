@@ -244,6 +244,237 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "create_sketch"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "plane": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "XY"
+            },
+            "offset": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "type",
+            "offset"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "add_rectangle"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "center": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "add_circle"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "center": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "diameter": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "diameter"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_dimension"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "dimension": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter)$"
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "dimension",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "extrude"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "profile": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "distance": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "profile",
+        "distance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "cut"
         },
         "id": {
@@ -396,6 +627,11 @@
               "type": "number",
               "minimum": 0,
               "maximum": 500
+            },
+            "distance": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
             }
           },
           "additionalProperties": false,

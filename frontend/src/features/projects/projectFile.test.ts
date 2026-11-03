@@ -59,6 +59,8 @@ describe('프로젝트 파일', () => {
 // 커밋 e0ac5e7 의 코드가 실제로 만든 저장 파일 (shared/samples/README.md)
 import legacyV1 from '../../../../shared/samples/project-v1-e0ac5e7.ai3d?raw';
 
+const legacyV1Copy = String(legacyV1);
+
 describe('구버전 프로젝트 샘플 (e0ac5e7)', () => {
   it('열기 → 다시 저장 → 다시 열기: 설계 원본이 그대로', () => {
     const first = parseProject(legacyV1);
@@ -68,6 +70,48 @@ describe('구버전 프로젝트 샘플 (e0ac5e7)', () => {
     expect(first.project.model.objects.map((o) => o.id)).toEqual(['plate', 'hole', 'plate_holed', 'knob']);
     const again = parseProject(serializeProject(first.project.name, first.project.model));
     expect(again.ok && again.project.model).toEqual(first.project.model);
-    expect(again.ok && again.project.model).toEqual(JSON.parse(legacyV1).model);
+    // v1 → v2 마이그레이션: 객체는 그대로, 형식만 v2 (스케치 없음)
+    const v1 = JSON.parse(legacyV1).model;
+    expect(v1.schemaVersion).toBe(1);
+    expect(first.project.model).toEqual({ ...v1, schemaVersion: 2, sketches: [] });
+    expect(JSON.parse(serializeProject('x', first.project.model)).formatVersion).toBe(2);
+    expect(legacyV1).toBe(legacyV1Copy); // 열기는 원본 문자열을 바꾸지 않는다
+  });
+});
+
+describe('형식 v1 → v2 마이그레이션 경계', () => {
+  it('v1 이지만 모델이 손상된 파일은 마이그레이션 후에도 거부', () => {
+    const bad = JSON.stringify({ ...JSON.parse(legacyV1), model: { schemaVersion: 1, units: 'mm', objects: [{ id: 'X' }] } });
+    expect(parseProject(bad).ok).toBe(false);
+  });
+  it('v2 파일인데 스케치 참조가 깨졌으면 거부 (현재 작업 유지)', () => {
+    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 2, units: 'mm', sketches: [], objects: [] }));
+    v2.model.objects.push({
+      id: 'plate', name: '판', kind: 'extrude', params: { distance: 4 }, extrude: { sketch: 'sk1', profile: 'r1' },
+      transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+    });
+    const r = parseProject(JSON.stringify(v2));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('존재하지 않는 스케치');
+  });
+  it('형식 3 은 새 버전으로 안내', () => {
+    const r = parseProject('{"format":"ai3d-project","formatVersion":3}');
+    expect(!r.ok && r.error).toContain('더 새로운 버전');
+  });
+});
+
+// 이 변경 단위의 코드가 만든 v2 저장 파일 (shared/samples/README.md)
+import plateV2 from '../../../../shared/samples/project-v2-plate.ai3d?raw';
+
+describe('v2 기준 판 샘플', () => {
+  it('스케치·돌출·구멍이 그대로 읽히고, 다시 저장해도 같다', () => {
+    const r = parseProject(plateV2);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.project.model.sketches.map((s) => s.id)).toEqual(['sk_plate', 'sk_hole']);
+    expect(r.project.model.objects.map((o) => [o.id, o.kind])).toEqual([['plate', 'extrude'], ['hole', 'extrude'], ['plate_holed', 'boolean']]);
+    expect(r.project.model).toEqual(JSON.parse(plateV2).model);
+    const again = parseProject(serializeProject(r.project.name, r.project.model));
+    expect(again.ok && again.project.model).toEqual(r.project.model);
   });
 });

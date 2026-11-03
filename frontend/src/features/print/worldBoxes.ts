@@ -5,7 +5,7 @@
  */
 import { Matrix4, Vector3, type BufferGeometry } from 'three';
 import type { CadObject, ModelDefinition, ObjectId, Vec3 } from '../../cad/commandTypes';
-import { byId, topLevelObjects } from '../../cad/modelGraph';
+import { byId, sketchIndex, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
 import type { WorldBox } from '../../cad/printCheck';
 import { toMatrix } from '../../cad/transformMath';
@@ -49,11 +49,12 @@ export function worldBoxes(
   geometries: Record<string, BufferGeometry>,
 ): { boxes: Map<ObjectId, WorldBox>; exact: boolean } {
   const index = byId(model);
+  const sketches = sketchIndex(model);
   const boxes = new Map<ObjectId, WorldBox>();
   let exact = true;
   for (const obj of topLevelObjects(model)) {
     const matrix = toMatrix(obj.transform);
-    const g = geometries[geometryKey(obj, index)];
+    const g = geometries[geometryKey(obj, index, sketches)];
     if (g) boxes.set(obj.id, boxFromGeometry(g, matrix));
     else {
       exact = false;

@@ -2,9 +2,10 @@
  * 객체 간 부모-자식 관계 (불리언 트리).
  * 관계는 불리언 객체의 base/tools 참조로만 표현되며, 이 모듈이 그로부터 유도한다.
  */
-import type { CadObject, ModelDefinition, ObjectId } from './commandTypes';
+import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
+import { resolveProfile, sketchErrors } from './sketch';
 
 export function childIds(obj: CadObject): ObjectId[] {
   return obj.kind === 'boolean' ? [obj.boolean.base, ...obj.boolean.tools] : [];
@@ -24,6 +25,10 @@ export function topLevelObjects(model: ModelDefinition): CadObject[] {
 
 export function byId(model: ModelDefinition): Map<ObjectId, CadObject> {
   return new Map(model.objects.map((o) => [o.id, o]));
+}
+
+export function sketchIndex(model: ModelDefinition): Map<ObjectId, Sketch> {
+  return new Map(model.sketches.map((s) => [s.id, s]));
 }
 
 /** 객체와 모든 하위 객체의 ID (자식 먼저, 자신은 마지막) */
@@ -57,6 +62,19 @@ export function validateGraph(model: ModelDefinition): string[] {
   for (const o of model.objects) {
     if (index.has(o.id)) errors.push(`중복된 객체 ID입니다: ${o.id}`);
     index.set(o.id, o);
+  }
+  // 스케치: 규칙 + 객체·스케치 ID 공간 중복
+  const sketchIds = new Set<ObjectId>();
+  for (const sk of model.sketches) {
+    if (sketchIds.has(sk.id) || index.has(sk.id)) errors.push(`중복된 ID입니다: ${sk.id}`);
+    sketchIds.add(sk.id);
+    errors.push(...sketchErrors(sk));
+  }
+  for (const o of model.objects) {
+    if (o.kind !== 'extrude') continue;
+    const sk = model.sketches.find((x) => x.id === o.extrude.sketch);
+    if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${o.extrude.sketch}`);
+    else if (!resolveProfile(sk, o.extrude.profile)) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${o.extrude.profile} 이(가) 없습니다`);
   }
   for (const o of model.objects) {
     if (o.kind === 'box' && o.edgeFeature) {

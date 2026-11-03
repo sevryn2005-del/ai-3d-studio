@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../api/ai';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { historyForApi, useAiStore } from './aiStore';
+import { STALE_RESPONSE, historyForApi, useAiStore } from './aiStore';
 
 const ok = (over: Partial<api.ChatResponse>): api.ChatResponse => ({
   kind: 'message', message: '', commands: [], options: [], issues: [], ...over,
@@ -49,6 +49,31 @@ describe('useAiStore.send', () => {
     await first;
     expect(spy).toHaveBeenCalledTimes(1);
     expect(useAiStore.getState().sentCount).toBe(1);
+  });
+
+  it.each([
+    ['직접 편집', () => useSceneStore.getState().dispatch({ type: 'set_params', target: 'box_1', params: { width: 30 } })],
+    ['다른 프로젝트 열기', () => useSceneStore.getState().reset()],
+  ])('응답을 기다리는 동안 %s → AI 변경은 적용하지 않고 다시 요청하라고 알린다', async (_, change) => {
+    let resolve!: (r: api.ChatResponse) => void;
+    vi.spyOn(api, 'sendChat').mockReturnValue(new Promise((r) => (resolve = r)));
+    const pending = useAiStore.getState().send('높이를 50mm로 바꿔줘');
+    change();
+    const afterEdit = selectModel(useSceneStore.getState());
+    resolve(ok({ kind: 'commands', message: '바꿨습니다', commands: [{ type: 'set_params', target: 'box_1', params: { height: 50 } }] }));
+    await pending;
+    expect(selectModel(useSceneStore.getState())).toBe(afterEdit);
+    expect(useAiStore.getState().messages.at(-1)).toMatchObject({ kind: 'error', text: STALE_RESPONSE });
+  });
+
+  it('질문·일반 답변은 모델이 바뀌어도 그대로 보여준다', async () => {
+    let resolve!: (r: api.ChatResponse) => void;
+    vi.spyOn(api, 'sendChat').mockReturnValue(new Promise((r) => (resolve = r)));
+    const pending = useAiStore.getState().send('컵');
+    useSceneStore.getState().dispatch({ type: 'translate', target: 'box_1', offset: [1, 0, 0] });
+    resolve(ok({ kind: 'question', message: '크기는?', options: ['작게'] }));
+    await pending;
+    expect(useAiStore.getState().messages.at(-1)).toMatchObject({ kind: 'question' });
   });
 
   it('빈 메시지는 보내지 않는다', async () => {

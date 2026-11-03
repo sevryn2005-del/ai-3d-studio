@@ -1,0 +1,148 @@
+{
+  "format": "ai3d-project",
+  "formatVersion": 2,
+  "app": {
+    "name": "AI 3D Studio",
+    "version": "0.1.0"
+  },
+  "name": "기준 판 v2",
+  "savedAt": "2026-11-03T00:00:00.000Z",
+  "model": {
+    "schemaVersion": 2,
+    "units": "mm",
+    "sketches": [
+      {
+        "id": "sk_plate",
+        "name": "판 윤곽",
+        "plane": {
+          "type": "XY",
+          "offset": 0
+        },
+        "entities": [
+          {
+            "id": "r1",
+            "type": "rectangle",
+            "center": [
+              0,
+              0
+            ]
+          }
+        ],
+        "dimensions": [
+          {
+            "id": "r1.width",
+            "entity": "r1",
+            "kind": "width",
+            "value": 80
+          },
+          {
+            "id": "r1.height",
+            "entity": "r1",
+            "kind": "height",
+            "value": 40
+          }
+        ]
+      },
+      {
+        "id": "sk_hole",
+        "name": "구멍",
+        "plane": {
+          "type": "XY",
+          "offset": -1
+        },
+        "entities": [
+          {
+            "id": "c1",
+            "type": "circle",
+            "center": [
+              18,
+              0
+            ]
+          }
+        ],
+        "dimensions": [
+          {
+            "id": "c1.diameter",
+            "entity": "c1",
+            "kind": "diameter",
+            "value": 6
+          }
+        ]
+      }
+    ],
+    "objects": [
+      {
+        "id": "plate",
+        "name": "기준 판",
+        "kind": "extrude",
+        "params": {
+          "distance": 4
+        },
+        "extrude": {
+          "sketch": "sk_plate",
+          "profile": "r1"
+        },
+        "transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "hole",
+        "name": "관통 구멍",
+        "kind": "extrude",
+        "params": {
+          "distance": 6
+        },
+        "extrude": {
+          "sketch": "sk_hole",
+          "profile": "c1"
+        },
+        "transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "plate_holed",
+        "name": "구멍 뚫린 판",
+        "kind": "boolean",
+        "boolean": {
+          "operation": "cut",
+          "base": "plate",
+          "tools": [
+            "hole"
+          ]
+        },
+        "transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    ]
+  }
+}

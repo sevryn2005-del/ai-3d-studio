@@ -8,6 +8,7 @@ import { SelectionGizmo } from './SelectionGizmo';
 import { CameraFitter } from './CameraFitter';
 import { ViewportToolbar } from './ViewportToolbar';
 import { DevProbe } from './DevProbe';
+import { SketchOutlines } from './SketchOutlines';
 
 /**
  * 3D 뷰포트. 1 Three.js 단위 = 1 mm, Z-up.
@@ -55,6 +56,7 @@ export function Viewport() {
           <CadNode key={o.id} object={o} index={index} mode="solid" />
         ))}
 
+        <SketchOutlines />
         <SelectionGizmo activeRef={gizmoActiveRef} />
         <CameraFitter />
         {import.meta.env.DEV && <DevProbe />}

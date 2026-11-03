@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultModel } from '../../cad/defaultModel';
 import { executeCommand } from '../../cad/commandExecutor';
-import { byId } from '../../cad/modelGraph';
+import { byId, sketchIndex } from '../../cad/modelGraph';
 import type { ModelDefinition } from '../../cad/commandTypes';
 import { decodeRenderMesh, geometryKey, MeshDecodeError } from './renderMesh';
 
@@ -60,5 +60,47 @@ describe('geometryKey', () => {
     expect(key(run(m, { type: 'translate', target: 'cut_1', offset: [50, 0, 0] }))).toBe(before);
     // 구멍(자식)을 옮기면 키가 바뀜 (재계산 필요)
     expect(key(run(m, { type: 'translate', target: 'cylinder_1', offset: [5, 0, 0] }))).not.toBe(before);
+  });
+});
+
+describe('geometryKey: 스케치 돌출', () => {
+  const build = (...cmds: unknown[]) => {
+    let m: ModelDefinition = { schemaVersion: 2, units: 'mm', sketches: [], objects: [] };
+    for (const c of cmds) {
+      const r = executeCommand(m, c);
+      if (!r.ok) throw new Error(r.error);
+      m = r.model;
+    }
+    return m;
+  };
+  const key = (m: ModelDefinition, id: string) => geometryKey(m.objects.find((o) => o.id === id)!, byId(m), sketchIndex(m));
+  const PLATE = [
+    { type: 'create_sketch', id: 'sk1' },
+    { type: 'add_rectangle', sketch: 'sk1', id: 'r1', width: 60, height: 40 },
+    { type: 'extrude', id: 'plate', sketch: 'sk1', profile: 'r1', distance: 4 },
+  ];
+
+  it('프로파일 치수를 포함 → 폭 수정 시 키가 바뀐다', () => {
+    expect(key(build(...PLATE), 'plate')).toBe('extrude:rect:60x40@0,0,0|d=4');
+    const m2 = build(...PLATE, { type: 'set_dimension', sketch: 'sk1', dimension: 'r1.width', value: 80 });
+    expect(key(m2, 'plate')).toBe('extrude:rect:80x40@0,0,0|d=4');
+  });
+
+  it('구멍 뚫린 판(불리언)도 판 폭 수정 시 키가 바뀐다', () => {
+    const holed = [
+      ...PLATE,
+      { type: 'create_sketch', id: 'sk2', plane: { type: 'XY', offset: -1 } },
+      { type: 'add_circle', sketch: 'sk2', id: 'c1', center: [18, 0], diameter: 6 },
+      { type: 'extrude', id: 'hole', sketch: 'sk2', profile: 'c1', distance: 6 },
+      { type: 'cut', id: 'plate_holed', base: 'plate', tools: ['hole'] },
+    ];
+    const a = key(build(...holed), 'plate_holed');
+    const b = key(build(...holed, { type: 'set_dimension', sketch: 'sk1', dimension: 'r1.width', value: 80 }), 'plate_holed');
+    expect(a).not.toBe(b);
+  });
+
+  it('스케치를 넘기지 않으면 돌출 키에 프로파일이 없다 (호출자는 항상 넘겨야 함)', () => {
+    const m = build(...PLATE);
+    expect(geometryKey(m.objects[0]!, byId(m))).toBe('extrude:missing|d=4');
   });
 });

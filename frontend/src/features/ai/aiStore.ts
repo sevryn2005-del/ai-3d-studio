@@ -47,6 +47,8 @@ interface AiState {
 
 let nextId = 1;
 
+export const STALE_RESPONSE = '요청을 보낸 뒤 모델이 바뀌어 AI 변경을 적용하지 않았습니다. 다시 요청해 주세요.';
+
 /** API 로 보낼 이전 대화: 사용자 문장 + AI 답변(적용한 변경 요약 포함) */
 export function historyForApi(messages: ChatMessage[]): { role: 'user' | 'assistant'; text: string }[] {
   return messages
@@ -83,6 +85,8 @@ export const useAiStore = create<AiState>((set, get) => ({
     const text = raw.trim();
     if (!text || get().pending) return;
     const scene = useSceneStore.getState();
+    // AI 가 본 설계 원본. 응답이 왔을 때 원본이 바뀌었으면(직접 편집·실행 취소·다른 프로젝트 열기) 적용하지 않는다.
+    const sentModel = scene.history.present.model;
     const history = historyForApi(get().messages);
     const controller = new AbortController();
     set((s) => ({
@@ -95,13 +99,15 @@ export const useAiStore = create<AiState>((set, get) => ({
 
     try {
       const r = await sendChat(
-        { model: scene.history.present.model, selectedId: scene.selectedId, history, message: text },
+        { model: sentModel, selectedId: scene.selectedId, history, message: text },
         controller.signal,
       );
       if (r.month) set({ month: r.month });
       const costUsd = r.usage?.costUsd;
 
-      if (r.kind === 'commands') {
+      if (r.kind === 'commands' && useSceneStore.getState().history.present.model !== sentModel) {
+        push({ kind: 'error', text: STALE_RESPONSE, costUsd });
+      } else if (r.kind === 'commands') {
         const result = useSceneStore.getState().dispatchBatch(r.commands, 'ai');
         if (result.ok) {
           push({ kind: 'commands', text: r.message, costUsd, changes: result.commands.map((c: CadCommand) => describeCommand(c, result.model)) });

@@ -6,7 +6,19 @@ from collections import Counter
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.cad.commands import COMMAND_MODELS, OBJECT_MODELS, BooleanObject, BoxObject, Limits, ModelDefinition, max_edge_size
+from app.cad.commands import (
+    COMMAND_MODELS,
+    OBJECT_MODELS,
+    REQUIRED_DIMENSIONS,
+    BooleanObject,
+    BoxObject,
+    ExtrudeObject,
+    Limits,
+    ModelDefinition,
+    Sketch,
+    max_edge_size,
+    resolve_profile,
+)
 
 
 def _literal(model: type, field: str) -> str:
@@ -91,6 +103,23 @@ def check_model(model: ModelDefinition) -> list[Issue]:
                 issues.append(Issue(path=f"objects.{i}.edgeFeature.size",
                                     message=f"{obj.id}: 모서리 크기 {obj.edgeFeature.size:g}mm 가 너무 큽니다 ({limit:g}mm 보다 작아야 합니다)"))
 
+    object_ids = {o.id for o in model.objects}
+    seen_sketches: set[str] = set()
+    for i, sk in enumerate(model.sketches):
+        if sk.id in seen_sketches or sk.id in object_ids:
+            issues.append(Issue(path=f"sketches.{i}.id", message=f"중복된 ID입니다: {sk.id}"))
+        seen_sketches.add(sk.id)
+        issues.extend(Issue(path=f"sketches.{i}", message=m) for m in sketch_errors(sk))
+    sketches = {sk.id: sk for sk in model.sketches}
+    for i, obj in enumerate(model.objects):
+        if isinstance(obj, ExtrudeObject):
+            sk = sketches.get(obj.extrude.sketch)
+            if sk is None:
+                issues.append(Issue(path=f"objects.{i}.extrude.sketch", message=f"{obj.id}: 존재하지 않는 스케치를 참조합니다: {obj.extrude.sketch}"))
+            elif resolve_profile(sk, obj.extrude.profile) is None:
+                issues.append(Issue(path=f"objects.{i}.extrude.profile",
+                                    message=f"{obj.id}: 스케치 {sk.id} 에 사용할 수 있는 프로파일 {obj.extrude.profile} 이(가) 없습니다"))
+
     index = {o.id: o for o in model.objects}
     parent_of: dict[str, str] = {}
     for i, obj in enumerate(model.objects):
@@ -130,6 +159,33 @@ def check_model(model: ModelDefinition) -> list[Issue]:
                     )
                 )
     return issues
+
+
+def sketch_errors(sk: Sketch) -> list[str]:
+    """frontend/src/cad/sketch.ts 의 sketchErrors 와 같은 규칙."""
+    errors: list[str] = []
+    ids: set[str] = set()
+    for e in sk.entities:
+        if e.id in ids:
+            errors.append(f"{sk.id}: 요소 ID 가 중복되었습니다: {e.id}")
+        ids.add(e.id)
+    types = {e.id: e.type for e in sk.entities}
+    seen: set[str] = set()
+    for d in sk.dimensions:
+        if d.entity not in types:
+            errors.append(f"{sk.id}: 치수 {d.id} 가 없는 요소를 가리킵니다: {d.entity}")
+        elif d.kind not in REQUIRED_DIMENSIONS[types[d.entity]]:
+            errors.append(f"{sk.id}: {types[d.entity]} 에는 {d.kind} 치수가 없습니다")
+        if d.id != f"{d.entity}.{d.kind}":
+            errors.append(f"{sk.id}: 치수 ID 는 {d.entity}.{d.kind} 이어야 합니다 ({d.id})")
+        if d.id in seen:
+            errors.append(f"{sk.id}: 치수가 중복되었습니다: {d.id}")
+        seen.add(d.id)
+    for e in sk.entities:
+        for k in REQUIRED_DIMENSIONS[e.type]:
+            if not any(d.entity == e.id and d.kind == k for d in sk.dimensions):
+                errors.append(f"{sk.id}: {e.id} 의 {k} 치수가 없습니다")
+    return errors
 
 
 def depth_of(oid: str, index: dict) -> int:

@@ -58,3 +58,44 @@ test('정적 웹: 서버 요청 0건, 외부 요청 0건으로 모델링·저장
   expect(external).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('정적 웹: 사각형 스케치 → 돌출 → 폭 80 → 관통 구멍 → STL (브라우저 엔진)', async ({ page }) => {
+  const apiCalls: string[] = [];
+  await page.context().route('**/*', (route) => {
+    if (new URL(route.request().url()).pathname.startsWith('/api/')) apiCalls.push(route.request().url());
+    return route.continue();
+  });
+  await page.goto(base!);
+  await page.getByRole('button', { name: '삭제' }).click();
+  await page.getByRole('button', { name: '+ 사각형 스케치' }).click();
+  await page.getByTestId('extrude-r1').click();
+  const w = page.getByTestId('dim-r1.width');
+  await w.fill('80');
+  await w.press('Enter');
+  await expect(page.locator('[data-object-id="extrude_1"]')).toContainText('80×40×4');
+  const x = page.getByTestId('hole-x');
+  await x.fill('18');
+  await x.press('Enter');
+  await page.getByTestId('hole-apply').click();
+  await expect(page.locator('[data-object-id="cut_1"]')).toBeVisible();
+  await expect(page.getByTestId('server-evaluation')).toHaveText('브라우저 계산 ✓', { timeout: 20_000 });
+  await expect(page.getByTestId('print-check')).toHaveText('출력 검사 ✓', { timeout: 20_000 });
+
+  await page.getByRole('button', { name: '내보내기 ▾' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /^STL/ }).click()]);
+  const b = readFileSync((await download.path())!);
+  const count = b.readUInt32LE(80);
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  let vol = 0;
+  for (let i = 0; i < count; i++) {
+    const p = [0, 1, 2].map((v) => [0, 1, 2].map((k) => b.readFloatLE(84 + i * 50 + 12 + v * 12 + k * 4)));
+    for (const q of p) for (let k = 0; k < 3; k++) [min[k], max[k]] = [Math.min(min[k]!, q[k]!), Math.max(max[k]!, q[k]!)];
+    const [a, c, d] = p as [number[], number[], number[]];
+    vol += a[0]! * (c[1]! * d[2]! - c[2]! * d[1]!) - a[1]! * (c[0]! * d[2]! - c[2]! * d[0]!) + a[2]! * (c[0]! * d[1]! - c[1]! * d[0]!);
+  }
+  min.forEach((v, k) => expect(v).toBeCloseTo([-40, -20, 0][k]!, 4));
+  max.forEach((v, k) => expect(v).toBeCloseTo([40, 20, 4][k]!, 4));
+  expect(Math.abs(vol / 6 - (80 * 40 * 4 - Math.PI * 9 * 4)) / (80 * 40 * 4)).toBeLessThan(2e-3);
+  expect(apiCalls).toEqual([]);
+});
