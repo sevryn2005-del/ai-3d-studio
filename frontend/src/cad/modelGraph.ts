@@ -7,7 +7,8 @@ import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandType
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
 import { patternError, shellError } from './features';
-import { resolveProfile, sketchErrors, sketchFeatureRef, revolveProfileError } from './sketch';
+import { resolveProfile, sketchErrors, sketchRefs, revolveProfileError } from './sketch';
+import { meshError } from './meshData';
 
 export function childIds(obj: CadObject): ObjectId[] {
   if (obj.kind === 'boolean') return [obj.boolean.base, ...obj.boolean.tools];
@@ -75,14 +76,18 @@ export function validateGraph(model: ModelDefinition): string[] {
     errors.push(...sketchErrors(sk));
   }
   for (const o of model.objects) {
-    const ref = sketchFeatureRef(o);
-    if (!ref) continue;
-    const sk = model.sketches.find((x) => x.id === ref.sketch);
-    const prof = sk ? resolveProfile(sk, ref.profile) : null;
-    if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${ref.sketch}`);
-    else if (!prof) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${ref.profile} 이(가) 없습니다`);
-    else if (o.kind === 'revolve') {
-      const err = revolveProfileError(prof);
+    for (const ref of sketchRefs(o)) {
+      const sk = model.sketches.find((x) => x.id === ref.sketch);
+      const prof = sk ? resolveProfile(sk, ref.profile) : null;
+      if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${ref.sketch}`);
+      else if (!prof) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${ref.profile} 이(가) 없습니다`);
+      else if (o.kind === 'revolve' || o.kind === 'helix') {
+        const err = revolveProfileError(prof);
+        if (err) errors.push(`${o.id}: ${err}`);
+      }
+    }
+    if (o.kind === 'mesh') {
+      const err = meshError(o.mesh);
       if (err) errors.push(`${o.id}: ${err}`);
     }
   }
@@ -152,8 +157,7 @@ export function dependencyCycle(model: ModelDefinition): string | null {
   const edges = new Map<string, string[]>();
   const add = (from: string, to: string) => edges.set(from, [...(edges.get(from) ?? []), to]);
   for (const o of model.objects) {
-    const ref = sketchFeatureRef(o);
-    if (ref) add(`o:${o.id}`, `s:${ref.sketch}`);
+    for (const ref of sketchRefs(o)) add(`o:${o.id}`, `s:${ref.sketch}`);
     for (const c of childIds(o)) add(`o:${o.id}`, `o:${c}`);
   }
   for (const sk of model.sketches) if (sk.plane.type === 'face') add(`s:${sk.id}`, `o:${sk.plane.object}`);

@@ -35,6 +35,7 @@ _STL_HEADER = b"AI 3D Studio STL (units: mm, Z-up)"
 class NamedShape:
     name: str
     shape: cq.Shape  # 월드 좌표 (mm)
+    color: str | None = None  # 외관 색 #rrggbb (3MF basematerials)
 
 
 def _fine_mesh(shape: cq.Shape) -> tuple[np.ndarray, np.ndarray]:
@@ -104,9 +105,17 @@ def to_3mf(objects: list[NamedShape]) -> bytes:
         'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n'
         '<metadata name="Application">AI 3D Studio</metadata>\n<resources>\n'
     ]
+    # 색이 있으면 basematerials 하나(id = 객체 수 + 1) — 브라우저 exporters.ts to3mf 와 같은 구조
+    colors = list(dict.fromkeys(o.color for o in objects if o.color))
+    mat_id = len(objects) + 1
+    if colors:
+        parts.append(f'<basematerials id="{mat_id}">\n')
+        parts.extend(f'<base name="{c}" displaycolor="{c.upper()}"/>\n' for c in colors)
+        parts.append("</basematerials>\n")
     for i, obj in enumerate(objects, start=1):
         v, t = weld(*_fine_mesh(obj.shape))
-        parts.append(f'<object id="{i}" type="model" name={quoteattr(obj.name)}><mesh><vertices>\n')
+        mat = f' pid="{mat_id}" pindex="{colors.index(obj.color)}"' if obj.color else ""
+        parts.append(f'<object id="{i}" type="model" name={quoteattr(obj.name)}{mat}><mesh><vertices>\n')
         parts.extend(f'<vertex x="{x:.6g}" y="{y:.6g}" z="{z:.6g}"/>\n' for x, y, z in v)
         parts.append("</vertices><triangles>\n")
         parts.extend(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>\n' for a, b, c in t)

@@ -34,6 +34,8 @@ class Limits:
     MAX_SKETCH_CONSTRAINTS = 300
     MAX_PATTERN_COUNT = 100
     MAX_PATTERN_TOTAL = 400
+    MAX_LOFT_SECTIONS = 10
+    MAX_MESH_TRIANGLES = 200_000
 
 
 def _num(ge: float, le: float) -> object:
@@ -147,6 +149,16 @@ class HoleParams(Strict):
         return self
 
 
+HelixTurns = Annotated[float, _num(0.1, 50)]
+
+
+class HelixParams(Strict):
+    """헬릭스 스윕 (형식 v8): 한 바퀴에 pitch 만큼 v 방향으로 오르며 turns 바퀴"""
+
+    pitch: Dimension
+    turns: HelixTurns
+
+
 PARAMS_MODELS: dict[str, type[Strict]] = {
     "box": BoxParams,
     "cylinder": CylinderParams,
@@ -155,6 +167,7 @@ PARAMS_MODELS: dict[str, type[Strict]] = {
     "extrude": ExtrudeParams,
     "revolve": RevolveParams,
     "hole": HoleParams,
+    "helix": HelixParams,
 }
 
 
@@ -425,13 +438,55 @@ class RevolveObject(_ObjectBase):
     revolve: ExtrudeRef
 
 
+class HelixObject(_ObjectBase):
+    kind: Literal["helix"]
+    params: HelixParams
+    helix: ExtrudeRef
+
+
+class LoftDef(Strict):
+    sections: Annotated[list[ExtrudeRef], Field(min_length=2, max_length=Limits.MAX_LOFT_SECTIONS)]
+
+
+class LoftObject(_ObjectBase):
+    """로프트 (형식 v8): 단면들을 같은 점 수로 나눠 직선 면으로 잇는다 (sections.py)"""
+
+    kind: Literal["loft"]
+    loft: LoftDef
+
+
+MeshBase64 = Annotated[str, StringConstraints(strict=True, max_length=16_000_000, pattern=r"^[A-Za-z0-9+/]*={0,2}$")]
+
+
+class MeshData(Strict):
+    positions: MeshBase64
+    indices: MeshBase64
+
+
+class MeshObject(_ObjectBase):
+    """가져온 메시 (형식 v8): Float32/Uint32 리틀엔디안 base64 (mesh_import.py)"""
+
+    kind: Literal["mesh"]
+    mesh: MeshData
+
+
 def sketch_feature_ref(obj) -> ExtrudeRef | None:
-    """스케치를 참조하는 피처(돌출·회전)의 참조."""
+    """스케치 하나를 참조하는 피처(돌출·회전·헬릭스)의 참조."""
     if isinstance(obj, ExtrudeObject):
         return obj.extrude
     if isinstance(obj, RevolveObject):
         return obj.revolve
+    if isinstance(obj, HelixObject):
+        return obj.helix
     return None
+
+
+def sketch_refs(obj) -> list[ExtrudeRef]:
+    """객체가 참조하는 모든 스케치 프로파일 (로프트는 단면 여러 개)"""
+    if isinstance(obj, LoftObject):
+        return list(obj.loft.sections)
+    r = sketch_feature_ref(obj)
+    return [r] if r else []
 
 
 class BooleanDef(Strict):
@@ -512,19 +567,21 @@ class PatternObject(_ObjectBase):
         return [self.pattern.source]
 
 
-PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject]
+PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
     BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
+    HelixObject, LoftObject, MeshObject,
 )
 
 CadObject = Annotated[
-    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject],
+    Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
+          HelixObject, LoftObject, MeshObject],
     Field(discriminator="kind"),
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[7]
+    schemaVersion: Literal[8]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -645,6 +702,14 @@ class SetEntityAngle(Strict):
     angle: SketchAngle
 
 
+class OffsetEntity(Strict):
+    type: Literal["offset_entity"]
+    sketch: ObjectId
+    entity: ObjectId
+    id: ObjectId | None = None
+    distance: Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
+
+
 class MovePoint(Strict):
     type: Literal["move_point"]
     sketch: ObjectId
@@ -695,6 +760,32 @@ class Revolve(Strict):
     position: Vec3 | None = None
 
 
+class Helix(Strict):
+    type: Literal["helix"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    sketch: ObjectId
+    profile: ObjectId
+    pitch: Dimension
+    turns: HelixTurns
+
+
+class Loft(Strict):
+    type: Literal["loft"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    sections: Annotated[list[ExtrudeRef], Field(min_length=2, max_length=Limits.MAX_LOFT_SECTIONS)]
+
+
+class ImportMesh(Strict):
+    type: Literal["import_mesh"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    positions: MeshBase64
+    indices: MeshBase64
+    position: Vec3 | None = None
+
+
 class Extrude(Strict):
     type: Literal["extrude"]
     id: ObjectId | None = None
@@ -737,6 +828,8 @@ class SetParamsParams(Strict):
     cboreDiameter: RadiusOrZero | None = None
     cboreDepth: RadiusOrZero | None = None
     csinkDiameter: RadiusOrZero | None = None
+    pitch: Dimension | None = None
+    turns: HelixTurns | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:
@@ -865,6 +958,7 @@ CadCommand = Annotated[
         AddLine,
         AddSlot,
         SetEntityAngle,
+        OffsetEntity,
         MovePoint,
         AddConstraint,
         SetConstraint,
@@ -873,6 +967,9 @@ CadCommand = Annotated[
         DeleteSketch,
         Extrude,
         Revolve,
+        Helix,
+        Loft,
+        ImportMesh,
         Cut,
         Union_,
         Intersect,
@@ -912,6 +1009,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddLine,
     AddSlot,
     SetEntityAngle,
+    OffsetEntity,
     MovePoint,
     AddConstraint,
     SetConstraint,
@@ -920,6 +1018,9 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     DeleteSketch,
     Extrude,
     Revolve,
+    Helix,
+    Loft,
+    ImportMesh,
     Cut,
     Union_,
     Intersect,

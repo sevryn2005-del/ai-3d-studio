@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS = 30_000; // 나사산·큰 메시처럼 무거운 형상의 첫 계산 (이후는 서버 캐시)
 
 async function request<S extends z.ZodType>(
   path: string,

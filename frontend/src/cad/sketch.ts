@@ -133,7 +133,15 @@ export function sketchErrors(sketch: Sketch): string[] {
 export function sketchFeatureRef(obj: CadObject): { sketch: ObjectId; profile: ObjectId } | null {
   if (obj.kind === 'extrude') return obj.extrude;
   if (obj.kind === 'revolve') return obj.revolve;
+  if (obj.kind === 'helix') return obj.helix;
   return null;
+}
+
+/** 객체가 참조하는 모든 스케치 프로파일 (로프트는 단면 여러 개). 삭제 막기·의존 순환·검증용 */
+export function sketchRefs(obj: CadObject): { sketch: ObjectId; profile: ObjectId }[] {
+  if (obj.kind === 'loft') return obj.loft.sections;
+  const r = sketchFeatureRef(obj);
+  return r ? [r] : [];
 }
 
 /** 회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지. 문제가 없으면 null */

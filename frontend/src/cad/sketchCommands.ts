@@ -4,7 +4,8 @@
 import type { CadCommand, CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
-import { findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from './sketch';
+import { findSketch, resolveProfile, revolveProfileError, sketchRefs } from './sketch';
+import { helixError, helixProfilePoints } from './sections';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
 import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, polygonError, refKind, solveSketch } from './solver';
@@ -13,7 +14,7 @@ const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
-  'add_line', 'add_slot', 'set_entity_angle',
+  'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -88,8 +89,7 @@ function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
 function extrudeUsers(model: ModelDefinition, sketchId: ObjectId, entityId?: ObjectId): string[] {
   return model.objects
     .filter((o) => {
-      const ref = sketchFeatureRef(o);
-      return ref !== null && ref.sketch === sketchId && (entityId === undefined || ref.profile === entityId);
+      return sketchRefs(o).some((ref) => ref.sketch === sketchId && (entityId === undefined || ref.profile === entityId));
     })
     .map((o) => o.name);
 }
@@ -250,6 +250,85 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return solvedResult(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? { ...e, angle: cmd.angle } : x)) }, cmd, null);
     }
 
+    case 'helix': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const prof = resolveProfile(sketch, cmd.profile);
+      if (!prof) return fail(`'${sketch.name}'에 쓸 수 있는 프로파일 ${cmd.profile} 이(가) 없습니다`);
+      const err = helixError(helixProfilePoints(prof, 0.05), cmd.pitch);
+      if (err) return fail(err);
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'helix');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `헬릭스 ${model.objects.filter((o) => o.kind === 'helix').length + 1}`,
+        kind: 'helix',
+        params: { pitch: cmd.pitch, turns: cmd.turns },
+        helix: { sketch: sketch.id, profile: cmd.profile },
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return okUnlessCycle({ ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+
+    case 'loft': {
+      for (const s of cmd.sections) {
+        const sk = findSketch(model, s.sketch);
+        if (!sk) return fail(`존재하지 않는 스케치입니다: ${s.sketch}`);
+        if (!resolveProfile(sk, s.profile)) return fail(`'${sk.name}'에 쓸 수 있는 프로파일 ${s.profile} 이(가) 없습니다`);
+      }
+      if (new Set(cmd.sections.map((s) => s.sketch)).size !== cmd.sections.length) return fail('로프트 단면은 서로 다른 스케치에 있어야 합니다');
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'loft');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `로프트 ${model.objects.filter((o) => o.kind === 'loft').length + 1}`,
+        kind: 'loft',
+        loft: { sections: cmd.sections },
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return okUnlessCycle({ ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+
+    case 'offset_entity': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
+      if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+      if (Math.abs(cmd.distance) < MIN_EDGE) return fail(`오프셋 거리는 ${MIN_EDGE}mm 이상이어야 합니다`);
+      const d = cmd.distance;
+      const dim = (k: 'width' | 'height' | 'diameter' | 'length') => sketch.dimensions.find((x) => x.entity === e.id && x.kind === k)?.value ?? 0;
+      const id = cmd.id ?? nextEntityId(sketch, e.type === 'rectangle' ? 'rect' : e.type);
+      if (sketch.entities.some((x) => x.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      const tooSmall = () => fail('안쪽 오프셋이 너무 커서 모양이 사라집니다');
+      let entity: Sketch['entities'][number];
+      let dims: Sketch['dimensions'] = [];
+      if (e.type === 'rectangle') {
+        const [w, h] = [dim('width') + 2 * d, dim('height') + 2 * d];
+        if (w < LIMITS.minDimension || h < LIMITS.minDimension) return tooSmall();
+        entity = { id, type: 'rectangle', center: e.center };
+        dims = [{ id: `${id}.width`, entity: id, kind: 'width', value: w }, { id: `${id}.height`, entity: id, kind: 'height', value: h }];
+      } else if (e.type === 'circle') {
+        const dia = dim('diameter') + 2 * d;
+        if (dia < LIMITS.minDimension) return tooSmall();
+        entity = { id, type: 'circle', center: e.center };
+        dims = [{ id: `${id}.diameter`, entity: id, kind: 'diameter', value: dia }];
+      } else if (e.type === 'slot') {
+        const w = dim('width') + 2 * d;
+        if (w < LIMITS.minDimension) return tooSmall();
+        entity = { id, type: 'slot', center: e.center, angle: e.angle };
+        dims = [{ id: `${id}.length`, entity: id, kind: 'length', value: dim('length') }, { id: `${id}.width`, entity: id, kind: 'width', value: w }];
+      } else if (e.type === 'polygon') {
+        const pts = offsetPolygon(e.points, d);
+        const err = pts ? polygonError(pts) : '안쪽 오프셋이 너무 큽니다';
+        if (!pts || err) return fail(`오프셋 결과: ${err}`);
+        entity = { id, type: 'polygon', points: pts };
+      } else return fail('구성선은 오프셋할 수 없습니다');
+      return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, entity], dimensions: [...sketch.dimensions, ...dims] }), cmd, sketch.id);
+    }
+
     case 'move_point': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
@@ -359,4 +438,38 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return ok({ ...model, objects: [...model.objects, obj] }, cmd, id);
     }
   }
+}
+
+/**
+ * 다각형 오프셋 (모서리는 변을 연장해 만나게 = 마이터). d > 0 바깥, d < 0 안쪽. 꼭짓점 수는 그대로.
+ * 변이 사라질 만큼 안쪽이면(방향이 뒤집힘) null
+ */
+export function offsetPolygon(points: [number, number][], d: number): [number, number][] | null {
+  const n = points.length;
+  const ccw = points.reduce((a, p, i) => a + p[0] * points[(i + 1) % n]![1] - points[(i + 1) % n]![0] * p[1], 0) > 0;
+  const s = ccw ? 1 : -1; // 반시계면 바깥 법선 = 변 방향을 시계로 90°
+  const lines = points.map((a, i) => {
+    const b = points[(i + 1) % n]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const nx = (s * (b[1] - a[1])) / len;
+    const ny = (s * -(b[0] - a[0])) / len;
+    return { p: [a[0] + nx * d, a[1] + ny * d], dir: [(b[0] - a[0]) / len, (b[1] - a[1]) / len] };
+  });
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const l1 = lines[(i - 1 + n) % n]!;
+    const l2 = lines[i]!;
+    const den = l1.dir[0]! * l2.dir[1]! - l1.dir[1]! * l2.dir[0]!;
+    if (Math.abs(den) < 1e-9) out.push([l2.p[0]!, l2.p[1]!]);
+    else {
+      const t = ((l2.p[0]! - l1.p[0]!) * l2.dir[1]! - (l2.p[1]! - l1.p[1]!) * l2.dir[0]!) / den;
+      out.push([Math.round((l1.p[0]! + t * l1.dir[0]!) * 1e6) / 1e6, Math.round((l1.p[1]! + t * l1.dir[1]!) * 1e6) / 1e6]);
+    }
+  }
+  // 변 방향이 원래와 반대가 되면(안쪽으로 너무 줄임) 실패
+  for (let i = 0; i < n; i++) {
+    const a = points[i]!, b = points[(i + 1) % n]!, c = out[i]!, e = out[(i + 1) % n]!;
+    if ((b[0] - a[0]) * (e[0] - c[0]) + (b[1] - a[1]) * (e[1] - c[1]) <= 0) return null;
+  }
+  return out;
 }

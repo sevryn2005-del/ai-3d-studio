@@ -34,6 +34,9 @@ import { byId, depthOf, parentMap, subtreeIds } from './modelGraph';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
+import { meshError } from './meshData';
+import { helixError, helixProfilePoints } from './sections';
+import { resolveProfile } from './sketch';
 import { facesOf, faceLocalMatrix } from './sketchPlane';
 import { edgeFeatureError } from './edgeFeature';
 import { executeSketchCommand, isSketchCommand } from './sketchCommands';
@@ -82,6 +85,7 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         return fail(`${OPERATION_INFO[target.boolean.operation].label} 결과에는 치수 파라미터가 없습니다. 포함된 객체의 치수를 바꾸세요`);
       }
       if (target.kind === 'pattern') return fail('패턴 값은 set_pattern 으로 바꿉니다');
+      if (target.kind === 'loft' || target.kind === 'mesh') return fail(`${KIND_INFO[target.kind].label}에는 치수 파라미터가 없습니다`);
       const allowed = new Set(KIND_INFO[target.kind].params.map((p) => p.key));
       const invalid = Object.keys(cmd.params).filter((k) => !allowed.has(k));
       if (invalid.length > 0) {
@@ -100,6 +104,12 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         const err = edgeFeatureError(merged.object.params, target.edgeFeature);
         if (err) return fail(`${err}. 모서리 처리를 먼저 줄이세요`);
         merged.object.edgeFeature = target.edgeFeature;
+      }
+      if (merged.object.kind === 'helix') {
+        const sk = model.sketches.find((s) => s.id === (merged.object as { helix: { sketch: string } }).helix.sketch);
+        const prof = sk ? resolveProfile(sk, merged.object.helix.profile) : null;
+        const err = prof ? helixError(helixProfilePoints(prof, 0.05), merged.object.params.pitch) : null;
+        if (err) return fail(err);
       }
       // 공통 선택 필드(억제·숨김·색)와 쉘은 그대로 유지. 줄여서 쉘이 들어가지 않으면 거부
       const kept = { ...merged.object, ...keepCommon(target) } as CadObject;
@@ -283,6 +293,22 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
 
     case 'hole':
       return createHole(model, cmd);
+
+    case 'import_mesh': {
+      const err = meshError(cmd);
+      if (err) return fail(err);
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'mesh');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `가져온 메시 ${model.objects.filter((o) => o.kind === 'mesh').length + 1}`,
+        kind: 'mesh',
+        mesh: { positions: cmd.positions, indices: cmd.indices },
+        transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
   }
 }
 

@@ -191,6 +191,30 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(f"commands[{i}].points: {err}")
                 ents[eid] = "polygon"
                 poly_sizes[(c["sketch"], eid)] = len(c["points"])
+        elif t == "offset_entity":
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                if c["entity"] not in ents or ents[c["entity"]] == "line":
+                    errors.append(f"commands[{i}].entity: sketch '{c['sketch']}' has no closed element '{c['entity']}'")
+                else:
+                    etype = ents[c["entity"]]
+                    eid = c.get("id") or next_entity_id(ents, "rect" if etype == "rectangle" else etype)
+                    if eid in ents:
+                        errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                    ents[eid] = etype
+        elif t in ("helix", "loft"):
+            refs = [(c["sketch"], c["profile"])] if t == "helix" else [(s["sketch"], s["profile"]) for s in c["sections"]]
+            for sid, pid in refs:
+                if sketch_exists(i, sid) and (pid not in sketches[sid] or sketches[sid][pid] == "line"):
+                    errors.append(f"commands[{i}]: sketch '{sid}' has no closed profile '{pid}'")
+            new_id = c.get("id")
+            if new_id is not None:
+                if id_used(new_id):
+                    errors.append(f"commands[{i}].id: id '{new_id}' is already used")
+                kinds[new_id] = t
+                extrude_refs[new_id] = refs[0]
+        elif t == "import_mesh":
+            errors.append(f"commands[{i}]: import_mesh is only for files the user opens, not for AI")
         elif t in ("add_line", "add_slot"):
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]

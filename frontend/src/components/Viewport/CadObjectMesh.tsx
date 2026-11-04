@@ -27,7 +27,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 7, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 8, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -113,6 +113,8 @@ export function PreviewBody({
       </>
     );
   }
+  // 로프트·메시·헬릭스: 엔진 메시가 올 때까지 미리보기 없음 (브라우저·서버 엔진 모두 빠름)
+  if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix') return null;
   if (object.kind !== 'boolean') {
     let profile: Profile | null = null;
     let local: Matrix4 | null = null;
@@ -231,6 +233,8 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
   rotation?: [number, number, number];
 } {
   switch (o.kind) {
+    case 'helix':
+      return { position: [0, 0, 0] };
     case 'box':
       return { position: [0, 0, o.params.height / 2] };
     case 'cylinder':
@@ -289,6 +293,8 @@ function profileOutline(p: Profile): Vector2[] {
 
 function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; profile: Profile | null }) {
   switch (o.kind) {
+    case 'helix':
+      return null;
     case 'box':
       return <boxGeometry args={[o.params.width, o.params.depth, o.params.height]} />;
     case 'cylinder':

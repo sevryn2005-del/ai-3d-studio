@@ -104,7 +104,7 @@ export function checkPrintability(
         });
         return;
       }
-      if (isCutTool || o.kind === 'hole') return;
+      if (isCutTool || o.kind === 'hole' || !('params' in o)) return;
       for (const [k, v] of Object.entries(o.params as Record<string, number>)) {
         const dim = k.startsWith('radius') ? v * 2 : v;
         // 원뿔 꼭짓점(반지름 0)은 의도된 형상

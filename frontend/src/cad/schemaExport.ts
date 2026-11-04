@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 import { CadCommandSchema, LIMITS, ModelDefinitionSchema, SetParamsParamsSchema, emptyModel } from './commandTypes';
+import { encodeMesh } from './meshData';
 import { executeCommand } from './commandExecutor';
 
 const SCHEMA_BASE_URL = 'https://ai-3d-studio.local/schemas/';
@@ -228,6 +229,14 @@ export const SURVEY_CASES: Record<string, { volume: number; commands: unknown[] 
 };
 
 const PI = Math.PI;
+
+/** 가져오기 시험용 정육면체 메시 (바닥면 중심 원점, 바깥 법선) */
+function cubeMesh(a: number) {
+  const h = a / 2;
+  const v = [[-h, -h, 0], [h, -h, 0], [h, h, 0], [-h, h, 0], [-h, -h, a], [h, -h, a], [h, h, a], [-h, h, a]];
+  const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]];
+  return encodeMesh({ positions: Float32Array.from(v.flat()), indices: Uint32Array.from(f.flat()) });
+}
 const box = (id: string, w: number, d: number, h: number, position?: number[]) => ({ type: 'create_box', id, width: w, depth: d, height: h, ...(position ? { position } : {}) });
 /**
  * 형식 v6 피처 (쉘·구멍·패턴·대칭·억제). 두 엔진 모두 닫힌 메시·같은 부피(해석값)여야 한다:
@@ -363,6 +372,61 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'add_constraint', sketch: 's', constraint: 'length', refs: ['t.e0'], value: 20 },
       { type: 'add_constraint', sketch: 's', constraint: 'angle', refs: ['ref.e0', 't.e2'], value: 60 },
       { type: 'extrude', id: 'e', sketch: 's', profile: 't', distance: 4 },
+    ],
+  },
+  // ---- 형식 v8 ----
+  'loft-square-frustum': {
+    volume: (20 / 3) * (400 + 100 + 200), // 각뿔대: h/3 (A1 + A2 + √(A1·A2))
+    roots: 1,
+    bbox: [[-10, -10, 0], [10, 10, 20]],
+    commands: [
+      { type: 'create_sketch', id: 'a', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 'a', id: 'r', width: 20, height: 20 },
+      { type: 'create_sketch', id: 'b', plane: { type: 'XY', offset: 20 } },
+      { type: 'add_rectangle', sketch: 'b', id: 'r', width: 10, height: 10 },
+      { type: 'loft', id: 'l', sections: [{ sketch: 'a', profile: 'r' }, { sketch: 'b', profile: 'r' }] },
+    ],
+  },
+  'loft-circle-three-sections': {
+    volume: PI * 100 * 15 + (PI * 15 / 3) * (100 + 25 + 50), // 원기둥 15 + 원뿔대 15
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 'a', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_circle', sketch: 'a', id: 'c', diameter: 20 },
+      { type: 'create_sketch', id: 'b', plane: { type: 'XY', offset: 15 } },
+      { type: 'add_circle', sketch: 'b', id: 'c', diameter: 20 },
+      { type: 'create_sketch', id: 'd', plane: { type: 'XY', offset: 30 } },
+      { type: 'add_circle', sketch: 'd', id: 'c', diameter: 10 },
+      { type: 'loft', id: 'l', sections: [{ sketch: 'a', profile: 'c' }, { sketch: 'b', profile: 'c' }, { sketch: 'd', profile: 'c' }] },
+    ],
+  },
+  'helix-spring': {
+    volume: 8 * 2 * PI * 10 * 3, // 나선 운동 부피 = 단면 넓이 × 2π × 도심 반지름 × 바퀴 수
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 0], width: 4, height: 2 },
+      { type: 'helix', id: 'h', sketch: 's', profile: 'r', pitch: 5, turns: 3 },
+    ],
+  },
+  'mesh-import-cube': {
+    volume: 1000,
+    roots: 1,
+    bbox: [[-5, -5, 0], [5, 5, 10]],
+    commands: [{ type: 'import_mesh', id: 'm', ...cubeMesh(10) }],
+  },
+  'offset-polygon-and-slot': {
+    volume: 24 * 24 * 5 + (10 * 4 + PI * 4) * 5,
+    roots: 2,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[-10, -10], [10, -10], [10, 10], [-10, 10]] },
+      { type: 'offset_entity', sketch: 's', entity: 'p', id: 'q', distance: 2 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'q', distance: 5 },
+      { type: 'create_sketch', id: 't', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_slot', sketch: 't', id: 'sl', center: [40, 0], length: 10, width: 6 },
+      { type: 'offset_entity', sketch: 't', entity: 'sl', id: 'sm', distance: -1 },
+      { type: 'extrude', id: 'f', sketch: 't', profile: 'sm', distance: 5 },
     ],
   },
   'suppressed-tool-and-root': {

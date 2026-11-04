@@ -159,3 +159,44 @@ describe('형식 v7: 구성선·슬롯·각도 구속·각도 평면·크기 조
     expect(err(m, { type: 'set_pattern', target: 'p', pattern: { type: 'scale', source: 'b', x: 0, y: 1, z: 1 } })).toMatch(/잘못된 명령/);
   });
 });
+
+describe('형식 v8: 헬릭스·로프트·오프셋·메시', () => {
+  const xz = { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } };
+  it('헬릭스: 피치가 단면 높이보다 작거나 축을 넘으면 거부, 치수 변경도 같은 검사', () => {
+    const m = build(xz, { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 0], width: 4, height: 2 });
+    expect(err(m, { type: 'helix', sketch: 's', profile: 'r', pitch: 2, turns: 3 })).toMatch(/피치/);
+    const across = build(xz, { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 4, height: 2 });
+    expect(err(across, { type: 'helix', sketch: 's', profile: 'r', pitch: 5, turns: 3 })).toMatch(/u > 0/);
+    const ok = build(xz, { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 0], width: 4, height: 2 }, { type: 'helix', id: 'h', sketch: 's', profile: 'r', pitch: 5, turns: 3 });
+    expect(err(ok, { type: 'set_params', target: 'h', params: { pitch: 1 } })).toMatch(/피치/);
+    expect(err(ok, { type: 'delete_sketch', sketch: 's' })).toMatch(/쓰는/);
+  });
+  it('로프트: 같은 스케치 두 번은 거부, 단면 스케치는 지울 수 없다', () => {
+    const m = build(
+      { type: 'create_sketch', id: 'a', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_circle', sketch: 'a', id: 'c', diameter: 10 },
+      { type: 'create_sketch', id: 'b', plane: { type: 'XY', offset: 10 } },
+      { type: 'add_circle', sketch: 'b', id: 'c', diameter: 6 },
+    );
+    expect(err(m, { type: 'loft', sections: [{ sketch: 'a', profile: 'c' }, { sketch: 'a', profile: 'c' }] })).toMatch(/서로 다른/);
+    const l = build(...[], { type: 'create_sketch', id: 'a', plane: { type: 'XY', offset: 0 } }, { type: 'add_circle', sketch: 'a', id: 'c', diameter: 10 }, { type: 'create_sketch', id: 'b', plane: { type: 'XY', offset: 10 } }, { type: 'add_circle', sketch: 'b', id: 'c', diameter: 6 }, { type: 'loft', id: 'l', sections: [{ sketch: 'a', profile: 'c' }, { sketch: 'b', profile: 'c' }] });
+    expect(err(l, { type: 'delete_sketch_entity', sketch: 'b', entity: 'c' })).toMatch(/쓰는/);
+    expect(validateGraph(l)).toEqual([]);
+  });
+  it('오프셋: 사각형·원·다각형(마이터), 너무 안쪽이면 거부', () => {
+    const m = build(
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', width: 10, height: 6 },
+      { type: 'offset_entity', sketch: 's', entity: 'r', id: 'r2', distance: 1 },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[0, 0], [10, 0], [0, 10]] },
+      { type: 'offset_entity', sketch: 's', entity: 'p', id: 'p2', distance: -1 },
+    );
+    const dims = Object.fromEntries(m.sketches[0]!.dimensions.map((d) => [d.id, d.value]));
+    expect(dims['r2.width']).toBe(12);
+    expect(dims['r2.height']).toBe(8);
+    const p2 = m.sketches[0]!.entities.find((e) => e.id === 'p2') as { points: number[][] };
+    expect(p2.points[0]).toEqual([1, 1]);
+    expect(err(m, { type: 'offset_entity', sketch: 's', entity: 'r', distance: -5 })).toMatch(/사라집니다/);
+    expect(err(m, { type: 'offset_entity', sketch: 's', entity: 'p', distance: -5 })).toMatch(/오프셋/);
+  });
+});

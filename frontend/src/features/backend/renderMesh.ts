@@ -10,8 +10,8 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import type { RenderMesh } from '../../api/backend';
 import type { EngineMesh } from '../engine/types';
 import type { CadObject, ObjectId, Sketch, SketchPlane, Transform } from '../../cad/commandTypes';
-import { resolveProfile } from '../../cad/sketch';
-import { extrudeLocalMatrix } from '../../cad/sketchPlane';
+import { resolveProfile, sketchFeatureRef, type Profile } from '../../cad/sketch';
+import { sketchLocalMatrix } from '../../cad/sketchPlane';
 
 /**
  * 형상 키. 돌출은 참조한 스케치 프로파일(치수·중심·평면 높이)을 포함 → 스케치 치수를 바꾸면 다시 계산된다.
@@ -37,19 +37,23 @@ export function geometryKey(
     return `pattern:${JSON.stringify(obj.pattern)}(${src})${sup}`;
   }
   const shell = 'shell' in obj && obj.shell ? `|shell:${obj.shell.thickness}:${obj.shell.open.join(',')}` : '';
-  if (obj.kind === 'extrude' || obj.kind === 'revolve') {
-    const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
+  if (obj.kind === 'extrude' || obj.kind === 'revolve' || obj.kind === 'helix') {
+    const ref = sketchFeatureRef(obj)!;
     const sk = sketches.get(ref.sketch);
-    const p = sk ? resolveProfile(sk, ref.profile) : null;
-    const prof = !p ? 'missing'
-      : p.type === 'rectangle' ? `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`
-      : p.type === 'polygon' ? `poly:${p.points.map((q) => q.join(',')).join(';')}@${p.z}${planeTag(p.plane)}`
-      : p.type === 'slot' ? `slot:${p.length}x${p.width}<${p.angle}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`
-      : `circle:${p.diameter}@${p.center.join(',')},${p.z}${planeTag(p.plane)}`;
+    const prof = profileKey(sk ? resolveProfile(sk, ref.profile) : null);
     // 면 위 스케치: 붙은 면의 좌표계(돌출 객체 로컬 기준)를 키에 넣는다 → 붙은 객체가 바뀌거나 움직이면 다시 계산
-    const frame = sk?.plane.type === 'face' ? `|frame:${faceFrameKey(obj, index, sketches)}` : '';
+    const frame = sk?.plane.type === 'face' ? `|frame:${frameKey(obj.id, ref.sketch, index, sketches)}` : '';
+    if (obj.kind === 'helix') return `helix:${prof}|p=${obj.params.pitch}|t=${obj.params.turns}${frame}${sup}`;
     return obj.kind === 'revolve' ? `revolve:${prof}|a=${obj.params.angle}${frame}${sup}` : `extrude:${prof}|d=${obj.params.distance}${frame}${shell}${sup}`;
   }
+  if (obj.kind === 'loft') {
+    const parts = obj.loft.sections.map((s) => {
+      const sk = sketches.get(s.sketch);
+      return `${profileKey(sk ? resolveProfile(sk, s.profile) : null)}${sk?.plane.type === 'face' ? `|frame:${frameKey(obj.id, s.sketch, index, sketches)}` : ''}`;
+    });
+    return `loft(${parts.join(';')})${sup}`;
+  }
+  if (obj.kind === 'mesh') return `mesh:${obj.mesh.positions.length}:${hash(obj.mesh.positions)}:${hash(obj.mesh.indices)}${sup}`;
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)
     .sort()
@@ -122,12 +126,33 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 }
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
-function faceFrameKey(obj: Extract<CadObject, { kind: 'extrude' | 'revolve' }>, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = extrudeLocalMatrix({ schemaVersion: 7, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
+  const m = sketchLocalMatrix({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 
 function planeTag(plane: SketchPlane): string {
   if (plane.type === 'face') return `/face:${plane.object}.${plane.face}`;
+  if (plane.type === 'angled') return `/angled:${plane.base}.${plane.axis}.${plane.angle}`;
   return plane.type === 'XY' ? '' : `/${plane.type}`;
+}
+
+/** 단면 키: 종류·치수·위치·평면 */
+function profileKey(p: Profile | null): string {
+  if (!p) return 'missing';
+  const tag = planeTag(p.plane);
+  if (p.type === 'rectangle') return `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${tag}`;
+  if (p.type === 'polygon') return `poly:${p.points.map((q) => q.join(',')).join(';')}@${p.z}${tag}`;
+  if (p.type === 'slot') return `slot:${p.length}x${p.width}<${p.angle}@${p.center.join(',')},${p.z}${tag}`;
+  return `circle:${p.diameter}@${p.center.join(',')},${p.z}${tag}`;
+}
+
+/** 큰 문자열(메시 base64)의 짧은 지문 (FNV-1a 32비트) */
+function hash(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }

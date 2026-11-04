@@ -32,6 +32,9 @@ const PATHS: Record<string, string> = {
   scale: 'M4 20h7v-7H4zM10 4h10v10M20 4l-9 9M15 4h5v5',
   slot: 'M8 8h8a4 4 0 0 1 0 8H8a4 4 0 0 1 0-8z',
   line: 'M3 20L21 4M3 20h2M19 4h2',
+  loft: 'M5 20h14M8 4h8M5 20L8 4M19 20L16 4M6.5 12h11',
+  helix: 'M6 4c8 0 12 2 12 3s-12 2-12 3 12 2 12 3-12 2-12 3 12 2 12 3',
+  thread: 'M9 3h6v18H9zM9 6l6 2M9 10l6 2M9 14l6 2M9 18l6 2',
   perspective: 'M4 6h16M6 18h12M4 6l2 12M20 6l-2 12',
   camera: 'M3 8h4l2-3h6l2 3h4v12H3zM12 10a4 4 0 1 0 0 8a4 4 0 1 0 0-8',
 };

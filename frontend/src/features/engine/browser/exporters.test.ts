@@ -110,3 +110,16 @@ describe('GLB', () => {
     expect(volume(tris) / (20 * 20 * 50 * 1e-9)).toBeCloseTo(1, 5); // 축 변환 후에도 바깥 방향 (Float32 정밀도 → 상대 비교)
   });
 });
+
+describe('3MF 외관 색 (서버 test_export.py 와 같은 구조)', () => {
+  it('색이 있는 객체만 basematerials 의 pid/pindex 를 갖고, 객체 id 는 1..n', () => {
+    const tri = { positions: Float32Array.from([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]), indices: Uint32Array.from([0, 2, 1, 0, 1, 3, 1, 2, 3, 0, 3, 2]) };
+    const zip = to3mf([{ name: 'a', color: '#e5534b', ...tri }, { name: 'b', ...tri }, { name: 'c', color: '#57ab5a', ...tri }]);
+    const xml = new TextDecoder().decode(unzipSync(zip)['3D/3dmodel.model']!);
+    expect(xml).toContain('<basematerials id="4">');
+    expect(xml).toContain('displaycolor="#E5534B"');
+    expect(xml).toMatch(/<object id="1"[^>]*pid="4" pindex="0"/);
+    expect(xml).toMatch(/<object id="2" type="model" name="b">/);
+    expect(xml).toMatch(/<object id="3"[^>]*pid="4" pindex="1"/);
+  });
+});

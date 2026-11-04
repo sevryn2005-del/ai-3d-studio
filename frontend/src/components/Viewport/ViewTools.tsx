@@ -19,6 +19,7 @@ import { MATERIALS, combine, massGrams, meshProperties } from '../../cad/massPro
 import { formatMm } from '../../cad/units';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
+import { resolveProfile } from '../../cad/sketch';
 
 const NORMAL = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] } as const;
 
@@ -192,6 +193,49 @@ export function MassPanel() {
           <dd>{props.max.map((x, i) => formatMm(Math.round((x - props.min[i]!) * 100) / 100)).join(' × ')} mm</dd>
         </dl>
       )}
+    </div>
+  );
+}
+
+/** 로프트 단면 고르기: 단면이 있는 스케치를 순서대로 체크 (평면 거리 순으로 정렬해 보여 줌) */
+export function LoftPanel() {
+  const open = useEditorStore((s) => s.loftOpen);
+  const model = useSceneStore(selectModel);
+  const [chosen, setChosen] = useState<string[]>([]);
+  if (!open) return null;
+  const usable = model.sketches
+    .map((sk) => ({ sk, profile: sk.entities.find((e) => e.type !== 'line' && resolveProfile(sk, e.id))?.id }))
+    .filter((x): x is { sk: (typeof model.sketches)[number]; profile: string } => !!x.profile)
+    .sort((a, b) => a.sk.plane.offset - b.sk.plane.offset);
+  const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+  const close = () => {
+    setChosen([]);
+    useEditorStore.getState().setLoftOpen(false);
+  };
+  const run = () => {
+    const sections = chosen.map((id) => ({ sketch: id, profile: usable.find((u) => u.sk.id === id)!.profile }));
+    const r = useSceneStore.getState().submitNow({ type: 'loft', sections });
+    if (r.status === 'applied') close();
+  };
+  return (
+    <div className="view-panel mass-panel" role="dialog" aria-label="로프트" data-testid="loft-panel">
+      <div className="pm-head">
+        <strong>로프트 — 단면을 잇는 순서대로 고르세요</strong>
+      </div>
+      {usable.map(({ sk, profile }) => (
+        <label key={sk.id} className="check">
+          <input type="checkbox" checked={chosen.includes(sk.id)} onChange={() => toggle(sk.id)} data-testid={`loft-${sk.id}`} />
+          {chosen.includes(sk.id) && <strong>{chosen.indexOf(sk.id) + 1}.</strong>} {sk.name} <span className="muted">({profile}, 평면 거리 {formatMm(sk.plane.offset)})</span>
+        </label>
+      ))}
+      <div className="row">
+        <button className="ok" disabled={chosen.length < 2} onClick={run} data-testid="loft-ok">
+          ✓ 로프트
+        </button>
+        <button className="cancel" onClick={close}>
+          ✕ 취소
+        </button>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { dimensionValue, sketchFeatureRef, slotOutline } from '../../cad/sketch';
+import { dimensionValue, sketchFeatureRef, sketchRefs, slotOutline } from '../../cad/sketch';
 import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 
@@ -34,7 +34,7 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
   const activeSketch = (selectedObj && sketchFeatureRef(selectedObj)?.sketch) || selectedId;
   return model.sketches
     .map((sketch) => {
-      const used = model.objects.some((o) => sketchFeatureRef(o)?.sketch === sketch.id);
+      const used = model.objects.some((o) => sketchRefs(o).some((r) => r.sketch === sketch.id));
       if (sketch.id !== activeSketch && used) return null;
       // 스케치 좌표 → 월드: (돌출 객체의 월드 변환) ∘ (평면)
       const frame = sketchWorldMatrix(model, sketch, selectedObj?.id);

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
-import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from '../../cad/sketch';
+import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile, revolveProfileError, sketchRefs } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
 import { ConstraintPanel, PolygonFields } from './ConstraintFields';
@@ -77,10 +77,10 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
 export function SketchProperties({ sketch, model }: { sketch: Sketch; model: ModelDefinition }) {
   const select = useSceneStore((s) => s.select);
   const submitNow = useSceneStore((s) => s.submitNow);
-  const users = model.objects.filter((o) => sketchFeatureRef(o)?.sketch === sketch.id);
+  const users = model.objects.filter((o) => sketchRefs(o).some((r) => r.sketch === sketch.id));
   const [name, setName] = useState(sketch.name);
   useEffect(() => setName(sketch.name), [sketch.name]);
-  const usersOf = (entityId: string) => users.filter((o) => sketchFeatureRef(o)?.profile === entityId);
+  const usersOf = (entityId: string) => users.filter((o) => sketchRefs(o).some((r) => r.sketch === sketch.id && r.profile === entityId));
   const nextEntity = (prefix: string) => {
     let n = 1;
     while (sketch.entities.some((e) => e.id === `${prefix}${n}`)) n++;
@@ -156,6 +156,15 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           </legend>
           <EntityDimensions sketch={sketch} entity={e} />
           <ExtrudeAction sketch={sketch} entityId={e.id} />
+          {e.type !== 'line' && (
+            <NumberField
+              label="오프셋 복사 (+ 바깥, − 안쪽)"
+              unit="mm"
+              value={0}
+              onCommit={(v) => v !== 0 && submitNow({ type: 'offset_entity', sketch: sketch.id, entity: e.id, distance: v })}
+              testId={`offset-${e.id}`}
+            />
+          )}
           <button
             className="danger"
             data-testid={`delete-entity-${e.id}`}

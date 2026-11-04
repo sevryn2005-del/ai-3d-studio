@@ -11,6 +11,8 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 
 export interface NamedMesh {
   name: string;
+  /** 외관 색 #rrggbb (3MF basematerials 로 내보냄, 서버 exporter.to_3mf 와 같은 구조) */
+  color?: string;
   positions: Float32Array; // 월드 좌표 mm
   indices: Uint32Array;
 }
@@ -64,8 +66,17 @@ export function to3mf(meshes: NamedMesh[]): Uint8Array {
       'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n' +
       '<metadata name="Application">AI 3D Studio</metadata>\n<resources>\n',
   ];
+  // 색이 있으면 basematerials 하나(id = 객체 수 + 1)에 색마다 한 항목 → 객체 pid/pindex (객체 id 는 1..n 그대로)
+  const colors = [...new Set(meshes.map((m) => m.color).filter((c): c is string => !!c))];
+  const matId = meshes.length + 1;
+  if (colors.length) {
+    parts.push(`<basematerials id="${matId}">\n`);
+    for (const c of colors) parts.push(`<base name="${c}" displaycolor="${c.toUpperCase()}"/>\n`);
+    parts.push('</basematerials>\n');
+  }
   meshes.forEach((m, i) => {
-    parts.push(`<object id="${i + 1}" type="model" name="${xmlAttr(m.name)}"><mesh><vertices>\n`);
+    const mat = m.color ? ` pid="${matId}" pindex="${colors.indexOf(m.color)}"` : '';
+    parts.push(`<object id="${i + 1}" type="model" name="${xmlAttr(m.name)}"${mat}><mesh><vertices>\n`);
     for (let k = 0; k < m.positions.length; k += 3) {
       parts.push(`<vertex x="${num(m.positions[k]!)}" y="${num(m.positions[k + 1]!)}" z="${num(m.positions[k + 2]!)}"/>\n`);
     }

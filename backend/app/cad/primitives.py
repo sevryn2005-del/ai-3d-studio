@@ -35,9 +35,19 @@ from app.cad.commands import (
     Transform,
     HoleObject,
     PatternObject,
+    HelixObject,
+    LoftObject,
+    MeshObject,
 )
 from app.cad.features import is_suppressed, pattern_matrices
-from app.cad.frames import extrude_local_matrix
+from app.cad.frames import extrude_local_matrix, sketch_local_matrix
+from app.cad.mesh_import import mesh_solid
+from app.cad.sections import helix_error, helix_profile_points, helix_rings, loft_segments, section_points
+
+import numpy as np
+
+# 헬릭스·로프트 단면 분할 = 출력 허용 오차 (브라우저 엔진은 표시 0.05 / 출력 0.01)
+HELIX_TOLERANCE = 0.01
 
 _ORIGIN = cq.Vector(0, 0, 0)
 _VERTICAL = cq.selectors.ParallelDirSelector(cq.Vector(0, 0, 1))
@@ -94,7 +104,7 @@ def local_solid(obj: CadObject) -> cq.Shape:
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
-        case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject():
+        case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject() | HelixObject() | LoftObject() | MeshObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -168,9 +178,66 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
     return cq.Shape.cast(BRepBuilderAPI_Transform(solid.wrapped, trsf, True).Shape())
 
 
+def _rigid(shape: cq.Shape, m) -> cq.Shape:
+    trsf = gp_Trsf()
+    trsf.SetValues(*m[:3, :4].ravel().tolist())
+    return cq.Shape.cast(BRepBuilderAPI_Transform(shape.wrapped, trsf, True).Shape())
+
+
+def _ring_solid(rings, name: str) -> cq.Shape:
+    """단면 고리들을 직선(룰드) 면으로 잇기 — 브라우저 ringSolid.ts 와 같은 고리"""
+    wires = [cq.Wire.makePolygon([cq.Vector(*p) for p in r], close=True) for r in rings]
+    try:
+        solid = cq.Solid.makeLoft(wires, ruled=True)
+    except Exception as e:
+        raise GeometryError(f"'{name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)") from e
+    if solid.Volume() < 0:
+        solid = cq.Shape.cast(solid.wrapped.Reversed())
+    return solid
+
+
+def helix_solid(obj: HelixObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
+    sk = sketches.get(obj.helix.sketch)
+    p = resolve_profile(sk, obj.helix.profile) if sk else None
+    if p is None:
+        raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
+    pts = helix_profile_points(p, HELIX_TOLERANCE)
+    if err := helix_error(pts, obj.params.pitch):
+        raise GeometryError(f"'{obj.name}': {err}")
+    model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
+    local = sketch_local_matrix(model, obj.id, obj.helix.sketch)  # type: ignore[arg-type]
+    if local is None:
+        raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
+    return _rigid(_ring_solid(helix_rings(pts, obj.params.pitch, obj.params.turns, HELIX_TOLERANCE), obj.name), local)
+
+
+def loft_solid(obj: LoftObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
+    model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
+    profs = []
+    for s in obj.loft.sections:
+        sk = sketches.get(s.sketch)
+        p = resolve_profile(sk, s.profile) if sk else None
+        m = sketch_local_matrix(model, obj.id, s.sketch) if p else None  # type: ignore[arg-type]
+        if p is None or m is None:
+            raise GeometryError(f"'{obj.name}': 단면 {s.sketch}·{s.profile} 을(를) 찾을 수 없습니다")
+        profs.append((p, m))
+    n = loft_segments([p for p, _ in profs], HELIX_TOLERANCE)
+    rings = []
+    for p, m in profs:
+        pts = np.array([[u, v, 0.0, 1.0] for u, v in section_points(p, n)])
+        rings.append([tuple(q[:3]) for q in (m @ pts.T).T])
+    return _ring_solid(rings, obj.name)
+
+
 def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """객체의 로컬 좌표계 솔리드. 불리언은 자식들을 (부모 기준 변환을 적용해) 재귀적으로 결합한다."""
     sketches = sketches or {}
+    if isinstance(obj, HelixObject):
+        return helix_solid(obj, index, sketches)
+    if isinstance(obj, LoftObject):
+        return loft_solid(obj, index, sketches)
+    if isinstance(obj, MeshObject):
+        return mesh_solid(obj.mesh.positions, obj.mesh.indices, obj.name)
     if isinstance(obj, (ExtrudeObject, RevolveObject)):
         return extrude_solid(obj, index, sketches)
 

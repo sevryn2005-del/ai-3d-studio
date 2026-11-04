@@ -85,7 +85,7 @@ export async function downloadBlob(blob: Blob, fileName: string): Promise<void> 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function pickFileWithInput(accept: string): Promise<File> {
+export function pickFileWithInput(accept: string): Promise<File> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';

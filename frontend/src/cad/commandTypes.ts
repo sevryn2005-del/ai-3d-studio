@@ -33,6 +33,10 @@ export const LIMITS = {
   /** 패턴 한 방향의 개수 상한, 전체 사본 수 상한 */
   maxPatternCount: 100,
   maxPatternTotal: 400,
+  /** 로프트 단면 수 */
+  maxLoftSections: 10,
+  /** 가져온 메시 삼각형 수 (브라우저 엔진). 서버 엔진은 MAX_SERVER_MESH_TRIANGLES 까지 */
+  maxMeshTriangles: 200_000,
 } as const;
 
 const dimension = z
@@ -137,6 +141,15 @@ export const HoleParamsSchema = z
     if (p.csinkDiameter > 0 && (p.csinkDiameter - p.diameter) / 2 >= p.depth) err('카운터싱크가 구멍 깊이보다 깊습니다');
   });
 
+/**
+ * 헬릭스 스윕 (형식 v8, 나사산·스프링·블렌더 Screw): 스케치 프로파일을 회전처럼 v 축 둘레로 돌리면서
+ * 한 바퀴에 pitch 만큼 v 방향으로 올린다. turns = 바퀴 수. 프로파일은 축의 한쪽(u ≥ 0)에 있어야 한다.
+ */
+export const HelixParamsSchema = z.strictObject({
+  pitch: dimension,
+  turns: z.number().min(0.1, '바퀴 수는 0.1 이상이어야 합니다').max(50, '바퀴 수는 50 이하여야 합니다'),
+});
+
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
 export const PARAMS_SCHEMAS = {
   box: BoxParamsSchema,
@@ -146,10 +159,11 @@ export const PARAMS_SCHEMAS = {
   extrude: ExtrudeParamsSchema,
   revolve: RevolveParamsSchema,
   hole: HoleParamsSchema,
+  helix: HelixParamsSchema,
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
-export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern';
+export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh';
 export const PRIMITIVE_KINDS = Object.keys(PARAMS_SCHEMAS) as PrimitiveKind[];
 export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
@@ -301,6 +315,12 @@ const objectBase = {
   color: ColorSchema.optional(),
 };
 
+/** 스케치 프로파일 참조 (돌출·회전·헬릭스·로프트 단면) */
+export const SketchRefSchema = z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema });
+export type SketchRef = z.infer<typeof SketchRefSchema>;
+/** base64 (메시 데이터, 최대 약 16MB) */
+export const MeshBase64Schema = z.string().max(16_000_000).regex(/^[A-Za-z0-9+/]*={0,2}$/, 'base64 형식이어야 합니다');
+
 /**
  * 쉘 (속 비우기, 형식 v6): 바깥면에서 안쪽으로 thickness 두께만 남기고 비운다. open = 제거할(열린) 면.
  * 박스(필렛 없는 것)·원통·돌출에 쓸 수 있다. 돌출의 열린 면은 start·end 만.
@@ -413,6 +433,30 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...objectBase, kind: z.literal('boolean'), boolean: BooleanDefSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('hole'), params: HoleParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('pattern'), pattern: PatternDefSchema }),
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('helix'),
+    params: HelixParamsSchema,
+    helix: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
+  }),
+  /**
+   * 로프트 (형식 v8): 단면(스케치 프로파일)들을 순서대로 직선(룰드) 면으로 잇는다. 단면마다 둘레를 같은 수의 점으로
+   * 나눠(+u 방향에서 시작, 반시계) 대응시킨다 — 두 엔진이 같은 규칙 (cad/sections.ts ↔ app/cad/sections.py)
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('loft'),
+    loft: z.strictObject({ sections: z.array(SketchRefSchema).min(2).max(LIMITS.maxLoftSections) }),
+  }),
+  /**
+   * 가져온 메시 (형식 v8, STL·OBJ): 삼각형 메시 그대로. positions = Float32 리틀엔디안 xyz (mm, 객체 로컬),
+   * indices = Uint32 리틀엔디안 (삼각형마다 3개). base64. 닫힌(새지 않는) 메시여야 불리언·내보내기가 된다.
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('mesh'),
+    mesh: z.strictObject({ positions: MeshBase64Schema, indices: MeshBase64Schema }),
+  }),
 ]);
 export type CadObject = z.infer<typeof CadObjectSchema>;
 export type CadObjectOf<K extends ObjectKind> = Extract<CadObject, { kind: K }>;
@@ -421,7 +465,7 @@ export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 7;
+export const MODEL_SCHEMA_VERSION = 8;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -501,6 +545,8 @@ export const SetParamsParamsSchema = z
     cboreDiameter: radiusOrZero,
     cboreDepth: radiusOrZero,
     csinkDiameter: radiusOrZero,
+    pitch: dimension,
+    turns: HelixParamsSchema.shape.turns,
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -658,6 +704,44 @@ export const RevolveCommandSchema = z.strictObject({
   position: Vec3Schema.optional(),
 });
 
+/** 헬릭스 스윕 (나사산·스프링): 회전처럼 v 축 둘레로 turns 바퀴, 한 바퀴에 pitch 만큼 올라감 */
+export const HelixCommandSchema = z.strictObject({
+  type: z.literal('helix'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  sketch: ObjectIdSchema,
+  profile: ObjectIdSchema,
+  pitch: dimension,
+  turns: HelixParamsSchema.shape.turns,
+});
+
+/** 로프트: 단면 2~10개를 순서대로 잇는다 (각각 스케치·프로파일) */
+export const LoftCommandSchema = z.strictObject({
+  type: z.literal('loft'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  sections: z.array(SketchRefSchema).min(2).max(LIMITS.maxLoftSections),
+});
+
+/** 메시 가져오기 (STL·OBJ 를 읽은 결과). 원점 규칙에 맞게 바닥면 중심으로 옮겨 저장한다 */
+export const ImportMeshCommandSchema = z.strictObject({
+  type: z.literal('import_mesh'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  positions: MeshBase64Schema,
+  indices: MeshBase64Schema,
+  position: Vec3Schema.optional(),
+});
+
+/** 스케치 요소 오프셋: 같은 모양을 distance 만큼 바깥(+)·안쪽(−)으로 띄운 새 요소 (다각형은 모서리 연장) */
+export const OffsetEntityCommandSchema = z.strictObject({
+  type: z.literal('offset_entity'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  distance: z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension),
+});
+
 /** 스케치 프로파일(사각형·원)을 평면 법선 방향으로 distance 만큼 돌출해 새 객체를 만든다 */
 export const ExtrudeCommandSchema = z.strictObject({
   type: z.literal('extrude'),
@@ -789,6 +873,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddLineCommandSchema,
   AddSlotCommandSchema,
   SetEntityAngleCommandSchema,
+  OffsetEntityCommandSchema,
   MovePointCommandSchema,
   AddConstraintCommandSchema,
   SetConstraintCommandSchema,
@@ -797,6 +882,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   DeleteSketchCommandSchema,
   ExtrudeCommandSchema,
   RevolveCommandSchema,
+  HelixCommandSchema,
+  LoftCommandSchema,
+  ImportMeshCommandSchema,
   CutCommandSchema,
   UnionCommandSchema,
   IntersectCommandSchema,

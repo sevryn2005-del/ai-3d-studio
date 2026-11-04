@@ -12,7 +12,7 @@ export interface ParamField {
   key: string;
   label: string;
   /** 기본 mm */
-  unit?: 'mm' | '°';
+  unit?: 'mm' | '°' | '개';
 }
 
 export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[] }> = {
@@ -57,6 +57,15 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
     ],
   },
   pattern: { label: '패턴', params: [] },
+  helix: {
+    label: '헬릭스',
+    params: [
+      { key: 'pitch', label: '피치 (한 바퀴에 오르는 높이)' },
+      { key: 'turns', label: '바퀴 수', unit: '개' },
+    ],
+  },
+  loft: { label: '로프트', params: [] },
+  mesh: { label: '가져온 메시', params: [] },
 };
 
 export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', mirror: '대칭 복사', scale: '크기 조정' } as const;
@@ -118,6 +127,19 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const d = Math.max(obj.params.diameter, obj.params.cboreDiameter, obj.params.csinkDiameter);
       return [d, d, obj.params.depth];
     }
+    case 'helix': {
+      const sk = findSketch(model, obj.helix.sketch);
+      const p = sk ? resolveProfile(sk, obj.helix.profile) : null;
+      if (!p) return [0, 0, 0];
+      const b = profileBounds(p);
+      const r = b.center[0] + b.width / 2;
+      const h = b.height + obj.params.pitch * obj.params.turns;
+      const local = extrudeLocalMatrix(model, obj);
+      return local ? extrudeLocalSize(local, [2 * r, h, 2 * r]) : [2 * r, h, 2 * r];
+    }
+    case 'loft':
+    case 'mesh':
+      return [0, 0, 0]; // 크기는 엔진 메시로 (질량 특성·출력 검사)
   }
 }
 
@@ -164,6 +186,12 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       const extra = p.cboreDiameter > 0 ? ` 카운터보어 Ø${formatMm(p.cboreDiameter)}` : p.csinkDiameter > 0 ? ` 카운터싱크 Ø${formatMm(p.csinkDiameter)}` : '';
       return `Ø${formatMm(p.diameter)}×${formatMm(p.depth)}${extra}`;
     }
+    case 'helix':
+      return `피치 ${formatMm(obj.params.pitch)} × ${formatMm(obj.params.turns)}바퀴`;
+    case 'loft':
+      return `단면 ${obj.loft.sections.length}개`;
+    case 'mesh':
+      return `삼각형 ${Math.round((obj.mesh.indices.length * 3) / 4 / 12).toLocaleString()}개`;
     case 'pattern': {
       const p = obj.pattern;
       if (p.type === 'mirror') return `${p.plane} 평면`;

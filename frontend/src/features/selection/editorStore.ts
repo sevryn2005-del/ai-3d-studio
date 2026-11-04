@@ -58,6 +58,8 @@ interface EditorState {
   measurePoints: Point3[];
   massOpen: boolean;
   screenshotRequest: number;
+  loftOpen: boolean;
+  setLoftOpen: (on: boolean) => void;
   /** 원근(기본) / 직교 투영 */
   projection: 'perspective' | 'orthographic';
   toggleProjection: () => void;
@@ -114,6 +116,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   measurePoints: [],
   massOpen: false,
   screenshotRequest: 0,
+  loftOpen: false,
+  setLoftOpen: (loftOpen) => set({ loftOpen }),
   projection: loadPref('ai3d.projection', ['perspective', 'orthographic'] as const, 'perspective'),
   toggleProjection: () =>
     set((s) => {

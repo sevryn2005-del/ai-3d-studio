@@ -12,7 +12,11 @@
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
 import { profileBounds, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
-import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix } from '../../../cad/sketchPlane';
+import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
+import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints } from '../../../cad/sections';
+import { decodeMesh } from '../../../cad/meshData';
+import { ringSolid } from './ringSolid';
+import { Vector3, type Matrix4 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
 import type { ManifoldToplevel, Manifold } from 'manifold-3d';
@@ -63,7 +67,52 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
+    case 'helix': {
+      const sk = sketches.get(obj.helix.sketch);
+      const p = sk ? resolveProfile(sk, obj.helix.profile) : null;
+      if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
+      const pts = helixProfilePoints(p, tol);
+      const err = helixError(pts, obj.params.pitch);
+      if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+      const local = extrudeLocalMatrix(modelOf(), obj);
+      if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
+      const solid = scope.keep(ringSolid(wasm, helixRings(pts, obj.params.pitch, obj.params.turns, tol), pts, pts));
+      return scope.keep(solid.transform(asMatrix(local)));
+    }
+    case 'loft': {
+      // 단면마다 같은 수의 점(+u 방향에서 시작, 반시계)으로 나눠 객체 로컬 좌표로 옮긴 고리들
+      const model = modelOf();
+      const profs = obj.loft.sections.map((s) => {
+        const sk = sketches.get(s.sketch);
+        const p = sk ? resolveProfile(sk, s.profile) : null;
+        if (!p) throw new GeometryError(`'${obj.name}': 단면 ${s.sketch}·${s.profile} 을(를) 찾을 수 없습니다`);
+        const m = sketchLocalMatrix(model, obj.id, s.sketch);
+        if (!m) throw new GeometryError(`'${obj.name}': 단면 스케치의 평면을 찾을 수 없습니다`);
+        return { p, m };
+      });
+      const n = loftSegments(profs.map((x) => x.p), tol);
+      const planar = profs.map((x) => sectionPoints(x.p, n));
+      const rings = planar.map((pts, i) =>
+        pts.map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(profs[i]!.m).toArray() as [number, number, number]),
+      );
+      const solid = scope.keep(ringSolid(wasm, rings, planar[0]!, planar[planar.length - 1]!));
+      if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 로프트 결과 형상이 올바르지 않습니다 (단면이 겹치거나 꼬였습니다)`);
+      return solid;
+    }
+    case 'mesh': {
+      const m = decodeMesh(obj.mesh);
+      let solid: Manifold;
+      try {
+        solid = scope.keep(new Manifold(new wasm.Mesh({ numProp: 3, vertProperties: m.positions, triVerts: m.indices })));
+      } catch {
+        throw new GeometryError(`'${obj.name}': 가져온 메시가 닫혀 있지 않습니다 (구멍·떨어진 모서리). 메시 복구 후 다시 가져오세요`);
+      }
+      if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 가져온 메시가 닫혀 있지 않습니다`);
+      return solid;
+    }
     case 'extrude':
     case 'revolve': {
       // 서버 CadQuery: 평면 좌표에서 rect·circle·polyline 단면을 만들어 돌출(또는 v 축 둘레 회전)한 뒤 같은 행렬로 옮긴 형상
@@ -87,7 +136,7 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 7, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -281,6 +330,7 @@ export function worldMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol 
   try {
     return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index)).map((obj) => ({
       name: obj.name,
+      ...(obj.color ? { color: obj.color } : {}),
       ...toPlainMesh(worldManifold(wasm, obj, index, tol, scope, sketches)),
     }));
   } finally {

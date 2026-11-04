@@ -13,7 +13,7 @@
 import { Matrix4, Vector3 } from 'three';
 import type { AngledPlane, CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
 import type { Profile } from './sketch';
-import { findSketch, resolveProfile, sketchFeatureRef } from './sketch';
+import { findSketch, resolveProfile, sketchFeatureRef, sketchRefs } from './sketch';
 import { toMatrix } from './transformMath';
 
 const BASES: Record<StandardPlane['type'], [Vector3, Vector3, Vector3]> = {
@@ -118,6 +118,9 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       return src ? facesOf(model, src, depth + 1) : [];
     }
     case 'hole':
+    case 'helix':
+    case 'loft':
+    case 'mesh':
       return [];
   }
 }
@@ -179,6 +182,9 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
       return src && f ? toMatrix(src.transform).multiply(f) : null;
     }
     case 'hole':
+    case 'helix':
+    case 'loft':
+    case 'mesh':
       return null;
   }
 }
@@ -192,13 +198,18 @@ function faceWorldMatrix(model: ModelDefinition, plane: Extract<SketchPlane, { t
 }
 
 /** 돌출 객체: 스케치 평면 좌표 → 돌출 객체 로컬. 참조가 깨졌거나 순환이면 null */
-export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObject, { kind: 'extrude' | 'revolve' }>, depth = 0): Matrix4 | null {
+export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObject, { kind: 'extrude' | 'revolve' | 'helix' }>, depth = 0): Matrix4 | null {
+  return sketchLocalMatrix(model, obj.id, sketchFeatureRef(obj)!.sketch, depth);
+}
+
+/** 스케치 평면 좌표 → 객체 로컬 (로프트 단면처럼 한 객체가 여러 스케치를 쓸 때). 참조가 깨졌으면 null */
+export function sketchLocalMatrix(model: ModelDefinition, objectId: ObjectId, sketchId: ObjectId, depth = 0): Matrix4 | null {
   if (depth > MAX_DEPTH) return null;
-  const sk = findSketch(model, (obj.kind === 'extrude' ? obj.extrude : obj.revolve).sketch);
+  const sk = findSketch(model, sketchId);
   if (!sk) return null;
   if (sk.plane.type !== 'face') return planeMatrix(sk.plane);
   const world = faceWorldMatrix(model, sk.plane, depth);
-  return world ? objectWorldMatrix(model, obj.id).invert().multiply(world) : null;
+  return world ? objectWorldMatrix(model, objectId).invert().multiply(world) : null;
 }
 
 /**
@@ -207,7 +218,7 @@ export function extrudeLocalMatrix(model: ModelDefinition, obj: Extract<CadObjec
  */
 export function sketchWorldMatrix(model: ModelDefinition, sketch: Sketch, preferred?: ObjectId): Matrix4 | null {
   if (sketch.plane.type === 'face') return faceWorldMatrix(model, sketch.plane, 0);
-  const users = model.objects.filter((o) => sketchFeatureRef(o)?.sketch === sketch.id);
+  const users = model.objects.filter((o) => sketchRefs(o).some((r) => r.sketch === sketch.id));
   const user = users.find((o) => o.id === preferred) ?? users[0];
   const base = user ? objectWorldMatrix(model, user.id) : new Matrix4();
   return base.multiply(planeMatrix(sketch.plane));

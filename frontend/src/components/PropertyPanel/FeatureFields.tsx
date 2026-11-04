@@ -256,3 +256,34 @@ export function HoleActions({ object, model }: { object: CadObject; model: Model
     </fieldset>
   );
 }
+
+/** 로프트: 단면 목록 (스케치로 이동) · 가져온 메시: 삼각형 수 */
+export function LoftOrMeshInfo({ object }: { object: Extract<CadObject, { kind: 'loft' | 'mesh' }> }) {
+  const select = useSceneStore((s) => s.select);
+  const model = useSceneStore((s) => s.history.present.model);
+  if (object.kind === 'mesh') {
+    return (
+      <fieldset>
+        <legend>가져온 메시</legend>
+        <p className="muted small">
+          삼각형 {Math.round((object.mesh.indices.length * 3) / 4 / 12).toLocaleString()}개. 위치·회전·패턴·불리언·내보내기에 쓸 수 있습니다
+          (치수 편집은 원래 CAD 에서).
+        </p>
+      </fieldset>
+    );
+  }
+  return (
+    <fieldset>
+      <legend>로프트 단면</legend>
+      <ol className="loft-sections">
+        {object.loft.sections.map((s, i) => (
+          <li key={i}>
+            <button onClick={() => select(s.sketch)}>{model.sketches.find((k) => k.id === s.sketch)?.name ?? s.sketch}</button>
+            <span className="muted"> · {s.profile}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="muted small">단면 스케치의 치수·평면 거리를 바꾸면 로프트가 다시 계산됩니다.</p>
+    </fieldset>
+  );
+}

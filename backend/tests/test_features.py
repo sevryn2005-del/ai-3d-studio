@@ -68,3 +68,21 @@ def test_all_suppressed_export_is_rejected(client):
         o["suppressed"] = True
     r = client.post("/api/export/stl", json=data)
     assert r.status_code != 200
+
+
+def test_worker_mesh_cache_reuses_and_invalidates():
+    """서버 객체별 메시 캐시: 같은 객체·스케치면 재사용, 치수·자식 위치가 바뀌면 다시 계산, 최상위 위치만 바뀌면 재사용"""
+    from app.cad import jobs
+
+    jobs._MESH_CACHE.clear()
+    model = _first("hole-counterbore")
+    first = jobs.evaluate(model)
+    assert len(jobs._MESH_CACHE) == 1
+    root = next(o for o in model["objects"] if o["kind"] == "boolean")
+    root["transform"]["position"] = [50, 0, 0]
+    assert jobs.evaluate(model)["meshes"] == first["meshes"]  # 위치만 바뀜 → 캐시
+    assert len(jobs._MESH_CACHE) == 1
+    box = next(o for o in model["objects"] if o["kind"] == "box")
+    box["params"]["width"] = 50
+    changed = jobs.evaluate(model)
+    assert changed["meshes"] != first["meshes"] and len(jobs._MESH_CACHE) == 2

@@ -9,6 +9,10 @@ import { resolveProfile, revolveProfileError } from '../../cad/sketch';
 import { facesOf } from '../../cad/sketchPlane';
 import { childIds, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
+import { helixError, helixProfilePoints } from '../../cad/sections';
+import { parseObj, parseStl, prepareImport } from '../../cad/meshData';
+import { pickFileWithInput } from '../projects/projectStorage';
+import { useProjectStore } from '../projects/projectStore';
 import { useEditorStore, type PendingFeature } from './editorStore';
 
 export function pendingCommand(p: PendingFeature): CadCommand {
@@ -203,4 +207,94 @@ export function quickSlot() {
 export function quickLine() {
   const s = selectedSketchFor('구성선');
   if (s) s.scene.submitNow({ type: 'add_line', sketch: s.sketch.id, points: [[-20, 0], [20, 0]] });
+}
+
+/** 헬릭스: 선택한 스케치의 첫 프로파일(축 한쪽)로, 피치 = 프로파일 높이 + 2mm, 5바퀴 */
+export function quickHelix() {
+  const s = selectedSketchFor('헬릭스');
+  if (!s) return;
+  const { scene, sketch } = s;
+  for (const e of sketch.entities) {
+    const p = resolveProfile(sketch, e.id);
+    if (!p) continue;
+    const pts = helixProfilePoints(p, 0.05);
+    const h = Math.max(...pts.map((q) => q[1])) - Math.min(...pts.map((q) => q[1]));
+    const pitch = Math.round((h + 2) * 10) / 10;
+    if (helixError(pts, pitch)) continue;
+    scene.submitNow({ type: 'helix', sketch: sketch.id, profile: e.id, pitch, turns: 5 });
+    useEditorStore.getState().requestView('iso');
+    return;
+  }
+  scene.reportError(`헬릭스: '${sketch.name}'에 회전축(u = 0) 한쪽에 있는 단면이 없습니다 (XZ 평면에 u > 0 쪽으로 그리세요)`);
+}
+
+/**
+ * 나사산 (솔리드웍스 "나사산", 블렌더 Screw): 선택한 원통 둘레에 60° 삼각 나사산(피치 p, 산 높이 0.6p)을
+ * 헬릭스로 감아 원통과 합친다. 명령 한 묶음 = 실행 취소 1번
+ */
+export function quickThread(pitch = 1.5) {
+  const s = selectedRoot('나사산');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  if (obj.kind !== 'cylinder') {
+    scene.reportError('나사산: 원통을 선택하세요 (볼트 몸통)');
+    return;
+  }
+  const r = obj.params.radius;
+  const h = obj.params.height;
+  const depth = Math.round(0.6 * pitch * 1000) / 1000;
+  const turns = Math.floor(((h - pitch) / pitch) * 10) / 10;
+  if (turns < 0.5) {
+    scene.reportError('나사산: 원통이 피치보다 충분히 길어야 합니다');
+    return;
+  }
+  const sk = nextId(model, 'sketch');
+  const hx = nextId(model, 'helix');
+  const r0 = Math.round((r - 0.05) * 1000) / 1000; // 원통 안쪽으로 살짝 겹쳐 합치기가 확실하게
+  scene.dispatchBatch([
+    { type: 'create_sketch', id: sk, name: `${obj.name} 나사산 단면`, plane: { type: 'XZ', offset: 0 } },
+    { type: 'add_polygon', sketch: sk, id: 'thread', points: [[r0, 0.05 * pitch], [r + depth, pitch / 2], [r0, 0.95 * pitch]] },
+    { type: 'helix', id: hx, name: '나사산', sketch: sk, profile: 'thread', pitch, turns },
+    { type: 'set_transform', target: hx, position: obj.transform.position, rotation: obj.transform.rotation },
+    { type: 'union', base: obj.id, tools: [hx], name: `${obj.name} (나사)` },
+  ]);
+}
+
+/** 로프트 단면 고르기 창 열기 (스케치가 2개 이상이어야) */
+export function openLoft() {
+  const scene = useSceneStore.getState();
+  const model = selectModel(scene);
+  const usable = model.sketches.filter((sk) => sk.entities.some((e) => resolveProfile(sk, e.id)));
+  if (usable.length < 2) {
+    scene.reportError('로프트: 단면이 있는 스케치가 2개 이상 필요합니다 (예: 높이가 다른 XY 평면 두 개에 사각형·원)');
+    return;
+  }
+  useEditorStore.getState().setLoftOpen(true);
+}
+
+/** STL·OBJ 가져오기 → 원점 규칙(바닥면 중심)에 맞춰 메시 객체 */
+export async function importMeshFile() {
+  let file: File;
+  try {
+    file = await pickFileWithInput('.stl,.obj,model/stl,text/plain');
+  } catch {
+    return;
+  }
+  const scene = useSceneStore.getState();
+  try {
+    const isObj = file.name.toLowerCase().endsWith('.obj');
+    const soup = isObj ? parseObj(await file.text()) : parseStl(await file.arrayBuffer());
+    let r = prepareImport(soup);
+    // 크기가 1mm 미만이면 미터 단위로 저장된 파일(블렌더 기본) → mm 로
+    const meters = Math.max(...r.size) < 1;
+    if (meters) r = prepareImport(soup, 1000);
+    const name = file.name.replace(/\.(stl|obj)$/i, '').slice(0, 100) || '가져온 메시';
+    const res = scene.submitNow({ type: 'import_mesh', name, positions: r.positions, indices: r.indices });
+    if (res.status === 'applied') {
+      useProjectStore.getState().set({ notice: `${file.name}: 삼각형 ${r.triangles.toLocaleString()}개${meters ? ' (미터 → mm 로 1000배)' : ''}` });
+      useEditorStore.getState().requestFit();
+    }
+  } catch (e) {
+    scene.reportError(`가져오기 실패: ${(e as Error).message}`);
+  }
 }

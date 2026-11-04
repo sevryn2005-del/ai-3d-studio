@@ -104,6 +104,14 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
         : `선형 패턴 ${p.axis.toUpperCase()} ${p.count}개 × ${formatMm(p.spacing)}mm${p.axis2 ? `, ${p.axis2.toUpperCase()} ${p.count2}개 × ${formatMm(p.spacing2 ?? 0)}mm` : ''}`;
       return `${name(p.source)} ${what}`;
     }
+    case 'helix':
+      return `${sketchName(cmd.sketch)}의 ${cmd.profile} 헬릭스 (피치 ${formatMm(cmd.pitch)}mm × ${formatMm(cmd.turns)}바퀴)`;
+    case 'loft':
+      return `로프트 (${cmd.sections.map((s) => sketchName(s.sketch)).join(' → ')})`;
+    case 'import_mesh':
+      return `메시 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
+    case 'offset_entity':
+      return `${sketchName(cmd.sketch)}의 ${cmd.entity} ${cmd.distance > 0 ? '바깥' : '안쪽'}으로 ${formatMm(Math.abs(cmd.distance))}mm 오프셋`;
     case 'add_line':
       return `${sketchName(cmd.sketch)}에 구성선 추가`;
     case 'add_slot':

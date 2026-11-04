@@ -23,6 +23,7 @@ from app.cad.commands import (
     ExtrudeObject,
     RevolveObject,
     sketch_feature_ref,
+    sketch_refs,
     FacePlane,
     ModelDefinition,
     Sketch,
@@ -185,24 +186,29 @@ def _face_world_matrix(model: ModelDefinition, plane: FacePlane, depth: int) -> 
     return object_world_matrix(model, anchor.id) @ f @ translation(0, 0, plane.offset)
 
 
-def extrude_local_matrix(model: ModelDefinition, obj: ExtrudeObject | RevolveObject, depth: int = 0) -> np.ndarray | None:
-    """스케치 평면 좌표 → 돌출 객체 로컬. 참조가 깨졌거나 순환이면 None."""
+def extrude_local_matrix(model: ModelDefinition, obj, depth: int = 0) -> np.ndarray | None:
+    """스케치 평면 좌표 → 돌출(회전·헬릭스) 객체 로컬. 참조가 깨졌거나 순환이면 None."""
+    return sketch_local_matrix(model, obj.id, sketch_feature_ref(obj).sketch, depth)
+
+
+def sketch_local_matrix(model: ModelDefinition, object_id: str, sketch_id: str, depth: int = 0) -> np.ndarray | None:
+    """스케치 평면 좌표 → 객체 로컬 (로프트처럼 한 객체가 여러 스케치를 쓸 때)"""
     if depth > MAX_DEPTH:
         return None
-    sk: Sketch | None = next((s for s in model.sketches if s.id == sketch_feature_ref(obj).sketch), None)
+    sk: Sketch | None = next((s for s in model.sketches if s.id == sketch_id), None)
     if sk is None:
         return None
     if not isinstance(sk.plane, FacePlane):
         return plane_matrix(sk.plane)
     world = _face_world_matrix(model, sk.plane, depth)
-    return None if world is None else np.linalg.inv(object_world_matrix(model, obj.id)) @ world
+    return None if world is None else np.linalg.inv(object_world_matrix(model, object_id)) @ world
 
 
 def dependency_cycle(model: ModelDefinition) -> str | None:
     """돌출 → 스케치, 스케치(면 평면) → 붙은 객체, 불리언 → 자식 의존에 순환이 있으면 사용자 메시지."""
     edges: dict[str, list[str]] = {}
     for o in model.objects:
-        if ref := sketch_feature_ref(o):
+        for ref in sketch_refs(o):
             edges.setdefault(f"o:{o.id}", []).append(f"s:{ref.sketch}")
         if o.child_ids:
             edges.setdefault(f"o:{o.id}", []).extend(f"o:{c}" for c in o.child_ids)

@@ -25,11 +25,12 @@
 | 외관 색 · 숨기기 | Appearance / Hide | Material / Hide | ✅ |
 | 돌출 컷 · 회전 컷 (다른 바디에서 빼기) | Extruded / Revolved Cut | Boolean | ✅ |
 | 크기 조정 (균일·축별 배율) | Scale | Scale | ✅ |
-| 스윕 (경로 따라 단면) | Swept Boss/Cut | Curve bevel | ⬜ |
-| 로프트 (단면 사이 잇기) | Lofted Boss/Cut | Skin/Bridge | ⬜ |
+| 헬릭스 스윕 (스프링·코일) | Swept along Helix | Screw modifier | ✅ |
+| 스윕 (임의 경로) | Swept Boss/Cut | Curve bevel | ⬜ |
+| 로프트 (단면 2~10개, 직선 연결) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선 없음) |
 | 구배 (빼기 각) | Draft | — | ⬜ (OCCT) |
 | 리브 | Rib | — | ⬜ |
-| 나사산 (외부·내부) | Thread / Cosmetic thread | Screw modifier | ⬜ |
+| 나사산 (원통에 60° 나사산 감기) | Thread | Screw modifier | ✅ 외부 나사 (내부 나사는 ⬜) |
 | 돔 · 랩 · 변형 | Dome / Wrap / Flex | Simple Deform | ⬜ |
 | 곡선 패턴 · 스케치 구동 패턴 | Curve/Sketch Driven Pattern | Array on curve | ⬜ |
 | 임의 모서리·면 필렛 / 가변 반경 | Fillet (edges/faces) | Bevel | ⬜ (OCCT, 면·모서리 선택 필요) |
@@ -44,7 +45,8 @@
 | 기하 구속 11종 + 자유도·완전 정의 표시, 충돌 구속 진단 | Relations / SketchXpert | ✅ |
 | 슬롯 (방향·길이·폭) | Straight Slot | ✅ |
 | 직선 프로파일 경계·호·스플라인·타원 | Line/Arc/Spline/Ellipse | ⬜ |
-| 스케치 필렛·모따기·잘라내기·연장·오프셋 | Sketch Fillet/Trim/Extend/Offset | ⬜ |
+| 스케치 오프셋 (사각형·원·슬롯·다각형) | Offset Entities | ✅ |
+| 스케치 필렛·모따기·잘라내기·연장 | Sketch Fillet/Trim/Extend | ⬜ |
 | 구성선 (구속 기준선) | Construction / Centerline | ✅ |
 | 스케치 대칭·패턴 | Mirror/Pattern Entities | ⬜ |
 | 각도 구속 | Angle | ✅ |
@@ -83,8 +85,9 @@
 |------|------|
 | 프로젝트 저장·열기(.ai3d), 자동 임시 저장·복원, 구버전 읽기 | ✅ |
 | 내보내기 STL·3MF·STEP·GLB | ✅ (STEP 은 서버 엔진) |
-| 가져오기 STL·OBJ·STEP (메시·B-rep 객체) | ⬜ |
-| 3MF 색 내보내기 | ⬜ |
+| 가져오기 STL·OBJ (메시 객체, 미터 단위 자동 보정) | ✅ (서버 엔진은 2만 삼각형까지) |
+| 가져오기 STEP | ⬜ (묶음 4: 브라우저 OCCT) |
+| 3MF 색 내보내기 | ✅ |
 | 도면 PDF·DXF | ⬜ (7장) |
 
 ## 6. 조립품 (솔리드웍스 Assembly / 인벤터)
@@ -121,7 +124,8 @@
 1. ✅ 묶음 1 (형식 v6): 억제·외관·숨기기·쉘·구멍·선형/원형 패턴·대칭 + 보기 도구 (표시 모드·단면·측정·질량 특성·PNG)
 2. ✅ 묶음 2 (형식 v7): 돌출·회전 컷, 크기 조정, 원근/직교, 각도 평면, 스케치 슬롯·구성선·각도 구속
    (남은 스케치 요소 — 호·스플라인·잘라내기·오프셋 — 는 묶음 3에 합침)
-3. 묶음 3: 스케치 호·필렛·잘라내기·오프셋 + 스윕·로프트·나사산·리브 + STL/OBJ/STEP 가져오기 + 3MF 색
+3. ✅ 묶음 3 (형식 v8): 로프트, 헬릭스·나사산, STL·OBJ 가져오기, 스케치 오프셋, 3MF 색
+   (남은 것 → 묶음 4: 스케치 호·필렛·잘라내기, 임의 경로 스윕, 리브, STEP 가져오기)
 4. 묶음 4: 브라우저 OCCT(WASM) 엔진 → 임의 모서리 필렛·구배·면 선택 (웹·Windows 동일)
 5. 묶음 5: 조립품 (부품 삽입·메이트) → 묶음 6: 도면
 6. 이후: 메시 편집·스컬프트(블렌더), 판금, 렌더, 해석, 애니메이션

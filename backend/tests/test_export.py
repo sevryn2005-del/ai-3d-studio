@@ -67,7 +67,7 @@ def test_invalid_model_returns_issues(client, default_model):
 
 
 def test_empty_model(client):
-    r = client.post("/api/export/stl", json={"schemaVersion": 7, "units": "mm", "sketches": [], "objects": []})
+    r = client.post("/api/export/stl", json={"schemaVersion": 8, "units": "mm", "sketches": [], "objects": []})
     assert r.status_code == 422
     assert "내보낼 객체가 없습니다" in r.json()["issues"][0]["message"]
 
@@ -198,3 +198,14 @@ def test_glb_structure_and_y_up_meters(client, default_model):
 
 def test_unknown_format_rejected(client, default_model):
     assert client.post("/api/export/obj", json=default_model).status_code == 422
+
+
+def test_3mf_object_colors(client, default_model):
+    """외관 색 → basematerials (브라우저 exporters.test.ts 와 같은 구조): 색 있는 객체만 pid/pindex"""
+    model = two_objects(default_model)
+    model["objects"][0]["color"] = "#e5534b"
+    with zipfile.ZipFile(io.BytesIO(fetch(client, "3mf", model))) as z:
+        xml = z.read("3D/3dmodel.model").decode()
+    assert '<basematerials id="3">' in xml and 'displaycolor="#E5534B"' in xml
+    assert 'object id="1" type="model" name=' in xml and 'pid="3" pindex="0"' in xml
+    assert xml.count("pid=") == 1

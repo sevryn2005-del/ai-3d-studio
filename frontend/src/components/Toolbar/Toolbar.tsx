@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
 import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
-import { quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, startFeature, startSketch } from '../../features/selection/featureFlow';
+import {
+  importMeshFile, openLoft, quickHelix, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+} from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
 import { useIsDirty, useProjectStore } from '../../features/projects/projectStore';
@@ -71,6 +73,9 @@ export function Toolbar() {
             다시 실행
           </button>
           <span className="sep" />
+          <button onClick={() => void importMeshFile()} title="STL·OBJ 파일을 가져와 객체로 (다른 프로그램·블렌더에서 만든 모델)" data-testid="import-mesh">
+            가져오기
+          </button>
           <ExportMenu />
         </nav>
         <div className="project-name" data-testid="project-name" title={dirty ? '저장하지 않은 변경 사항이 있습니다' : '저장됨'}>
@@ -96,6 +101,9 @@ export function Toolbar() {
             <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓)" onClick={() => startFeature('extrude')} />
             <Cmd icon="revolve" label="회전 보스/베이스" title="선택한 스케치를 v 축 둘레로 회전" onClick={() => startFeature('revolve')} />
             <Cmd icon="extrudeCut" label="돌출 컷" title="선택한 스케치를 돌출해 바디에서 뺌 (면 위 스케치는 안쪽으로)" onClick={() => startFeature('extrude', true)} testId="cmd-extrude-cut" />
+            <Cmd icon="loft" label="로프트" title="여러 스케치 단면을 순서대로 이어 형상 만들기" onClick={openLoft} testId="cmd-loft" />
+            <Cmd icon="helix" label="헬릭스" title="선택한 스케치 단면을 나선으로 감기 (스프링·코일)" onClick={quickHelix} testId="cmd-helix" />
+            <Cmd icon="thread" label="나사산" title="선택한 원통에 나사산(피치 1.5mm) 감아 합치기" onClick={() => quickThread()} testId="cmd-thread" />
             <Cmd icon="revolveCut" label="회전 컷" title="선택한 스케치를 회전해 바디에서 뺌 (홈·구멍)" onClick={() => startFeature('revolve', true)} testId="cmd-revolve-cut" />
             <span className="sep" />
             <Cmd icon="hole" label="구멍 가공" title="선택한 객체의 윗면 중심에 구멍 (속성에서 위치·종류 조정)" onClick={quickHole} testId="cmd-hole" />

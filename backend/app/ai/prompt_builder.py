@@ -98,6 +98,9 @@ Model rules (the commands follow them exactly)
 - More sketch elements: add_slot {sketch, center, length, width, angle} adds a slot (long hole / stadium): length = distance between the two round ends' centres, width = slot width, angle = direction in degrees (dimensions "<id>.length", "<id>.width"; turn it with set_entity_angle). add_line {sketch, points: [[u,v],[u,v]]} adds a construction line (no geometry) usable in constraints as edge "<id>.e0" and points "<id>.p0"/"<id>.p1". angle [edge, edge] + value (degrees, 0-180, counter-clockwise from the first edge to the second) fixes the angle between two edges.
 - Cut with a sketch feature: extrude or revolve with an explicit id, then cut {base: body, tools: [that id]} (negative extrude distance on a face sketch goes into the face).
 - Sketch planes may also be {"type": "angled", "base": "XY"|"XZ"|"YZ", "axis": "u"|"v", "angle": degrees, "offset": mm}: the base plane tilted around its own u or v axis.
+- helix {sketch, profile, pitch, turns}: sweeps a profile around the sketch v axis while rising pitch mm per turn (springs, threads, coils, augers). Like revolve the profile must be on the u > 0 side; pitch must exceed the profile height. For a thread: sketch on XZ, a small triangle polygon just outside the rod radius, then union it with the rod.
+- loft {sections: [{sketch, profile}, ...]} (2-10 sections, each in its own sketch, e.g. XY planes at different offsets) joins the sections in order with straight faces (vase, transitions, tapered handles).
+- offset_entity {sketch, entity, distance}: adds a copy of a rectangle/circle/slot/polygon grown outward (+) or shrunk inward (-) by distance mm (walls, gaskets, rims).
 - Scale: {"type": "pattern", "pattern": {"type": "scale", "source": id, "x": 1.5, "y": 1.5, "z": 1.5}} scales a top-level object about the world origin (0.01-100 per axis).
 - revolve turns a sketch profile around the sketch's v axis (the line u = 0) by angle degrees (default 360) into a solid (kind "revolve"); the profile must lie on the u >= 0 side. For a cup, bowl, knob or bottle: sketch on plane XZ (u = X, v = Z, so the axis is the world Z axis), draw the half cross-section with add_polygon (u = radius, v = height) and revolve it. Change the angle later with set_params {angle}.
 - shell hollows a box, cylinder or extrude: {"type": "shell", "target": id, "thickness": mm, "open": ["top"]} leaves walls of that thickness and removes the listed faces (box: top/bottom/+X/-X/+Y/-Y, cylinder: top/bottom, extrude: end/start). thickness 0 removes it. Prefer this over cutting an inner box for cups, boxes and enclosures. Not on filleted boxes.
@@ -112,6 +115,10 @@ Model rules (the commands follow them exactly)
 def model_context(model: ModelDefinition, selected_id: str | None) -> str:
     """현재 설계 상태 (매 요청 바뀌므로 마지막 사용자 메시지에 넣는다)."""
     data = model.model_dump(mode="json")
+    # 가져온 메시의 정점 데이터(수 MB)는 AI 에 보내지 않는다 — 비용·개인정보. 요약만 남긴다
+    for o in data["objects"]:
+        if o.get("kind") == "mesh":
+            o["mesh"] = {"triangles": len(o["mesh"]["indices"]) * 3 // 4 // 12, "data": "omitted"}
     selected = selected_id if selected_id and any(o.id == selected_id for o in model.objects) else None
     return (
         "<current_model>\n"
