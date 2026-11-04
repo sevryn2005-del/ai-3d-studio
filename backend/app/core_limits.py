@@ -10,7 +10,7 @@ import json
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-MAX_BODY_BYTES = 1_000_000  # 1 MB
+MAX_BODY_BYTES = 40_000_000  # 40 MB — 가져온 메시(형식 v8, base64 최대 16MB × 2)를 담은 모델. 로컬(127.0.0.1) 전용 서버
 
 
 class BodySizeLimitMiddleware:

@@ -16,6 +16,7 @@ function cubeStl(path: string) {
 
 for (const engine of ['server', 'browser'] as const) {
   test(`나사산·로프트·STL 가져오기 (${engine === 'server' ? 'CadQuery 서버' : '브라우저'} 엔진)`, async ({ page }, info) => {
+    test.setTimeout(120_000); // 나사산·암나사 등 무거운 형상 여러 개
     if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
     await page.goto('/');
     await page.waitForFunction(() => !!window.__AI3D_DEV__);
@@ -55,5 +56,18 @@ for (const engine of ['server', 'browser'] as const) {
     const m = (await sources(page)).mesh_1!;
     expect(m.max[2]! - m.min[2]!).toBeCloseTo(10, 3);
     await expect(page.getByTestId('notice')).toContainText('삼각형 12개');
+
+    // 암나사: 큐브에 구멍(Ø5) → 구멍 선택 → 암나사 (M6 × 1, 홈 빼기)
+    await page.locator('[data-object-id="box_1"]').click();
+    await page.getByTestId('cmd-hole').click();
+    await expect.poll(async () => (await sources(page)).cut_1?.source, { timeout: 20_000 }).toBe(engine);
+    const plain = (await sources(page)).cut_1!.vertices;
+    await page.locator('[data-object-id="hole_1"]').click();
+    await page.getByTestId('param-depth').fill('6'); // 짧은 구멍 (계산 시간: 병렬 테스트에서도 여유 있게)
+    await page.getByTestId('param-depth').press('Enter');
+    await page.getByTestId('cmd-internal-thread').click();
+    await expect(page.getByRole('list', { name: '객체 목록' })).toContainText('암나사 P1');
+    await expect.poll(async () => (await sources(page)).cut_2?.vertices ?? 0, { timeout: 60_000 }).toBeGreaterThan(plain);
+    expect((await sources(page)).cut_2!.max[2]).toBe(20); // 외형 그대로
   });
 }

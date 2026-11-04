@@ -28,7 +28,7 @@ from app.cad.commands import (
     resolve_profile,
 )
 from app.cad.constraints import constraint_errors
-from app.cad.mesh_import import mesh_error
+from app.cad.mesh_data import mesh_error
 from app.cad.features import is_suppressed, pattern_error, shell_error
 from app.cad.frames import dependency_cycle, faces_of
 

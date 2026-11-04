@@ -6,7 +6,8 @@ import type { CadCommand, StandardPlane } from '../../cad/commandTypes';
 import { nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { resolveProfile, revolveProfileError } from '../../cad/sketch';
-import { facesOf } from '../../cad/sketchPlane';
+import { facesOf, objectWorldMatrix } from '../../cad/sketchPlane';
+import { fromMatrix } from '../../cad/transformMath';
 import { childIds, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
 import { helixError, helixProfilePoints } from '../../cad/sections';
@@ -297,4 +298,44 @@ export async function importMeshFile() {
   } catch (e) {
     scene.reportError(`가져오기 실패: ${(e as Error).message}`);
   }
+}
+
+/** ISO 보통 나사 피치 (호칭 지름 → 피치). 구멍 지름에 가장 가까운 호칭을 쓴다 */
+const ISO_COARSE: [number, number][] = [[2, 0.4], [2.5, 0.45], [3, 0.5], [4, 0.7], [5, 0.8], [6, 1], [8, 1.25], [10, 1.5], [12, 1.75], [16, 2], [20, 2.5], [24, 3]];
+
+/**
+ * 암나사 (구멍 안쪽 나사산): 선택한 구멍(구멍 가공으로 만든 구멍 도구)의 벽에 60° 나사 홈을 헬릭스로 판다.
+ * 구멍 지름 = 나사의 안지름으로 보고, 가장 가까운 ISO 보통 나사 피치를 쓴다. 명령 한 묶음 = 실행 취소 1번
+ */
+export function quickInternalThread() {
+  const scene = useSceneStore.getState();
+  const model = selectModel(scene);
+  const obj = selectSelectedObject(scene);
+  if (!obj || obj.kind !== 'hole') {
+    scene.reportError('암나사: 피처 트리에서 구멍(구멍 가공으로 만든 "구멍 Ø…")을 선택하세요');
+    return;
+  }
+  const parents = new Map(model.objects.flatMap((o) => childIds(o).map((c) => [c, o.id] as const)));
+  let root = obj.id;
+  while (parents.has(root)) root = parents.get(root)!;
+  const d = obj.params.diameter;
+  const pitch = ISO_COARSE.reduce((best, [nom, p]) => (Math.abs(nom - (d + 1.08 * p)) < Math.abs(best[0] - (d + 1.08 * best[1])) ? [nom, p] : best))[1];
+  const r = d / 2;
+  const depth = Math.round(0.6 * pitch * 1000) / 1000;
+  const turns = Math.floor(((obj.params.depth - pitch) / pitch) * 10) / 10;
+  if (turns < 0.5) {
+    scene.reportError('암나사: 구멍이 피치보다 충분히 깊어야 합니다');
+    return;
+  }
+  const world = fromMatrix(objectWorldMatrix(model, obj.id));
+  const sk = nextId(model, 'sketch');
+  const hx = nextId(model, 'helix');
+  const r0 = Math.round((r - 0.05) * 1000) / 1000;
+  scene.dispatchBatch([
+    { type: 'create_sketch', id: sk, name: `${obj.name} 암나사 단면`, plane: { type: 'XZ', offset: 0 } },
+    { type: 'add_polygon', sketch: sk, id: 'thread', points: [[r0, 0.05 * pitch], [r + depth, pitch / 2], [r0, 0.95 * pitch]] },
+    { type: 'helix', id: hx, name: `암나사 P${pitch}`, sketch: sk, profile: 'thread', pitch, turns },
+    { type: 'set_transform', target: hx, position: world.position, rotation: world.rotation },
+    { type: 'cut', base: root, tools: [hx], name: `${model.objects.find((o) => o.id === root)?.name ?? root} (암나사)` },
+  ]);
 }

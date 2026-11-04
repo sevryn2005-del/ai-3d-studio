@@ -6,7 +6,7 @@ import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
 import {
-  importMeshFile, openLoft, quickHelix, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+  importMeshFile, openLoft, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
@@ -104,6 +104,7 @@ export function Toolbar() {
             <Cmd icon="loft" label="로프트" title="여러 스케치 단면을 순서대로 이어 형상 만들기" onClick={openLoft} testId="cmd-loft" />
             <Cmd icon="helix" label="헬릭스" title="선택한 스케치 단면을 나선으로 감기 (스프링·코일)" onClick={quickHelix} testId="cmd-helix" />
             <Cmd icon="thread" label="나사산" title="선택한 원통에 나사산(피치 1.5mm) 감아 합치기" onClick={() => quickThread()} testId="cmd-thread" />
+            <Cmd icon="thread" label="암나사" title="선택한 구멍 벽에 나사 홈 파기 (ISO 보통 나사 피치)" onClick={quickInternalThread} testId="cmd-internal-thread" />
             <Cmd icon="revolveCut" label="회전 컷" title="선택한 스케치를 회전해 바디에서 뺌 (홈·구멍)" onClick={() => startFeature('revolve', true)} testId="cmd-revolve-cut" />
             <span className="sep" />
             <Cmd icon="hole" label="구멍 가공" title="선택한 객체의 윗면 중심에 구멍 (속성에서 위치·종류 조정)" onClick={quickHole} testId="cmd-hole" />

@@ -70,19 +70,45 @@ def test_all_suppressed_export_is_rejected(client):
     assert r.status_code != 200
 
 
-def test_worker_mesh_cache_reuses_and_invalidates():
-    """서버 객체별 메시 캐시: 같은 객체·스케치면 재사용, 치수·자식 위치가 바뀌면 다시 계산, 최상위 위치만 바뀌면 재사용"""
-    from app.cad import jobs
+def test_shared_mesh_cache_reuses_and_invalidates(client):
+    """API 공유 메시 캐시: 같은 객체·스케치면 재사용, 최상위 위치만 바뀌면 재사용, 치수가 바뀌면 다시 계산"""
+    from app.api import modeling
 
-    jobs._MESH_CACHE.clear()
+    cache = modeling.mesh_cache(client.app.state.cad_pool)
+    cache._data.clear()
     model = _first("hole-counterbore")
-    first = jobs.evaluate(model)
-    assert len(jobs._MESH_CACHE) == 1
+    first = client.post("/api/model/evaluate", json=model).json()
+    assert first["ok"] and len(cache) == 1
     root = next(o for o in model["objects"] if o["kind"] == "boolean")
     root["transform"]["position"] = [50, 0, 0]
-    assert jobs.evaluate(model)["meshes"] == first["meshes"]  # 위치만 바뀜 → 캐시
-    assert len(jobs._MESH_CACHE) == 1
+    again = client.post("/api/model/evaluate", json=model).json()
+    assert again["meshes"] == first["meshes"] and len(cache) == 1
     box = next(o for o in model["objects"] if o["kind"] == "box")
     box["params"]["width"] = 50
-    changed = jobs.evaluate(model)
-    assert changed["meshes"] != first["meshes"] and len(jobs._MESH_CACHE) == 2
+    changed = client.post("/api/model/evaluate", json=model).json()
+    assert changed["meshes"] != first["meshes"] and len(cache) == 2
+
+
+def test_api_process_does_not_load_cadquery():
+    """CadQuery(OCCT)는 격리 워커에서만 — API 프로세스의 검증·캐시 모듈은 불러오지 않는다"""
+    import subprocess
+    import sys
+
+    code = "import sys, app.api.modeling, app.cad.validation; print('cadquery' in sys.modules)"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "False"
+
+
+def test_mesh_cache_claims_dedupe_concurrent_work():
+    """같은 키를 두 요청이 동시에 맡지 않는다: 두 번째는 기다릴 이벤트를 받고, 끝나면 깨어난다"""
+    from app.cad.mesh_cache import MeshCache
+
+    c = MeshCache()
+    mine, waits = c.claim(["a", "b"])
+    assert mine == ["a", "b"] and waits == []
+    mine2, waits2 = c.claim(["a", "c"])
+    assert mine2 == ["c"] and len(waits2) == 1 and not waits2[0].is_set()
+    c.put("a", {"m": 1})
+    c.release(["a", "b"])
+    assert waits2[0].is_set()
+    assert c.claim(["a"]) == ([], [])

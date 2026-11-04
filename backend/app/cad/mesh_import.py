@@ -6,39 +6,16 @@ OCCT 는 삼각형마다 면을 만들어 꿰매므로 느리다 → 서버 엔�
 
 from __future__ import annotations
 
-import base64
-
 import cadquery as cq
-import numpy as np
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon, BRepBuilderAPI_MakeSolid, BRepBuilderAPI_Sewing
 from OCP.gp import gp_Pnt
 from OCP.ShapeFix import ShapeFix_Solid
 from OCP.TopAbs import TopAbs_SHELL
 from OCP.TopoDS import TopoDS
 
+from app.cad.mesh_data import decode, mesh_error  # noqa: F401  (mesh_error 재노출)
+
 MAX_SERVER_MESH_TRIANGLES = 20_000
-
-
-def decode(positions: str, indices: str) -> tuple[np.ndarray, np.ndarray]:
-    v = np.frombuffer(base64.b64decode(positions), dtype="<f4").astype(np.float64).reshape(-1, 3)
-    t = np.frombuffer(base64.b64decode(indices), dtype="<u4").astype(np.int64).reshape(-1, 3)
-    return v, t
-
-
-def mesh_error(positions: str, indices: str, max_triangles: int) -> str | None:
-    try:
-        v, t = decode(positions, indices)
-    except Exception:
-        return "메시 데이터가 올바르지 않습니다"
-    if len(t) < 4:
-        return "메시 삼각형이 4개 이상이어야 합니다"
-    if len(t) > max_triangles:
-        return f"메시 삼각형은 최대 {max_triangles:,}개까지 가능합니다"
-    if t.size and t.max() >= len(v):
-        return "메시 삼각형이 없는 정점을 가리킵니다"
-    if not np.isfinite(v).all() or np.abs(v).max() > 10_000:
-        return "메시 좌표가 허용 범위를 벗어납니다"
-    return None
 
 
 def mesh_solid(positions: str, indices: str, name: str) -> cq.Shape:

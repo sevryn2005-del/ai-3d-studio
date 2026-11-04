@@ -26,9 +26,11 @@ test('연속 편집은 디바운스되어 마지막 상태만 검증 요청된�
 
   let count = 0;
   page.on('request', (r) => r.url().endsWith('/api/model/evaluate') && count++);
-  for (const label of ['원통', '구', '원뿔', '박스']) {
-    await page.getByRole('button', { name: `+ ${label}` }).click();
-  }
+  // 사람이 빠르게 누르는 것과 같게 한 번에 (CPU 가 바쁜 병렬 테스트에서도 클릭 간격이 디바운스보다 짧도록)
+  await page.evaluate(() => {
+    for (const label of ['원통', '구', '원뿔', '박스'])
+      [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === `+ ${label}`)?.click();
+  });
   await expect(page.getByTestId('server-evaluation')).toHaveText('서버 검증 ✓');
   await page.waitForTimeout(600);
   expect(count).toBeLessThanOrEqual(2);

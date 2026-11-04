@@ -30,7 +30,7 @@
 | 로프트 (단면 2~10개, 직선 연결) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선 없음) |
 | 구배 (빼기 각) | Draft | — | ⬜ (OCCT) |
 | 리브 | Rib | — | ⬜ |
-| 나사산 (원통에 60° 나사산 감기) | Thread | Screw modifier | ✅ 외부 나사 (내부 나사는 ⬜) |
+| 나사산: 수나사(원통에 감기)·암나사(구멍 벽에 홈, ISO 보통 피치) | Thread | Screw modifier | ✅ |
 | 돔 · 랩 · 변형 | Dome / Wrap / Flex | Simple Deform | ⬜ |
 | 곡선 패턴 · 스케치 구동 패턴 | Curve/Sketch Driven Pattern | Array on curve | ⬜ |
 | 임의 모서리·면 필렛 / 가변 반경 | Fillet (edges/faces) | Bevel | ⬜ (OCCT, 면·모서리 선택 필요) |

@@ -127,7 +127,7 @@ class TestEvaluateModel:
 def test_body_size_limit(client):
     r = client.post(
         "/api/model/evaluate",
-        content=b"{" + b" " * 1_100_000 + b"}",
+        content=b"{" + b" " * 41_000_000 + b"}",
         headers={"content-type": "application/json"},
     )
     assert r.status_code == 413
@@ -136,8 +136,8 @@ def test_body_size_limit(client):
 
 def test_body_size_limit_without_content_length(client):
     def chunks():
-        for _ in range(20):
-            yield b" " * 100_000
+        for _ in range(42):
+            yield b" " * 1_000_000
 
     r = client.post("/api/model/evaluate", content=chunks(), headers={"content-type": "application/json"})
     assert r.status_code == 413

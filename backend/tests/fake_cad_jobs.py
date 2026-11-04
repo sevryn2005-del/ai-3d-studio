@@ -9,4 +9,8 @@ def evaluate(payload):
     return {"meshes": [], "computeMs": 0}
 
 
-JOBS = {"evaluate": evaluate}
+def evaluate_objects(payload):
+    return evaluate(payload["model"])
+
+
+JOBS = {"evaluate": evaluate, "evaluate_objects": evaluate_objects}
