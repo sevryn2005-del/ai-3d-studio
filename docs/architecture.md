@@ -117,7 +117,7 @@ Three.js 뷰포트 ◀───────────────────�
   같은 OCCT 호출·같은 선택 규칙(판정 오차 1e-4mm, 정확한 곡선 바운딩 박스, 이음선·퇴화 모서리 제외).
 - 브라우저 워커는 최상위 객체마다 엔진을 고른다(`objectNeedsPrecise`): 정밀 피처가 든 트리만 OCCT, 나머지는 manifold.
   OCCT 메시는 정점을 합쳐(welded) 브라우저 엔진 계약과 같게 돌려준다. STEP 내보내기는 모든 객체를 OCCT 로.
-- WASM 로딩: `scripts/occtWasm.ts` Vite 플러그인이 23MB WASM 을 gzip(7MB)으로 만들어 번들 자산으로 넣고, 글루 코드가 원본 WASM 을
+- WASM 로딩: `scripts/occtWasm.ts` Vite 플러그인이 23MB WASM 을 gzip(7MB, 파일 이름 occt-gzip.wasm — 정적 호스팅이 .gz 를 제공하지 않는 경우가 있어 확장자는 .wasm)으로 만들어 번들 자산으로 넣고, 글루 코드가 원본 WASM 을
   자산으로 끌어들이지 않게 막는다. 워커가 처음 필요할 때 받아 `DecompressionStream` 으로 푼다 (외부 CDN 없음).
 - 비균일 크기 조정 안의 정밀 피처: 이 OCCT 빌드에 `BRepBuilderAPI_GTransform` 이 없어 출력 정밀도 메시로 바꿔 늘인 뒤 다시 꿰맨다.
 
