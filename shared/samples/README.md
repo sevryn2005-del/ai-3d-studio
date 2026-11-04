@@ -6,6 +6,7 @@
 | 파일 | 만든 코드 | 내용 |
 |------|-----------|------|
 | `project-v1-e0ac5e7.ai3d` | 커밋 `e0ac5e7` (1~3주 차) | 기준 판 60×40×8 − 지름 6 관통 구멍(불리언), 30° 회전한 구 |
+| `block-hole.step` | CadQuery 2.x (`cq.Solid.makeBox(10,20,30, pnt=(100,50,5))` − 지름 4 원통, `cq.exporters.export`) | STEP 가져오기 시험: 원점이 아닌 곳의 블록 + 관통 구멍. 부피 6000 − π·4·30 (feature-cases `step-import-block`) |
 | `project-v2-plate.ai3d` | 형식 v2 도입 커밋 (스케치·돌출) | 사각형 스케치 80×40 → 4mm 돌출 − 원 스케치 Ø6 (18,0) 돌출 6mm 관통 구멍 |
 
 만드는 방법(재현):

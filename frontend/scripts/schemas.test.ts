@@ -7,10 +7,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CadCommandSchema } from '../src/cad/commandTypes';
 import { generateSchemas } from '../src/cad/schemaExport';
-import { SCHEMA_DIR } from './schemaPaths';
+import { SCHEMA_DIR, readSamples } from './schemaPaths';
 
 describe('shared/schemas 동기화', () => {
-  for (const [file, expected] of Object.entries(generateSchemas())) {
+  for (const [file, expected] of Object.entries(generateSchemas(readSamples()))) {
     it(`${file} 가 최신 상태다`, () => {
       const actual = readFileSync(join(SCHEMA_DIR, file), 'utf8');
       expect(actual, `${file} 가 오래되었습니다. npm run schema:export 를 실행하세요.`).toBe(expected);
@@ -18,7 +18,7 @@ describe('shared/schemas 동기화', () => {
   }
 
   it('명령 스키마에 모든 명령 type 이 포함된다', () => {
-    const schema = JSON.parse(generateSchemas()['cad-command.schema.json']!);
+    const schema = JSON.parse(generateSchemas(readSamples())['cad-command.schema.json']!);
     expect(schema.oneOf).toBeDefined();
     const types = schema.oneOf.map((s: { properties: { type: { const: string } } }) => s.properties.type.const);
     expect(types).toEqual([
@@ -49,6 +49,11 @@ describe('shared/schemas 동기화', () => {
       'helix',
       'loft',
       'import_mesh',
+      'edge_feature',
+      'set_edge_feature',
+      'draft',
+      'set_draft',
+      'import_step',
       'cut',
       'union',
       'intersect',

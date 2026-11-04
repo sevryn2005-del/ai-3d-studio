@@ -5,3 +5,4 @@ test-results
 playwright-report
 dist-web
 dist-artifact
+src/features/engine/occt/generated/

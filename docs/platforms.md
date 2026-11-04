@@ -26,7 +26,7 @@
 |------|----------|-----------|----------|
 | **Windows 앱 (Tauri)** | 로컬 CadQuery (사이드카) | 아래 Windows 데스크톱 앱 절 | STL·3MF·STEP·GLB |
 | **로컬 모드** (현재) | 로컬 CadQuery, 서버가 꺼지면 브라우저 엔진 | `run-local.sh` / `run-local.ps1` | STL·3MF·STEP·GLB |
-| **웹 (정적 호스팅)** | 브라우저 엔진 (manifold-3d WASM) | `VITE_CAD_ENGINE=browser npm run build` → 정적 파일 업로드 | STL·3MF·GLB |
+| **웹 (정적 호스팅)** | 브라우저 엔진 (manifold-3d WASM + 정밀 피처는 OCCT WASM) | `VITE_CAD_ENGINE=browser npm run build` → 정적 파일 업로드 | STL·3MF·STEP·GLB |
 | **웹 + 클라우드 CAD** (선택) | 원격 CadQuery 서버 | `VITE_API_BASE=https://…/api npm run build` | STL·3MF·STEP·GLB |
 
 ### 엔진 선택 (`features/engine/engines.ts`)
@@ -39,13 +39,13 @@
 
 ### 두 CAD 엔진의 차이
 
-| | 서버 (CadQuery/OCCT) | 브라우저 (manifold-3d) |
+| | 서버 (CadQuery/OCCT) | 브라우저 (manifold-3d + OCCT WASM) |
 |--|--|--|
-| 형상 표현 | 정확한 곡면 (B-rep) | 다각형 메시 (표면 편차 ≤ 0.01mm로 분할) |
-| STEP | 지원 | 미지원 (메뉴에서 비활성 + 안내) |
+| 형상 표현 | 정확한 곡면 (B-rep) | 다각형 메시 (표면 편차 ≤ 0.01mm로 분할). 필렛·구배·STEP 이 든 객체만 OCCT B-rep |
+| STEP | 지원 | 지원 (OCCT WASM, 처음 쓸 때 7MB 압축 파일을 불러옴) |
 | 결과 메시 | 면마다 정점 분리 | 정점 공유 (화면은 30° 기준 법선 분리) |
 | 격리 | 프로세스 워커 + 타임아웃 | Web Worker + 타임아웃 (초과 시 워커 재생성) |
-| 크기 | 설치 약 1.7GB | WASM 0.5MB + 워커 0.27MB |
+| 크기 | 설치 약 1.7GB | manifold WASM 0.5MB + 워커 0.27MB, 정밀 엔진 7MB(gzip, 필요할 때만) |
 
 두 엔진이 같은 해석을 하는지는 공유 픽스처 `shared/schemas/examples/model-cut-rotated.json`
 (45° 회전한 판의 구멍이 월드 (60, 0) 에 있어야 함)으로 백엔드(`test_boolean.py`)와

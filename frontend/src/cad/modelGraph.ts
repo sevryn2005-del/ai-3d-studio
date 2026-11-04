@@ -12,8 +12,19 @@ import { meshError } from './meshData';
 
 export function childIds(obj: CadObject): ObjectId[] {
   if (obj.kind === 'boolean') return [obj.boolean.base, ...obj.boolean.tools];
-  if (obj.kind === 'pattern') return [obj.pattern.source];
-  return [];
+  const src = wrapperSource(obj);
+  return src ? [src] : [];
+}
+
+/**
+ * 원본 하나를 감싸는 피처(패턴·대칭·크기 조정·모서리 처리·구배)의 원본 ID. 아니면 null.
+ * 감싸는 객체를 지우면 원본은 월드 위치 그대로 남는다 (솔리드웍스와 같음)
+ */
+export function wrapperSource(obj: CadObject): ObjectId | null {
+  if (obj.kind === 'pattern') return obj.pattern.source;
+  if (obj.kind === 'fillet') return obj.fillet.source;
+  if (obj.kind === 'draft') return obj.draft.source;
+  return null;
 }
 
 /** 자식 ID → 부모 ID */

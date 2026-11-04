@@ -68,7 +68,7 @@ test('로컬 CAD 서버까지 꺼지면 브라우저 엔진으로 전환: 편집
 
   const menu = page.getByRole('button', { name: '내보내기 ▾' });
   await menu.click();
-  await expect(page.getByRole('menuitem', { name: /^STEP/ })).toBeDisabled(); // 정확한 곡면은 서버 필요
+  await expect(page.getByRole('menuitem', { name: /^STEP/ })).toBeEnabled(); // 브라우저 정밀 엔진(OCCT WASM)으로도 가능
   for (const fmt of ['STL', '3MF', 'GLB']) {
     if (fmt !== 'STL') await menu.click();
     const [download] = await Promise.all([

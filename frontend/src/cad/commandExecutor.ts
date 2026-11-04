@@ -30,7 +30,7 @@ import {
   LIMITS,
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
-import { byId, depthOf, parentMap, subtreeIds } from './modelGraph';
+import { byId, depthOf, parentMap, subtreeIds, wrapperSource } from './modelGraph';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
@@ -85,7 +85,7 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         return fail(`${OPERATION_INFO[target.boolean.operation].label} 결과에는 치수 파라미터가 없습니다. 포함된 객체의 치수를 바꾸세요`);
       }
       if (target.kind === 'pattern') return fail('패턴 값은 set_pattern 으로 바꿉니다');
-      if (target.kind === 'loft' || target.kind === 'mesh') return fail(`${KIND_INFO[target.kind].label}에는 치수 파라미터가 없습니다`);
+      if (!('params' in target)) return fail(`${KIND_INFO[target.kind].label}에는 치수 파라미터가 없습니다`);
       const allowed = new Set(KIND_INFO[target.kind].params.map((p) => p.key));
       const invalid = Object.keys(cmd.params).filter((k) => !allowed.has(k));
       if (invalid.length > 0) {
@@ -202,6 +202,8 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         const copy: CadObject = structuredClone(src);
         copy.id = newId;
         if (copy.kind === 'pattern') copy.pattern = { ...copy.pattern, source: idMap.get(copy.pattern.source)! };
+        if (copy.kind === 'fillet') copy.fillet = { ...copy.fillet, source: idMap.get(copy.fillet.source)! };
+        if (copy.kind === 'draft') copy.draft = { ...copy.draft, source: idMap.get(copy.draft.source)! };
         if (copy.kind === 'boolean') {
           copy.boolean = {
             ...copy.boolean,
@@ -228,11 +230,12 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
         return fail(`'${target.name}'은(는) '${parent.name}'에 포함되어 있어 단독으로 삭제할 수 없습니다`);
       }
       // 패턴을 지우면 원본은 남긴다 (솔리드웍스와 같음): 원본을 최상위로, 위치는 월드 기준으로 되돌린다
-      if (target.kind === 'pattern') {
+      const wrapped = wrapperSource(target);
+      if (wrapped) {
         const objects = model.objects
           .filter((o) => o.id !== target.id)
-          .map((o) => (o.id === target.pattern.source ? { ...o, transform: composeTransform(target.transform, o.transform) } : o));
-        return done(model, { ...model, objects }, cmd, target.pattern.source);
+          .map((o) => (o.id === wrapped ? { ...o, transform: composeTransform(target.transform, o.transform) } : o));
+        return done(model, { ...model, objects }, cmd, wrapped);
       }
       const remove = new Set(subtreeIds(model, target.id));
       // 면 위 스케치가 붙어 있으면 거부 (스케치를 다른 평면으로 옮기거나 지운 뒤 삭제)
@@ -293,6 +296,62 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
 
     case 'hole':
       return createHole(model, cmd);
+
+    case 'edge_feature':
+    case 'draft': {
+      const source = findObject(model, cmd.target);
+      if (!source) return missing(cmd.target);
+      if (parentMap(model).has(source.id)) return fail(`'${source.name}'은(는) 다른 객체에 포함되어 있습니다. 상위 객체를 고르세요`);
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      if (1 + depthOf(model, source.id) > LIMITS.maxBooleanDepth) return fail(`중첩은 최대 ${LIMITS.maxBooleanDepth}단계까지 가능합니다`);
+      const kind = cmd.type === 'draft' ? 'draft' : 'fillet';
+      const id = cmd.id ?? nextId(model, kind);
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const label = cmd.type === 'draft' ? '구배' : cmd.feature === 'fillet' ? '필렛' : '모따기';
+      const n = model.objects.filter((o) => o.kind === kind).length + 1;
+      // 감싸는 좌표계 = 월드 (모서리 규칙 top·bottom·vertical, 구배 방향 +Z 가 월드 기준). 원본은 월드 변환을 자식 변환으로
+      const obj: CadObject =
+        cmd.type === 'draft'
+          ? { id, name: cmd.name ?? `${label} ${n}`, kind: 'draft', draft: { source: source.id, angle: cmd.angle }, transform: IDENTITY }
+          : {
+              id,
+              name: cmd.name ?? `${label} ${n}`,
+              kind: 'fillet',
+              fillet: { source: source.id, type: cmd.feature, size: cmd.size, edges: cmd.edges },
+              transform: IDENTITY,
+            };
+      return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+
+    case 'set_edge_feature': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'fillet') return fail(`'${target.name}'은(는) 모서리 처리가 아닙니다`);
+      const f = { ...target.fillet, ...(cmd.feature ? { type: cmd.feature } : {}), ...(cmd.size !== undefined ? { size: cmd.size } : {}), ...(cmd.edges ? { edges: cmd.edges } : {}) };
+      return done(model, replaceObject(model, { ...target, fillet: f }), cmd, target.id);
+    }
+
+    case 'set_draft': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'draft') return fail(`'${target.name}'은(는) 구배가 아닙니다`);
+      return done(model, replaceObject(model, { ...target, draft: { ...target.draft, angle: cmd.angle } }), cmd, target.id);
+    }
+
+    case 'import_step': {
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      if (!cmd.data.length) return fail('STEP 파일이 비어 있습니다');
+      const id = cmd.id ?? nextId(model, 'step');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `STEP ${model.objects.filter((o) => o.kind === 'step').length + 1}`,
+        kind: 'step',
+        step: { data: cmd.data },
+        transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
 
     case 'import_mesh': {
       const err = meshError(cmd);

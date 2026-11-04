@@ -67,9 +67,15 @@ describe('createBrowserEngine', () => {
     vi.useRealTimers();
   });
 
-  it('STEP 은 지원하지 않는다고 명확히 알린다', async () => {
-    const engine = createBrowserEngine(() => new FakeWorker(evalOk) as unknown as Worker);
-    expect(engine.exportFormats).not.toContain('step');
-    await expect(engine.exportFile('step', createDefaultModel())).rejects.toThrow('로컬 CAD 서버에서만');
+  it('STEP 은 워커(정밀 엔진)에 그대로 요청해 model/step 파일로 받는다', async () => {
+    const seen: WorkerRequest[] = [];
+    const engine = createBrowserEngine(() => new FakeWorker((req) => {
+      seen.push(req);
+      return { id: req.id, ok: true, type: 'export', bytes: new TextEncoder().encode('ISO-10303-21;') };
+    }) as unknown as Worker);
+    expect(engine.exportFormats).toContain('step');
+    const blob = await engine.exportFile('step', createDefaultModel());
+    expect(blob.type).toBe('model/step');
+    expect(seen[0]).toMatchObject({ type: 'export', format: 'step' });
   });
 });

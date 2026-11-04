@@ -10,7 +10,7 @@ import type { WorkerRequest, WorkerResponse } from './protocol';
 
 export const BROWSER_JOB_TIMEOUT_MS = 20_000;
 
-const MEDIA_TYPES = { stl: 'model/stl', '3mf': 'model/3mf', glb: 'model/gltf-binary' } as const;
+const MEDIA_TYPES = { stl: 'model/stl', '3mf': 'model/3mf', glb: 'model/gltf-binary', step: 'model/step' } as const;
 
 /** 유니온의 각 멤버에서 id 를 뺀다 (Omit 은 유니온을 하나로 합쳐버린다) */
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
@@ -71,7 +71,7 @@ export function createBrowserEngine(
   return {
     id: 'browser',
     label: '브라우저 엔진',
-    exportFormats: ['3mf', 'stl', 'glb'],
+    exportFormats: ['3mf', 'stl', 'step', 'glb'],
 
     async evaluate(model: ModelDefinition, signal?: AbortSignal): Promise<EngineEvaluation> {
       const r = await request({ type: 'evaluate', model }, signal);
@@ -85,7 +85,6 @@ export function createBrowserEngine(
     },
 
     async exportFile(format: ExportFormat, model: ModelDefinition, signal?: AbortSignal): Promise<Blob> {
-      if (format === 'step') throw new EngineError('STEP 은 정확한 곡면이 필요해 로컬 CAD 서버에서만 지원합니다');
       const r = await request({ type: 'export', model, format }, signal);
       if (!r.ok) throw new EngineError(r.error);
       if (r.type !== 'export') throw new EngineError('잘못된 응답입니다');

@@ -164,7 +164,7 @@ def check_model(model: ModelDefinition) -> list[Issue]:
         ids = obj.child_ids
         if not ids:
             continue
-        path = f"objects.{i}.{obj.kind if obj.kind == 'pattern' else 'boolean'}"
+        path = f"objects.{i}.{obj.kind if obj.kind in ('pattern', 'fillet', 'draft') else 'boolean'}"
         if len(set(ids)) != len(ids):
             issues.append(Issue(path=path, message=f"{obj.id}: 같은 객체가 두 번 이상 참조되었습니다"))
         for c in ids:

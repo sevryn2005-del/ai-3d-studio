@@ -16,12 +16,40 @@ import { formatMm } from './units';
 export function isSuppressed(obj: CadObject, index: Map<ObjectId, CadObject>, depth = 0): boolean {
   if (obj.suppressed) return true;
   if (depth > 32) return false;
-  const inner = obj.kind === 'boolean' ? obj.boolean.base : obj.kind === 'pattern' ? obj.pattern.source : null;
+  const inner =
+    obj.kind === 'boolean' ? obj.boolean.base
+    : obj.kind === 'pattern' ? obj.pattern.source
+    : obj.kind === 'fillet' ? obj.fillet.source
+    : obj.kind === 'draft' ? obj.draft.source
+    : null;
   const child = inner ? index.get(inner) : undefined;
   return child ? isSuppressed(child, index, depth + 1) : false;
 }
 
 const AXIS: Record<Axis, [number, number, number]> = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+
+/** 정밀(B-rep) 엔진이 필요한 모델인가: 모서리 처리·구배·STEP 이 있으면 (브라우저는 OCCT 엔진으로 계산) */
+export function needsPreciseEngine(model: ModelDefinition): boolean {
+  return model.objects.some(isPreciseKind);
+}
+
+function isPreciseKind(o: CadObject): boolean {
+  return o.kind === 'fillet' || o.kind === 'draft' || o.kind === 'step';
+}
+
+/** 이 객체(하위 객체 포함)를 정밀 엔진으로 계산해야 하는가 — 브라우저 워커가 최상위 객체마다 엔진을 고른다 */
+export function objectNeedsPrecise(obj: CadObject, index: Map<ObjectId, CadObject>, depth = 0): boolean {
+  if (isPreciseKind(obj)) return true;
+  if (depth > 32) return false;
+  const kids =
+    obj.kind === 'boolean' ? [obj.boolean.base, ...obj.boolean.tools]
+    : obj.kind === 'pattern' ? [obj.pattern.source]
+    : [];
+  return kids.some((id) => {
+    const c = index.get(id);
+    return c ? objectNeedsPrecise(c, index, depth + 1) : false;
+  });
+}
 
 /** 패턴 사본 수 (원본 포함) */
 export function patternCopyCount(p: PatternDef): number {

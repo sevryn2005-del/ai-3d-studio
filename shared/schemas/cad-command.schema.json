@@ -1406,6 +1406,207 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "edge_feature"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "feature": {
+          "type": "string",
+          "enum": [
+            "fillet",
+            "chamfer"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 500
+        },
+        "edges": {
+          "type": "string",
+          "enum": [
+            "all",
+            "vertical",
+            "top",
+            "bottom"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "feature",
+        "size",
+        "edges"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_edge_feature"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "feature": {
+          "type": "string",
+          "enum": [
+            "fillet",
+            "chamfer"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 500
+        },
+        "edges": {
+          "type": "string",
+          "enum": [
+            "all",
+            "vertical",
+            "top",
+            "bottom"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "draft"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -30,
+          "maximum": 30
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "angle"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_draft"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -30,
+          "maximum": 30
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "angle"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "import_step"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "data": {
+          "type": "string",
+          "maxLength": 16000000,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "cut"
         },
         "id": {

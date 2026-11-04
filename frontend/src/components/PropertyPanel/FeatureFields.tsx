@@ -7,7 +7,7 @@ import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../
 import { useSceneStore } from '../../cad/sceneStore';
 import { shellFaces } from '../../cad/features';
 import { facesOf } from '../../cad/sketchPlane';
-import { PATTERN_LABEL } from '../../cad/objectKinds';
+import { EDGE_RULE_LABEL, PATTERN_LABEL } from '../../cad/objectKinds';
 import { NumberField } from './NumberField';
 
 const FACE_LABEL: Record<string, string> = {
@@ -284,6 +284,71 @@ export function LoftOrMeshInfo({ object }: { object: Extract<CadObject, { kind: 
         ))}
       </ol>
       <p className="muted small">단면 스케치의 치수·평면 거리를 바꾸면 로프트가 다시 계산됩니다.</p>
+    </fieldset>
+  );
+}
+
+/** 정밀 엔진 피처: 모서리 처리(규칙 선택) · 구배 · STEP */
+export function PreciseFields({ object }: { object: Extract<CadObject, { kind: 'fillet' | 'draft' | 'step' }> }) {
+  const submit = useSceneStore((s) => s.submitNow);
+  const select = useSceneStore((s) => s.select);
+  if (object.kind === 'step') {
+    return (
+      <fieldset>
+        <legend>가져온 STEP</legend>
+        <p className="muted small">정확한 곡면(B-rep) 그대로입니다. 위치·회전·불리언·모서리 처리·내보내기에 쓸 수 있습니다.</p>
+      </fieldset>
+    );
+  }
+  const source = object.kind === 'fillet' ? object.fillet.source : object.draft.source;
+  return (
+    <fieldset>
+      <legend>{object.kind === 'draft' ? '구배' : '모서리 처리'}</legend>
+      <div className="operands">
+        원본: <button onClick={() => select(source)}>{source}</button>
+      </div>
+      {object.kind === 'draft' ? (
+        <NumberField
+          label="각도 (+ 위로 갈수록 안쪽)"
+          unit="°"
+          value={object.draft.angle}
+          onCommit={(v) => submit({ type: 'set_draft', target: object.id, angle: v })}
+          testId="draft-angle"
+        />
+      ) : (
+        <>
+          <div className="field">
+            <label htmlFor="ef-type">처리</label>
+            <select id="ef-type" value={object.fillet.type} onChange={(e) => submit({ type: 'set_edge_feature', target: object.id, feature: e.target.value as 'fillet' })}>
+              <option value="fillet">필렛 (둥글게)</option>
+              <option value="chamfer">모따기 (비스듬히)</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="ef-edges">모서리</label>
+            <select
+              id="ef-edges"
+              data-testid="ef-edges"
+              value={object.fillet.edges}
+              onChange={(e) => submit({ type: 'set_edge_feature', target: object.id, edges: e.target.value as 'all' })}
+            >
+              {(Object.keys(EDGE_RULE_LABEL) as (keyof typeof EDGE_RULE_LABEL)[]).map((k) => (
+                <option key={k} value={k}>
+                  {EDGE_RULE_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <NumberField
+            label={object.fillet.type === 'fillet' ? '반지름' : '거리'}
+            unit="mm"
+            value={object.fillet.size}
+            onCommit={(v) => submit({ type: 'set_edge_feature', target: object.id, size: v })}
+            testId="ef-size"
+          />
+        </>
+      )}
+      <p className="muted small">정밀 엔진(OCCT)으로 계산합니다. 모서리를 고르는 기준: 월드 Z (위·아래·세로).</p>
     </fieldset>
   );
 }

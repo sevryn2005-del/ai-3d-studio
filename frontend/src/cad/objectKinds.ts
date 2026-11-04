@@ -66,7 +66,12 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
   },
   loft: { label: '로프트', params: [] },
   mesh: { label: '가져온 메시', params: [] },
+  fillet: { label: '모서리 처리', params: [] },
+  draft: { label: '구배', params: [] },
+  step: { label: 'STEP', params: [] },
 };
+
+export const EDGE_RULE_LABEL = { all: '모든 모서리', vertical: '세로 모서리', top: '윗면 모서리', bottom: '아랫면 모서리' } as const;
 
 export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', mirror: '대칭 복사', scale: '크기 조정' } as const;
 
@@ -79,6 +84,7 @@ export const OPERATION_INFO: Record<BooleanOperation, { label: string; symbol: s
 export function kindLabel(obj: CadObject): string {
   if (obj.kind === 'boolean') return OPERATION_INFO[obj.boolean.operation].label;
   if (obj.kind === 'pattern') return PATTERN_LABEL[obj.pattern.type];
+  if (obj.kind === 'fillet') return obj.fillet.type === 'fillet' ? '필렛' : '모따기';
   return KIND_INFO[obj.kind].label;
 }
 
@@ -137,8 +143,14 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const local = extrudeLocalMatrix(model, obj);
       return local ? extrudeLocalSize(local, [2 * r, h, 2 * r]) : [2 * r, h, 2 * r];
     }
+    case 'fillet':
+    case 'draft': {
+      const src = model.objects.find((o) => o.id === (obj.kind === 'fillet' ? obj.fillet.source : obj.draft.source));
+      return src ? localSize(src, model) : [0, 0, 0];
+    }
     case 'loft':
     case 'mesh':
+    case 'step':
       return [0, 0, 0]; // 크기는 엔진 메시로 (질량 특성·출력 검사)
   }
 }
@@ -190,6 +202,12 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       return `피치 ${formatMm(obj.params.pitch)} × ${formatMm(obj.params.turns)}바퀴`;
     case 'loft':
       return `단면 ${obj.loft.sections.length}개`;
+    case 'fillet':
+      return `${obj.fillet.type === 'fillet' ? 'R' : 'C'}${formatMm(obj.fillet.size)} ${EDGE_RULE_LABEL[obj.fillet.edges]}`;
+    case 'draft':
+      return `${formatMm(obj.draft.angle)}°`;
+    case 'step':
+      return `STEP ${Math.round((obj.step.data.length * 3) / 4 / 1024).toLocaleString()}KB`;
     case 'mesh':
       return `삼각형 ${Math.round((obj.mesh.indices.length * 3) / 4 / 12).toLocaleString()}개`;
     case 'pattern': {

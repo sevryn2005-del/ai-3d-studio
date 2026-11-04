@@ -86,7 +86,7 @@ describe('형식 v1 → v2 마이그레이션 경계', () => {
     expect(parseProject(bad).ok).toBe(false);
   });
   it('v2 파일인데 스케치 참조가 깨졌으면 거부 (현재 작업 유지)', () => {
-    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 8, units: 'mm', sketches: [], objects: [] }));
+    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 9, units: 'mm', sketches: [], objects: [] }));
     v2.model.objects.push({
       id: 'plate', name: '판', kind: 'extrude', params: { distance: 4 }, extrude: { sketch: 'sk1', profile: 'r1' },
       transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
@@ -116,5 +116,28 @@ describe('v2 기준 판 샘플 (v2 → v3 마이그레이션)', () => {
     expect(r.project.model).toEqual({ ...v2, schemaVersion: MODEL_SCHEMA_VERSION, sketches: v2.sketches.map((s: object) => ({ ...s, constraints: [] })) });
     const again = parseProject(serializeProject(r.project.name, r.project.model));
     expect(again.ok && again.project.model).toEqual(r.project.model);
+  });
+});
+
+describe('v8 → v9 마이그레이션', () => {
+  it('헬릭스가 든 v8 파일이 그대로 읽히고 v9 로 저장된다', () => {
+    let model = createDefaultModel();
+    for (const c of [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 0], width: 4, height: 2 },
+      { type: 'helix', id: 'h', sketch: 's', profile: 'r', pitch: 5, turns: 3 },
+    ]) {
+      const r = executeCommand(model, c as never);
+      if (!r.ok) throw new Error(r.error);
+      model = r.model;
+    }
+    const v8 = JSON.parse(serializeProject('스프링', model));
+    v8.formatVersion = 8;
+    v8.model.schemaVersion = 8;
+    const r = parseProject(JSON.stringify(v8));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.project.model.schemaVersion).toBe(9);
+    expect(r.project.model.objects.some((o) => o.kind === 'helix')).toBe(true);
+    expect(JSON.parse(serializeProject(r.project.name, r.project.model)).formatVersion).toBe(9);
   });
 });

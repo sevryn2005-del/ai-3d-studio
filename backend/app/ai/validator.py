@@ -347,6 +347,27 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if id_used(c["id"]):
                     errors.append(f"commands[{i}].id: id '{c['id']}' is already used")
                 kinds[c["id"]] = "hole"
+        elif t in ("edge_feature", "draft"):
+            # 정밀 피처: 최상위 객체를 감싼다 (패턴과 같은 규칙)
+            src = c["target"]
+            if exists(i, src, "target"):
+                if src in parent:
+                    errors.append(f"commands[{i}].target: '{src}' is already inside '{parent[src]}'; use '{parent[src]}' instead")
+                new_id = c.get("id")
+                if new_id is not None:
+                    if id_used(new_id):
+                        errors.append(f"commands[{i}].id: id '{new_id}' is already used")
+                    kinds[new_id] = "fillet" if t == "edge_feature" else "draft"
+                    parent[src] = new_id
+        elif t in ("set_edge_feature", "set_draft"):
+            want = "fillet" if t == "set_edge_feature" else "draft"
+            if exists(i, c["target"], "target") and kinds[c["target"]] != want:
+                errors.append(f"commands[{i}].target: '{c['target']}' is not a {'fillet/chamfer' if want == 'fillet' else 'draft'} feature")
+        elif t == "import_step":
+            if c.get("id") is not None:
+                if id_used(c["id"]):
+                    errors.append(f"commands[{i}].id: id '{c['id']}' is already used")
+                kinds[c["id"]] = "step"
         elif t in ("fillet", "chamfer"):
             if exists(i, c["target"], "target") and kinds[c["target"]] != "box":
                 errors.append(f"commands[{i}].target: fillet/chamfer only works on boxes; '{c['target']}' is a {kinds[c['target']]}")

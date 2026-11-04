@@ -163,7 +163,7 @@ export const PARAMS_SCHEMAS = {
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
-export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh';
+export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh' | 'fillet' | 'draft' | 'step';
 export const PRIMITIVE_KINDS = Object.keys(PARAMS_SCHEMAS) as PrimitiveKind[];
 export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
@@ -315,6 +315,13 @@ const objectBase = {
   color: ColorSchema.optional(),
 };
 
+/**
+ * 모서리 선택 규칙 (형식 v9, 정밀 엔진): 감싸는 객체 좌표계(만들 때 = 월드) 기준
+ * all = 모든 모서리, vertical = Z 와 나란한 직선 모서리, top / bottom = 형상의 맨 위 / 맨 아래 높이에 놓인 모서리
+ */
+export const EdgeRuleSchema = z.enum(['all', 'vertical', 'top', 'bottom']);
+export type EdgeRule = z.infer<typeof EdgeRuleSchema>;
+
 /** 스케치 프로파일 참조 (돌출·회전·헬릭스·로프트 단면) */
 export const SketchRefSchema = z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema });
 export type SketchRef = z.infer<typeof SketchRefSchema>;
@@ -457,6 +464,31 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('mesh'),
     mesh: z.strictObject({ positions: MeshBase64Schema, indices: MeshBase64Schema }),
   }),
+  /**
+   * 모서리 처리 (형식 v9, 정밀 엔진 — 서버 CadQuery·브라우저 OCCT): 원본(source, 자식) 형상의 모서리를 규칙(edges)으로 골라
+   * 필렛(둥글게, size = 반지름) 또는 모따기(size = 깎는 거리). 어떤 형상(불리언·돌출·회전 결과 포함)에도 쓸 수 있다
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('fillet'),
+    fillet: z.strictObject({
+      source: ObjectIdSchema,
+      type: z.enum(['fillet', 'chamfer']),
+      size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
+      edges: EdgeRuleSchema,
+    }),
+  }),
+  /**
+   * 구배 (형식 v9, 정밀 엔진): 원본의 세로 면(Z 와 나란한 평면·원통면)을 맨 아래 높이를 기준으로 angle(°)만큼 기울인다.
+   * 양수 = 위로 갈수록 안쪽 (사출·주조 금형에서 빠지는 방향 +Z)
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('draft'),
+    draft: z.strictObject({ source: ObjectIdSchema, angle: z.number().min(-30).max(30) }),
+  }),
+  /** 가져온 STEP (형식 v9, 정밀 엔진): STEP 파일 내용(base64) 그대로 — 정확한 곡면(B-rep) */
+  z.strictObject({ ...objectBase, kind: z.literal('step'), step: z.strictObject({ data: MeshBase64Schema }) }),
 ]);
 export type CadObject = z.infer<typeof CadObjectSchema>;
 export type CadObjectOf<K extends ObjectKind> = Extract<CadObject, { kind: K }>;
@@ -465,7 +497,7 @@ export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 8;
+export const MODEL_SCHEMA_VERSION = 9;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -733,6 +765,49 @@ export const ImportMeshCommandSchema = z.strictObject({
   position: Vec3Schema.optional(),
 });
 
+/** 모서리 처리 만들기 (정밀 엔진): target(최상위)을 원본으로 감싼다 */
+export const EdgeFeatureCommandSchema = z.strictObject({
+  type: z.literal('edge_feature'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  target: ObjectIdSchema,
+  feature: z.enum(['fillet', 'chamfer']),
+  size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
+  edges: EdgeRuleSchema,
+});
+
+/** 모서리 처리 값 바꾸기 */
+export const SetEdgeFeatureCommandSchema = z.strictObject({
+  type: z.literal('set_edge_feature'),
+  target: ObjectIdSchema,
+  feature: z.enum(['fillet', 'chamfer']).optional(),
+  size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2).optional(),
+  edges: EdgeRuleSchema.optional(),
+});
+
+/** 구배 만들기 / 바꾸기 (정밀 엔진) */
+export const DraftCommandSchema = z.strictObject({
+  type: z.literal('draft'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  target: ObjectIdSchema,
+  angle: z.number().min(-30).max(30),
+});
+export const SetDraftCommandSchema = z.strictObject({
+  type: z.literal('set_draft'),
+  target: ObjectIdSchema,
+  angle: z.number().min(-30).max(30),
+});
+
+/** STEP 가져오기 (파일 내용 base64). 원점 규칙으로 옮기는 것은 position 으로 */
+export const ImportStepCommandSchema = z.strictObject({
+  type: z.literal('import_step'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  data: MeshBase64Schema,
+  position: Vec3Schema.optional(),
+});
+
 /** 스케치 요소 오프셋: 같은 모양을 distance 만큼 바깥(+)·안쪽(−)으로 띄운 새 요소 (다각형은 모서리 연장) */
 export const OffsetEntityCommandSchema = z.strictObject({
   type: z.literal('offset_entity'),
@@ -885,6 +960,11 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   HelixCommandSchema,
   LoftCommandSchema,
   ImportMeshCommandSchema,
+  EdgeFeatureCommandSchema,
+  SetEdgeFeatureCommandSchema,
+  DraftCommandSchema,
+  SetDraftCommandSchema,
+  ImportStepCommandSchema,
   CutCommandSchema,
   UnionCommandSchema,
   IntersectCommandSchema,

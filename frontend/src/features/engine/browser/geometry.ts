@@ -67,7 +67,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -102,6 +102,11 @@ export function localManifold(
       if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 로프트 결과 형상이 올바르지 않습니다 (단면이 겹치거나 꼬였습니다)`);
       return solid;
     }
+    case 'fillet':
+    case 'draft':
+    case 'step':
+      // 브라우저에서는 워커가 이런 모델을 OCCT 엔진(occtGeometry.ts)으로 계산한다
+      throw new GeometryError(`'${obj.name}': 정밀 엔진(OCCT)이 필요한 형상입니다`);
     case 'mesh': {
       const m = decodeMesh(obj.mesh);
       let solid: Manifold;
@@ -136,7 +141,7 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -307,13 +312,19 @@ export function modelIssues(model: ModelDefinition): string[] {
   return validateGraph(model);
 }
 
-/** 최상위 객체별 로컬 메시 (서버 /api/model/evaluate 와 같은 계약) */
-export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = DISPLAY_TOLERANCE) {
+/** 계산하는(억제되지 않은) 최상위 객체 */
+export function computedRoots(model: ModelDefinition): CadObject[] {
+  const index = byId(model);
+  return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index));
+}
+
+/** 최상위 객체별 로컬 메시 (서버 /api/model/evaluate 와 같은 계약). objects = 이 엔진으로 계산할 최상위 객체 */
+export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = DISPLAY_TOLERANCE, objects = computedRoots(model)) {
   const index = byId(model);
   const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
-    return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index)).map((obj) => ({
+    return objects.map((obj) => ({
       objectId: obj.id,
       ...toPlainMesh(localManifold(wasm, obj, index, tol, scope, sketches)),
     }));
@@ -323,12 +334,12 @@ export function evaluateMeshes(wasm: ManifoldToplevel, model: ModelDefinition, t
 }
 
 /** 최상위 객체별 월드 좌표 메시 (내보내기용) */
-export function worldMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = EXPORT_TOLERANCE) {
+export function worldMeshes(wasm: ManifoldToplevel, model: ModelDefinition, tol = EXPORT_TOLERANCE, objects = computedRoots(model)) {
   const index = byId(model);
   const sketches = sketchIndex(model);
   const scope = new Scope();
   try {
-    return topLevelObjects(model).filter((obj) => !isSuppressed(obj, index)).map((obj) => ({
+    return objects.map((obj) => ({
       name: obj.name,
       ...(obj.color ? { color: obj.color } : {}),
       ...toPlainMesh(worldManifold(wasm, obj, index, tol, scope, sketches)),

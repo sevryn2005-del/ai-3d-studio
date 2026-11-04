@@ -104,6 +104,15 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
         : `선형 패턴 ${p.axis.toUpperCase()} ${p.count}개 × ${formatMm(p.spacing)}mm${p.axis2 ? `, ${p.axis2.toUpperCase()} ${p.count2}개 × ${formatMm(p.spacing2 ?? 0)}mm` : ''}`;
       return `${name(p.source)} ${what}`;
     }
+    case 'edge_feature':
+      return `${name(cmd.target)} ${cmd.edges} ${cmd.feature === 'fillet' ? `필렛 R${formatMm(cmd.size)}` : `모따기 ${formatMm(cmd.size)}`}mm`;
+    case 'set_edge_feature':
+      return `${name(cmd.target)} 모서리 처리 변경`;
+    case 'draft':
+    case 'set_draft':
+      return `${name(cmd.target)} 구배 ${formatMm(cmd.angle)}°`;
+    case 'import_step':
+      return `STEP 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
     case 'helix':
       return `${sketchName(cmd.sketch)}의 ${cmd.profile} 헬릭스 (피치 ${formatMm(cmd.pitch)}mm × ${formatMm(cmd.turns)}바퀴)`;
     case 'loft':

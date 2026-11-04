@@ -11,7 +11,7 @@ import { fromMatrix } from '../../cad/transformMath';
 import { childIds, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
 import { helixError, helixProfilePoints } from '../../cad/sections';
-import { parseObj, parseStl, prepareImport } from '../../cad/meshData';
+import { parseObj, parseStl, prepareImport, toBase64 } from '../../cad/meshData';
 import { pickFileWithInput } from '../projects/projectStorage';
 import { useProjectStore } from '../projects/projectStore';
 import { useEditorStore, type PendingFeature } from './editorStore';
@@ -155,6 +155,26 @@ export function quickShell() {
   scene.submitNow({ type: 'shell', target: obj.id, thickness: t, open: [obj.kind === 'extrude' ? 'end' : 'top'] });
 }
 
+/**
+ * 모서리 필렛·모따기 (형식 v9, 정밀 엔진): 선택한 최상위 객체의 모든 모서리를 가장 얇은 치수의 1/10 (0.5~2mm).
+ * 속성 관리자에서 크기·모서리 규칙(전체·세로·위·아래)을 바꾼다
+ */
+export function quickEdgeFeature(feature: 'fillet' | 'chamfer') {
+  const s = selectedRoot(feature === 'fillet' ? '필렛' : '모따기');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const thin = Math.min(...localSize(obj, model).map(Math.abs).filter((v) => v > 0));
+  const size = Math.max(0.5, Math.min(2, Math.round((thin / 10) * 10) / 10));
+  scene.submitNow({ type: 'edge_feature', target: obj.id, feature, size, edges: 'all' });
+}
+
+/** 구배: 선택한 최상위 객체의 옆면을 바닥 기준 3° (위로 갈수록 좁게) */
+export function quickDraft() {
+  const s = selectedRoot('구배');
+  if (!s) return;
+  s.scene.submitNow({ type: 'draft', target: s.obj.id, angle: 3 });
+}
+
 /** 패턴·대칭: 선형 = X 방향 3개 (크기 + 5mm 간격), 원형 = Z축 6개, 대칭 = YZ 평면 */
 export function quickPattern(type: 'linear' | 'circular' | 'mirror') {
   const s = selectedRoot(type === 'mirror' ? '대칭 복사' : '패턴');
@@ -274,14 +294,31 @@ export function openLoft() {
 }
 
 /** STL·OBJ 가져오기 → 원점 규칙(바닥면 중심)에 맞춰 메시 객체 */
+/** STEP 파일 최대 크기: 저장 형식(base64 1,600만 자) 한도 */
+export const MAX_STEP_BYTES = 12_000_000;
+
 export async function importMeshFile() {
   let file: File;
   try {
-    file = await pickFileWithInput('.stl,.obj,model/stl,text/plain');
+    file = await pickFileWithInput('.stl,.obj,.step,.stp,model/stl,model/step,text/plain');
   } catch {
     return;
   }
   const scene = useSceneStore.getState();
+  if (/\.(step|stp)$/i.test(file.name)) {
+    // STEP: 정확한 곡면 그대로 저장하고 정밀 엔진(OCCT)이 읽는다. 원점은 엔진이 바닥면 중심으로 맞춘다
+    if (file.size > MAX_STEP_BYTES) {
+      scene.reportError(`가져오기 실패: STEP 파일은 ${MAX_STEP_BYTES / 1_000_000}MB 까지 가져올 수 있습니다`);
+      return;
+    }
+    const name = file.name.replace(/\.(step|stp)$/i, '').slice(0, 100) || '가져온 STEP';
+    const res = scene.submitNow({ type: 'import_step', name, data: toBase64(new Uint8Array(await file.arrayBuffer())) });
+    if (res.status === 'applied') {
+      useProjectStore.getState().set({ notice: `${file.name}: STEP (정밀 엔진으로 계산)` });
+      useEditorStore.getState().requestFit();
+    }
+    return;
+  }
   try {
     const isObj = file.name.toLowerCase().endsWith('.obj');
     const soup = isObj ? parseObj(await file.text()) : parseStl(await file.arrayBuffer());

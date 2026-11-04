@@ -6,7 +6,7 @@ import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
 import {
-  importMeshFile, openLoft, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+  importMeshFile, openLoft, quickDraft, quickEdgeFeature, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
@@ -73,7 +73,7 @@ export function Toolbar() {
             다시 실행
           </button>
           <span className="sep" />
-          <button onClick={() => void importMeshFile()} title="STL·OBJ 파일을 가져와 객체로 (다른 프로그램·블렌더에서 만든 모델)" data-testid="import-mesh">
+          <button onClick={() => void importMeshFile()} title="STL·OBJ·STEP 파일을 가져와 객체로 (다른 CAD·블렌더에서 만든 모델)" data-testid="import-mesh">
             가져오기
           </button>
           <ExportMenu />
@@ -108,6 +108,9 @@ export function Toolbar() {
             <Cmd icon="revolveCut" label="회전 컷" title="선택한 스케치를 회전해 바디에서 뺌 (홈·구멍)" onClick={() => startFeature('revolve', true)} testId="cmd-revolve-cut" />
             <span className="sep" />
             <Cmd icon="hole" label="구멍 가공" title="선택한 객체의 윗면 중심에 구멍 (속성에서 위치·종류 조정)" onClick={quickHole} testId="cmd-hole" />
+            <Cmd icon="fillet" label="필렛" title="선택한 객체의 모서리를 둥글게 (속성에서 반지름·모서리 규칙: 전체·세로·위·아래)" onClick={() => quickEdgeFeature('fillet')} testId="cmd-fillet" />
+            <Cmd icon="chamfer" label="모따기" title="선택한 객체의 모서리를 비스듬히 깎기 (속성에서 거리·모서리 규칙)" onClick={() => quickEdgeFeature('chamfer')} testId="cmd-chamfer" />
+            <Cmd icon="draft" label="구배" title="선택한 객체의 옆면을 바닥 기준으로 기울이기 (금형 빼기 각, 속성에서 각도)" onClick={quickDraft} testId="cmd-draft" />
             <Cmd icon="shell" label="쉘" title="선택한 박스·원통·돌출의 속을 비움 (윗면 열림)" onClick={quickShell} testId="cmd-shell" />
             <Cmd icon="linear" label="선형 패턴" title="선택한 객체를 X 방향으로 반복" onClick={() => quickPattern('linear')} testId="cmd-linear" />
             <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />

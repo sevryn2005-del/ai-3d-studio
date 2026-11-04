@@ -5,7 +5,7 @@ import type { ExportFormat } from '../types';
 
 export type WorkerRequest =
   | { id: number; type: 'evaluate'; model: ModelDefinition }
-  | { id: number; type: 'export'; model: ModelDefinition; format: Exclude<ExportFormat, 'step'> };
+  | { id: number; type: 'export'; model: ModelDefinition; format: ExportFormat };
 
 export interface WorkerEvaluation {
   ok: boolean;

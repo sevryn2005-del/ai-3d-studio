@@ -24,12 +24,12 @@ _AXIS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
 
 
 def is_suppressed(obj, index: dict, depth: int = 0) -> bool:
-    """자신이 억제됐거나, 불리언의 기준·패턴의 원본이 억제됐으면 억제 (도구 억제는 그 연산에서만 빠짐)."""
+    """자신이 억제됐거나, 불리언의 기준·패턴·모서리 처리·구배의 원본이 억제됐으면 억제 (도구 억제는 그 연산에서만 빠짐)."""
     if obj.suppressed:
         return True
     if depth > 32:
         return False
-    inner = obj.boolean.base if isinstance(obj, BooleanObject) else obj.pattern.source if isinstance(obj, PatternObject) else None
+    inner = obj.boolean.base if isinstance(obj, BooleanObject) else obj.child_ids[0] if obj.kind in ("pattern", "fillet", "draft") else None
     child = index.get(inner) if inner else None
     return is_suppressed(child, index, depth + 1) if child is not None else False
 

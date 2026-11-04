@@ -50,7 +50,7 @@ cd frontend
 VITE_CAD_ENGINE=browser npm run build   # → dist/ 를 아무 정적 호스팅에 업로드
 ```
 
-브라우저 안의 CAD 엔진(manifold-3d WASM)으로 동작합니다. STL·3MF·GLB 내보내기 가능 (STEP 은 로컬 CAD 서버 필요).
+브라우저 안의 CAD 엔진(manifold-3d WASM)으로 동작합니다. STL·3MF·STEP·GLB 내보내기 가능 (필렛·구배·STEP 은 브라우저 안의 OCCT 정밀 엔진이 계산).
 플랫폼별 구성: [docs/platforms.md](docs/platforms.md)
 
 ## 개발 모드

@@ -443,9 +443,57 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
   },
 };
 
-export function buildFeatureFixture() {
+/** 시험용 실제 파일 (scripts/schemaPaths.readSamples) */
+export interface FixtureSamples {
+  blockHoleStep: string; // base64. CadQuery 로 만든 10×20×30 블록(모서리 (100,50,5)) − 지름 4 관통 구멍
+}
+
+/** 둥근 상자 부피: 안쪽 상자를 반지름 r 구로 민코프스키 합 */
+const roundedBox = (a: number, b: number, c: number, r: number) => {
+  const [x, y, z] = [a - 2 * r, b - 2 * r, c - 2 * r];
+  return x * y * z + 2 * r * (x * y + y * z + z * x) + PI * r * r * (x + y + z) + (4 / 3) * PI * r ** 3;
+};
+/** 원통 위 모서리 필렛으로 빠지는 부피: (r²(1−π/4)) × 2π × 도심 반지름 (파푸스) */
+const cylinderTopFilletLoss = (R: number, r: number) => {
+  const area = r * r * (1 - PI / 4);
+  const d = (r * (10 - 3 * PI)) / (3 * (4 - PI)); // 모서리에서 도심까지
+  return area * 2 * PI * (R - d);
+};
+const frustum = (a1: number, a2: number, h: number) => (h / 3) * (a1 + a2 + Math.sqrt(a1 * a2));
+
+/** 형식 v9 정밀 피처: 브라우저는 OCCT 엔진(occtGeometry.test.ts), 서버는 CadQuery 가 같은 값을 내야 한다 */
+export function preciseCases(samples: FixtureSamples): typeof FEATURE_CASES {
+  const top = 20 - 2 * 10 * Math.tan((5 * PI) / 180);
+  return {
+    'fillet-box-all': { volume: roundedBox(20, 20, 20, 2), roots: 1, bbox: [[-10, -10, 0], [10, 10, 20]], commands: [box('b', 20, 20, 20), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 2, edges: 'all' }] },
+    'chamfer-box-top': { volume: 20 * 20 * 8 + frustum(400, 256, 2), roots: 1, commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'chamfer', size: 2, edges: 'top' }] },
+    'fillet-box-vertical': { volume: 4000 - 4 * (9 - (PI * 9) / 4) * 10, roots: 1, commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 3, edges: 'vertical' }] },
+    'fillet-cylinder-top': { volume: PI * 100 * 10 - cylinderTopFilletLoss(10, 2), roots: 1, commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 10 }, { type: 'edge_feature', id: 'f', target: 'c', feature: 'fillet', size: 2, edges: 'top' }] },
+    'fillet-moved-boolean-bottom': {
+      // 원본이 옮겨져 있어도 규칙은 피처 좌표계(월드)에서 고른다. 바닥 모서리 = 바깥 네 모서리 + 구멍 아래 원
+      // (구멍 입구 모따기: 삼각형 넓이 2 × 2π × 도심 반지름 (2 + 2/3))
+      volume: 20 * 20 * 8 + frustum(256, 400, 2) - PI * 4 * 10 - 2 * 2 * PI * (2 + 2 / 3),
+      roots: 1,
+      bbox: [[40, -10, 0], [60, 10, 10]],
+      commands: [
+        box('b', 20, 20, 10, [50, 0, 0]),
+        { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 4, depth: 10 },
+        { type: 'edge_feature', id: 'f', target: 'cut_1', feature: 'chamfer', size: 2, edges: 'bottom' },
+      ],
+    },
+    'draft-box': { volume: frustum(400, top * top, 10), roots: 1, bbox: [[-10, -10, 0], [10, 10, 10]], commands: [box('b', 20, 20, 10), { type: 'draft', id: 'd', target: 'b', angle: 5 }] },
+    'step-import-block': {
+      volume: 6000 - PI * 4 * 30,
+      roots: 1,
+      bbox: [[-5, -10, 0], [5, 10, 30]],
+      commands: [{ type: 'import_step', id: 's', name: '블록', data: samples.blockHoleStep }],
+    },
+  };
+}
+
+export function buildFeatureFixture(samples: FixtureSamples) {
   return Object.fromEntries(
-    Object.entries(FEATURE_CASES).map(([name, c]) => {
+    Object.entries({ ...FEATURE_CASES, ...preciseCases(samples) }).map(([name, c]) => {
       const model = buildSketchPlateFixture(c.commands);
       // 'polygon': 구속으로 풀린 다각형 넓이 × 돌출 거리 (첫 다각형·첫 돌출)
       let volume = c.volume;
@@ -467,7 +515,7 @@ export function buildSurveyFixture() {
 }
 
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */
-export function generateSchemas(): Record<string, string> {
+export function generateSchemas(samples: FixtureSamples): Record<string, string> {
   return {
     'examples/model-cut-rotated.json': JSON.stringify(buildBooleanFixture(), null, 2) + '\n',
     'examples/model-sketch-plate.json': JSON.stringify(buildSketchPlateFixture(), null, 2) + '\n',
@@ -476,7 +524,7 @@ export function generateSchemas(): Record<string, string> {
     'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
     'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
     'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
-    'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(), null, 2) + '\n',
+    'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(samples), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

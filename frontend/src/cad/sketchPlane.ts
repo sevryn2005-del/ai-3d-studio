@@ -80,6 +80,8 @@ export function objectWorldMatrix(model: ModelDefinition, id: ObjectId): Matrix4
   for (const o of model.objects) {
     if (o.kind === 'boolean') for (const c of [o.boolean.base, ...o.boolean.tools]) parent.set(c, o.id);
     if (o.kind === 'pattern') parent.set(o.pattern.source, o.id);
+    if (o.kind === 'fillet') parent.set(o.fillet.source, o.id);
+    if (o.kind === 'draft') parent.set(o.draft.source, o.id);
   }
   let m = new Matrix4();
   for (let cur: ObjectId | undefined = id; cur; cur = parent.get(cur)) {
@@ -121,6 +123,9 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
     case 'helix':
     case 'loft':
     case 'mesh':
+    case 'fillet':
+    case 'draft':
+    case 'step':
       return [];
   }
 }
@@ -185,6 +190,9 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
     case 'helix':
     case 'loft':
     case 'mesh':
+    case 'fillet':
+    case 'draft':
+    case 'step':
       return null;
   }
 }

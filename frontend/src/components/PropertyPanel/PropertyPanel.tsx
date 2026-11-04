@@ -10,7 +10,7 @@ import { formatMm } from '../../cad/units';
 import { usePrintCheck } from '../../features/print/usePrintCheck';
 import { ExtrudeFields, FaceSketchAction, SketchProperties } from './SketchFields';
 import { PropertyManager } from './PropertyManager';
-import { AppearanceFields, HoleActions, LoftOrMeshInfo, PatternActions, PatternFields, ShellFields } from './FeatureFields';
+import { AppearanceFields, HoleActions, LoftOrMeshInfo, PreciseFields, PatternActions, PatternFields, ShellFields } from './FeatureFields';
 import { isSuppressed } from '../../cad/features';
 import { useEditorStore } from '../../features/selection/editorStore';
 
@@ -167,6 +167,8 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
         <BooleanInfo object={object} model={model} />
       ) : object.kind === 'pattern' ? (
         <PatternFields object={object} />
+      ) : object.kind === 'fillet' || object.kind === 'draft' || object.kind === 'step' ? (
+        <PreciseFields object={object} />
       ) : object.kind === 'loft' || object.kind === 'mesh' ? (
         <LoftOrMeshInfo object={object} />
       ) : (

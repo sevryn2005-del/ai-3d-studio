@@ -38,10 +38,14 @@ from app.cad.commands import (
     HelixObject,
     LoftObject,
     MeshObject,
+    FilletObject,
+    DraftObject,
+    StepObject,
 )
 from app.cad.features import is_suppressed, pattern_matrices
 from app.cad.frames import extrude_local_matrix, sketch_local_matrix
 from app.cad.mesh_import import mesh_solid
+from app.cad.precise import draft, edge_feature, read_step
 from app.cad.sections import helix_error, helix_profile_points, helix_rings, loft_segments, section_points
 
 import numpy as np
@@ -104,7 +108,8 @@ def local_solid(obj: CadObject) -> cq.Shape:
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
-        case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject() | HelixObject() | LoftObject() | MeshObject():
+        case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject() | HelixObject() | LoftObject() | MeshObject() \
+                | FilletObject() | DraftObject() | StepObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -247,6 +252,13 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
 
     if isinstance(obj, PatternObject):
         return pattern_solid(obj, placed(obj.pattern.source))
+    if isinstance(obj, StepObject):
+        return read_step(obj.step.data, obj.name)
+    if isinstance(obj, FilletObject):
+        f = obj.fillet
+        return edge_feature(placed(f.source), f.type, f.size, f.edges, obj.name)
+    if isinstance(obj, DraftObject):
+        return draft(placed(obj.draft.source), obj.draft.angle, obj.name)
     if not isinstance(obj, BooleanObject):
         return local_solid(obj)
 

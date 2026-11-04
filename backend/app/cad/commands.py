@@ -567,21 +567,71 @@ class PatternObject(_ObjectBase):
         return [self.pattern.source]
 
 
+EdgeRule = Literal["all", "vertical", "top", "bottom"]
+FeatureType = Literal["fillet", "chamfer"]
+DraftAngle = Annotated[float, _num(-30, 30)]
+
+
+class FilletDef(Strict):
+    source: ObjectId
+    type: FeatureType
+    size: Radius
+    edges: EdgeRule
+
+
+class FilletObject(_ObjectBase):
+    """모서리 처리 (형식 v9, 정밀 엔진): 원본 형상의 모서리를 규칙(edges)으로 골라 필렛·모따기 (precise.py)"""
+
+    kind: Literal["fillet"]
+    fillet: FilletDef
+
+    @property
+    def child_ids(self) -> list[str]:
+        return [self.fillet.source]
+
+
+class DraftDef(Strict):
+    source: ObjectId
+    angle: DraftAngle
+
+
+class DraftObject(_ObjectBase):
+    """구배 (형식 v9): 세로 면을 바닥 높이 기준으로 기울인다. 양수 = 위로 갈수록 안쪽"""
+
+    kind: Literal["draft"]
+    draft: DraftDef
+
+    @property
+    def child_ids(self) -> list[str]:
+        return [self.draft.source]
+
+
+class StepData(Strict):
+    data: MeshBase64
+
+
+class StepObject(_ObjectBase):
+    """가져온 STEP (형식 v9): 파일 내용 base64. 바운딩 박스 바닥면 중심을 원점으로 옮긴다"""
+
+    kind: Literal["step"]
+    step: StepData
+
+
 PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
     BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-    HelixObject, LoftObject, MeshObject,
+    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject,
 )
 
 CadObject = Annotated[
     Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-          HelixObject, LoftObject, MeshObject],
+          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject],
     Field(discriminator="kind"),
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[8]
+    schemaVersion: Literal[9]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -786,6 +836,46 @@ class ImportMesh(Strict):
     position: Vec3 | None = None
 
 
+class EdgeFeatureCommand(Strict):
+    type: Literal["edge_feature"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    target: ObjectId
+    feature: FeatureType
+    size: Radius
+    edges: EdgeRule
+
+
+class SetEdgeFeature(Strict):
+    type: Literal["set_edge_feature"]
+    target: ObjectId
+    feature: FeatureType | None = None
+    size: Radius | None = None
+    edges: EdgeRule | None = None
+
+
+class DraftCommand(Strict):
+    type: Literal["draft"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    target: ObjectId
+    angle: DraftAngle
+
+
+class SetDraft(Strict):
+    type: Literal["set_draft"]
+    target: ObjectId
+    angle: DraftAngle
+
+
+class ImportStep(Strict):
+    type: Literal["import_step"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    data: MeshBase64
+    position: Vec3 | None = None
+
+
 class Extrude(Strict):
     type: Literal["extrude"]
     id: ObjectId | None = None
@@ -970,6 +1060,11 @@ CadCommand = Annotated[
         Helix,
         Loft,
         ImportMesh,
+        EdgeFeatureCommand,
+        SetEdgeFeature,
+        DraftCommand,
+        SetDraft,
+        ImportStep,
         Cut,
         Union_,
         Intersect,
@@ -1021,6 +1116,11 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     Helix,
     Loft,
     ImportMesh,
+    EdgeFeatureCommand,
+    SetEdgeFeature,
+    DraftCommand,
+    SetDraft,
+    ImportStep,
     Cut,
     Union_,
     Intersect,

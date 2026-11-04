@@ -19,9 +19,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 6: + 억제·숨김·외관색, 쉘, 패턴·대칭(kind 'pattern'), 구멍 도구(kind 'hole'). model.schemaVersion 6. v5 내용은 그대로 유효
  * - 7: + 스케치 구성선(line)·슬롯(slot)·각도 구속, 각도 기준 평면(angled), 크기 조정(pattern type 'scale'). v6 내용은 그대로 유효
  * - 8: + 헬릭스(helix)·로프트(loft)·가져온 메시(mesh). v7 내용은 그대로 유효
- * 읽기는 1~8 모두, 쓰기는 항상 최신(8). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 9: + 모서리 필렛·모따기(fillet)·구배(draft)·가져온 STEP(step). v8 내용은 그대로 유효
+ * 읽기는 1~9 모두, 쓰기는 항상 최신(9). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 8;
+export const PROJECT_FORMAT_VERSION = 9;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -128,8 +129,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   }
   if ((file.formatVersion as number) < 8) {
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 7 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 7 ? { ...model, schemaVersion: 8 } : model;
     file = { ...file, formatVersion: 8, model: migrated };
+  }
+  if ((file.formatVersion as number) < 9) {
+    // v8 → v9: 새 객체 종류만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 8 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 9, model: migrated };
   }
   return file;
 }

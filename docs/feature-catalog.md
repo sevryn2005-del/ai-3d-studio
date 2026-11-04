@@ -5,7 +5,7 @@
 
 엔진 제약: 브라우저 엔진(manifold, 메시)은 임의 모서리 필렛·구배·스윕 같은 B-rep 연산을 정확히 할 수 없다.
 이런 기능은 서버/Windows 엔진(CadQuery/OCCT)에 먼저 넣고, 웹은 OCCT WASM(opencascade.js, LGPL-2.1, GPL-3.0 호환)
-엔진을 같은 `CadEngine` 인터페이스 뒤에 추가해 맞춘다 (묶음 4).
+엔진을 같은 `CadEngine` 인터페이스 뒤에 추가해 맞춘다 (묶음 4 ✅: 브라우저 워커가 정밀 피처만 OCCT 로 계산).
 
 ## 1. 부품 모델링 (솔리드웍스 피처 / 블렌더 모디파이어)
 
@@ -15,7 +15,7 @@
 | 돌출 보스/베이스, 돌출 컷(음수) | Extruded Boss/Cut | Extrude | ✅ |
 | 회전 보스/베이스 | Revolved Boss | Spin/Screw | ✅ |
 | 불리언 합치기·빼기·교차 | Combine | Boolean modifier | ✅ |
-| 필렛·모따기 | Fillet/Chamfer | Bevel | 🟡 박스 모서리만 |
+| 필렛·모따기 (모든 형상, 모서리 규칙 전체·세로·위·아래) | Fillet/Chamfer | Bevel | ✅ (정밀 엔진) |
 | 쉘 (속 비우기) | Shell | Solidify | ✅ 박스·원통·돌출 |
 | 구멍 가공 (단순·카운터보어·카운터싱크) | Hole Wizard | — | ✅ |
 | 선형 패턴 (1·2방향) | Linear Pattern | Array | ✅ |
@@ -28,12 +28,12 @@
 | 헬릭스 스윕 (스프링·코일) | Swept along Helix | Screw modifier | ✅ |
 | 스윕 (임의 경로) | Swept Boss/Cut | Curve bevel | ⬜ |
 | 로프트 (단면 2~10개, 직선 연결) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선 없음) |
-| 구배 (빼기 각) | Draft | — | ⬜ (OCCT) |
+| 구배 (빼기 각, 옆면 전체) | Draft | — | ✅ (정밀 엔진) |
 | 리브 | Rib | — | ⬜ |
 | 나사산: 수나사(원통에 감기)·암나사(구멍 벽에 홈, ISO 보통 피치) | Thread | Screw modifier | ✅ |
 | 돔 · 랩 · 변형 | Dome / Wrap / Flex | Simple Deform | ⬜ |
 | 곡선 패턴 · 스케치 구동 패턴 | Curve/Sketch Driven Pattern | Array on curve | ⬜ |
-| 임의 모서리·면 필렛 / 가변 반경 | Fillet (edges/faces) | Bevel | ⬜ (OCCT, 면·모서리 선택 필요) |
+| 뷰포트에서 모서리·면을 하나씩 골라 필렛 / 가변 반경 | Fillet (edges/faces) | Bevel | ⬜ (뷰포트 모서리 선택 필요) |
 | 면 이동·삭제·오프셋 | Move/Delete Face | — | ⬜ |
 | 여러 바디 · 바디 분할 | Multibody / Split | Separate | ⬜ |
 
@@ -84,9 +84,9 @@
 | 기능 | 상태 |
 |------|------|
 | 프로젝트 저장·열기(.ai3d), 자동 임시 저장·복원, 구버전 읽기 | ✅ |
-| 내보내기 STL·3MF·STEP·GLB | ✅ (STEP 은 서버 엔진) |
+| 내보내기 STL·3MF·STEP·GLB | ✅ (웹 STEP 도 정밀 엔진으로) |
 | 가져오기 STL·OBJ (메시 객체, 미터 단위 자동 보정) | ✅ (서버 엔진은 2만 삼각형까지) |
-| 가져오기 STEP | ⬜ (묶음 4: 브라우저 OCCT) |
+| 가져오기 STEP (웹·Windows) | ✅ |
 | 3MF 색 내보내기 | ✅ |
 | 도면 PDF·DXF | ⬜ (7장) |
 
@@ -126,6 +126,7 @@
    (남은 스케치 요소 — 호·스플라인·잘라내기·오프셋 — 는 묶음 3에 합침)
 3. ✅ 묶음 3 (형식 v8): 로프트, 헬릭스·나사산, STL·OBJ 가져오기, 스케치 오프셋, 3MF 색
    (남은 것 → 묶음 4: 스케치 호·필렛·잘라내기, 임의 경로 스윕, 리브, STEP 가져오기)
-4. 묶음 4: 브라우저 OCCT(WASM) 엔진 → 임의 모서리 필렛·구배·면 선택 (웹·Windows 동일)
+4. ✅ 묶음 4 (형식 v9): 브라우저 OCCT(WASM) 정밀 엔진, 모든 형상 필렛·모따기(규칙), 구배, STEP 가져오기·웹 STEP 내보내기
+   (남은 것 → 묶음 5 앞: 스케치 호·필렛·잘라내기, 임의 경로 스윕, 리브, 뷰포트 모서리 선택)
 5. 묶음 5: 조립품 (부품 삽입·메이트) → 묶음 6: 도면
 6. 이후: 메시 편집·스컬프트(블렌더), 판금, 렌더, 해석, 애니메이션

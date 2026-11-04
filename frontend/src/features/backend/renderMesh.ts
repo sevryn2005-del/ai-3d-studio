@@ -31,11 +31,13 @@ export function geometryKey(
     });
     return `${obj.boolean.operation}(${parts.join(';')})${sup}`;
   }
-  if (obj.kind === 'pattern') {
-    const child = index.get(obj.pattern.source);
-    const src = child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${obj.pattern.source}`;
-    return `pattern:${JSON.stringify(obj.pattern)}(${src})${sup}`;
+  if (obj.kind === 'pattern' || obj.kind === 'fillet' || obj.kind === 'draft') {
+    const def = obj.kind === 'pattern' ? obj.pattern : obj.kind === 'fillet' ? obj.fillet : obj.draft;
+    const child = index.get(def.source);
+    const src = child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${def.source}`;
+    return `${obj.kind}:${JSON.stringify(def)}(${src})${sup}`;
   }
+  if (obj.kind === 'step') return `step:${obj.step.data.length}:${hash(obj.step.data)}${sup}`;
   const shell = 'shell' in obj && obj.shell ? `|shell:${obj.shell.thickness}:${obj.shell.open.join(',')}` : '';
   if (obj.kind === 'extrude' || obj.kind === 'revolve' || obj.kind === 'helix') {
     const ref = sketchFeatureRef(obj)!;
@@ -127,7 +129,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 8, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

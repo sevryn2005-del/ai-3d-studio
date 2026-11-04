@@ -99,3 +99,29 @@ test('정적 웹: 사각형 스케치 → 돌출 → 폭 80 → 관통 구멍 �
   expect(Math.abs(vol / 6 - (80 * 40 * 4 - Math.PI * 9 * 4)) / (80 * 40 * 4)).toBeLessThan(2e-3);
   expect(apiCalls).toEqual([]);
 });
+
+test('정적 웹: 정밀 엔진(OCCT WASM 압축본)으로 필렛 → STEP 내보내기, 외부 요청 0건', async ({ page }) => {
+  test.setTimeout(90_000);
+  const external: string[] = [];
+  await page.context().route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (!['127.0.0.1', 'localhost'].includes(url.hostname) && !['data:', 'blob:'].includes(url.protocol)) {
+      external.push(url.href);
+      return route.abort();
+    }
+    return route.continue();
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(base!);
+  await expect(page.getByTestId('server-evaluation')).toHaveText('브라우저 계산 ✓', { timeout: 20_000 });
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-fillet').click();
+  await expect(page.locator('[data-object-id="fillet_1"]')).toBeVisible();
+  await expect(page.getByTestId('server-evaluation')).toHaveText('브라우저 계산 ✓', { timeout: 60_000 });
+  await page.getByRole('button', { name: '내보내기 ▾' }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /^STEP/ }).click()]);
+  expect(readFileSync((await download.path())!).subarray(0, 12).toString()).toBe('ISO-10303-21');
+  expect(external).toEqual([]);
+  expect(errors).toEqual([]);
+});

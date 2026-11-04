@@ -27,7 +27,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 8, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 9, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -114,7 +114,18 @@ export function PreviewBody({
     );
   }
   // 로프트·메시·헬릭스: 엔진 메시가 올 때까지 미리보기 없음 (브라우저·서버 엔진 모두 빠름)
-  if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix') return null;
+  if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix' || object.kind === 'step') return null;
+  if (object.kind === 'fillet' || object.kind === 'draft') {
+    // 계산 전 미리보기: 원본 그대로
+    const src = index.get(object.kind === 'fillet' ? object.fillet.source : object.draft.source);
+    if (!src) return null;
+    const { position: p, rotation: r } = src.transform;
+    return (
+      <group position={p} rotation={[r[0] * DEG2RAD, r[1] * DEG2RAD, r[2] * DEG2RAD]}>
+        <PreviewBody object={src} index={index} selectId={selectId} variant={variant === 'ghost' ? 'ghost' : 'translucent'} />
+      </group>
+    );
+  }
   if (object.kind !== 'boolean') {
     let profile: Profile | null = null;
     let local: Matrix4 | null = null;
