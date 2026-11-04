@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 
 from app.cad.commands import slot_half_extent
+from app.cad.curves import rounded_points
 
 
 def slot_outline(p: dict, segs: int = 16) -> list[tuple[float, float]]:
@@ -31,7 +32,7 @@ def signed_area(pts) -> float:
 def outline(p: dict) -> list[tuple[float, float]]:
     t = p["type"]
     if t == "polygon":
-        pts = [(q[0], q[1]) for q in p["points"]]
+        pts = rounded_points(p["points"], p.get("corners"), True)
     elif t == "rectangle":
         cx, cy = p["center"]
         w, h = p["width"] / 2, p["height"] / 2
@@ -132,3 +133,9 @@ def helix_error(pts, pitch: float) -> str | None:
     if pitch <= h + 1e-9:
         return f"피치({round(pitch, 3):g}mm)가 프로파일 높이({round(h, 3):g}mm)보다 커야 바퀴끼리 겹치지 않습니다"
     return None
+
+
+def sweep_profile_points(p: dict, tol: float):
+    """스윕 단면 점: 헬릭스와 같은 점을 바운딩 박스 중심 기준으로 (sections.ts sweepProfilePoints)"""
+    (cx, cy), _, _ = bounds(p)
+    return [(u - cx, v - cy) for u, v in helix_profile_points(p, tol)]

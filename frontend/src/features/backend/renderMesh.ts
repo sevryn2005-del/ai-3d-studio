@@ -10,7 +10,7 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import type { RenderMesh } from '../../api/backend';
 import type { EngineMesh } from '../engine/types';
 import type { CadObject, ObjectId, Sketch, SketchPlane, Transform } from '../../cad/commandTypes';
-import { resolveProfile, sketchFeatureRef, type Profile } from '../../cad/sketch';
+import { openLinePoints, profileOf, resolveProfile, sketchFeatureRef, type Profile } from '../../cad/sketch';
 import { sketchLocalMatrix } from '../../cad/sketchPlane';
 
 /**
@@ -42,7 +42,7 @@ export function geometryKey(
   if (obj.kind === 'extrude' || obj.kind === 'revolve' || obj.kind === 'helix') {
     const ref = sketchFeatureRef(obj)!;
     const sk = sketches.get(ref.sketch);
-    const prof = profileKey(sk ? resolveProfile(sk, ref.profile) : null);
+    const prof = profileKey(sk ? profileOf(sk, ref) : null);
     // 면 위 스케치: 붙은 면의 좌표계(돌출 객체 로컬 기준)를 키에 넣는다 → 붙은 객체가 바뀌거나 움직이면 다시 계산
     const frame = sk?.plane.type === 'face' ? `|frame:${frameKey(obj.id, ref.sketch, index, sketches)}` : '';
     if (obj.kind === 'helix') return `helix:${prof}|p=${obj.params.pitch}|t=${obj.params.turns}${frame}${sup}`;
@@ -54,6 +54,13 @@ export function geometryKey(
       return `${profileKey(sk ? resolveProfile(sk, s.profile) : null)}${sk?.plane.type === 'face' ? `|frame:${frameKey(obj.id, s.sketch, index, sketches)}` : ''}`;
     });
     return `loft(${parts.join(';')})${sup}`;
+  }
+  if (obj.kind === 'sweep') {
+    // 스윕: 단면 + 경로 점 + 경로 스케치의 객체 로컬 좌표계 (단면은 경로 시작점에 세우므로 단면 평면 위치는 쓰지 않는다)
+    const sk = sketches.get(obj.sweep.sketch);
+    const pk = sketches.get(obj.sweep.pathSketch);
+    const path = pk ? openLinePoints(pk, obj.sweep.path) : null;
+    return `sweep:${profileKey(sk ? resolveProfile(sk, obj.sweep.profile) : null)}|path:${path ? path.map((q) => q.join(',')).join(';') : 'missing'}|frame:${frameKey(obj.id, obj.sweep.pathSketch, index, sketches)}${sup}`;
   }
   if (obj.kind === 'mesh') return `mesh:${obj.mesh.positions.length}:${hash(obj.mesh.positions)}:${hash(obj.mesh.indices)}${sup}`;
   const params = obj.params as Record<string, number>;
@@ -129,7 +136,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 10, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 
@@ -144,7 +151,7 @@ function profileKey(p: Profile | null): string {
   if (!p) return 'missing';
   const tag = planeTag(p.plane);
   if (p.type === 'rectangle') return `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${tag}`;
-  if (p.type === 'polygon') return `poly:${p.points.map((q) => q.join(',')).join(';')}@${p.z}${tag}`;
+  if (p.type === 'polygon') return `poly:${p.points.map((q) => q.join(',')).join(';')}${p.corners?.length ? `|c:${p.corners.map((c) => `${c.k}${c.type[0]}${c.size}`).join(',')}` : ''}@${p.z}${tag}`;
   if (p.type === 'slot') return `slot:${p.length}x${p.width}<${p.angle}@${p.center.join(',')},${p.z}${tag}`;
   return `circle:${p.diameter}@${p.center.join(',')},${p.z}${tag}`;
 }

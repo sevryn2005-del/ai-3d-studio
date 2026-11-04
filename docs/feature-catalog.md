@@ -26,10 +26,10 @@
 | 돌출 컷 · 회전 컷 (다른 바디에서 빼기) | Extruded / Revolved Cut | Boolean | ✅ |
 | 크기 조정 (균일·축별 배율) | Scale | Scale | ✅ |
 | 헬릭스 스윕 (스프링·코일) | Swept along Helix | Screw modifier | ✅ |
-| 스윕 (임의 경로) | Swept Boss/Cut | Curve bevel | ⬜ |
+| 스윕 (경로 = 스케치 꺾은선, 둥근 꺾임, 마이터 이음) | Swept Boss/Cut | Curve bevel | ✅ (3D 곡선 경로·비틀기 없음) |
 | 로프트 (단면 2~10개, 직선 연결) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선 없음) |
 | 구배 (빼기 각, 옆면 전체) | Draft | — | ✅ (정밀 엔진) |
-| 리브 | Rib | — | ⬜ |
+| 리브 · 얇은 피처 (열린 선을 두께로 돌출) | Rib / Thin Feature | Solidify | ✅ (깊이 직접 지정) |
 | 나사산: 수나사(원통에 감기)·암나사(구멍 벽에 홈, ISO 보통 피치) | Thread | Screw modifier | ✅ |
 | 돔 · 랩 · 변형 | Dome / Wrap / Flex | Simple Deform | ⬜ |
 | 곡선 패턴 · 스케치 구동 패턴 | Curve/Sketch Driven Pattern | Array on curve | ⬜ |
@@ -44,9 +44,11 @@
 | 사각형·원·다각형, 치수, 평면 XY/XZ/YZ, 면 위 스케치 | Sketch | ✅ |
 | 기하 구속 11종 + 자유도·완전 정의 표시, 충돌 구속 진단 | Relations / SketchXpert | ✅ |
 | 슬롯 (방향·길이·폭) | Straight Slot | ✅ |
-| 직선 프로파일 경계·호·스플라인·타원 | Line/Arc/Spline/Ellipse | ⬜ |
+| 경로(열린 꺾은선, 꺾임 둥글게) | Polyline / Sketch Fillet | ✅ |
+| 독립 호·스플라인·타원 요소 | Arc/Spline/Ellipse | ⬜ |
 | 스케치 오프셋 (사각형·원·슬롯·다각형) | Offset Entities | ✅ |
-| 스케치 필렛·모따기·잘라내기·연장 | Sketch Fillet/Trim/Extend | ⬜ |
+| 스케치 필렛·모따기 (다각형·경로 꼭짓점, 정확한 원호) | Sketch Fillet/Chamfer | ✅ |
+| 스케치 잘라내기·연장 | Trim/Extend | ⬜ |
 | 구성선 (구속 기준선) | Construction / Centerline | ✅ |
 | 스케치 대칭·패턴 | Mirror/Pattern Entities | ⬜ |
 | 각도 구속 | Angle | ✅ |
@@ -126,7 +128,8 @@
    (남은 스케치 요소 — 호·스플라인·잘라내기·오프셋 — 는 묶음 3에 합침)
 3. ✅ 묶음 3 (형식 v8): 로프트, 헬릭스·나사산, STL·OBJ 가져오기, 스케치 오프셋, 3MF 색
    (남은 것 → 묶음 4: 스케치 호·필렛·잘라내기, 임의 경로 스윕, 리브, STEP 가져오기)
+5. ✅ 묶음 5 (형식 v10): 경로, 스케치 필렛·모따기, 스윕, 리브(얇은 돌출)
 4. ✅ 묶음 4 (형식 v9): 브라우저 OCCT(WASM) 정밀 엔진, 모든 형상 필렛·모따기(규칙), 구배, STEP 가져오기·웹 STEP 내보내기
    (남은 것 → 묶음 5 앞: 스케치 호·필렛·잘라내기, 임의 경로 스윕, 리브, 뷰포트 모서리 선택)
-5. 묶음 5: 조립품 (부품 삽입·메이트) → 묶음 6: 도면
+6. 묶음 6: 조립품 (부품 삽입·메이트) → 묶음 7: 도면 (뷰포트 모서리 직접 선택 필렛·잘라내기도 이 사이에)
 6. 이후: 메시 편집·스컬프트(블렌더), 판금, 렌더, 해석, 애니메이션

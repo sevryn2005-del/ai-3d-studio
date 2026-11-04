@@ -4,8 +4,9 @@
 import type { CadCommand, CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
-import { findSketch, resolveProfile, revolveProfileError, sketchRefs } from './sketch';
-import { helixError, helixProfilePoints } from './sections';
+import { findSketch, openLinePoints, profileOf, resolveProfile, revolveProfileError, sketchRefs } from './sketch';
+import { cornerError, openPathError, sweepError, type Corner } from './curves';
+import { helixError, helixProfilePoints, sweepProfilePoints } from './sections';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
 import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, polygonError, refKind, solveSketch } from './solver';
@@ -15,6 +16,7 @@ const SKETCH_TYPES = [
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
   'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
+  'add_path', 'set_corner', 'sweep',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -55,8 +57,8 @@ function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, aff
   const solved = solveSketch(next, pinned);
   if (!solved.ok) return fail(solved.error);
   for (const e of solved.sketch.entities) {
-    if (e.type !== 'polygon') continue;
-    const err = polygonError(e.points);
+    if (e.type !== 'polygon' && e.type !== 'path') continue;
+    const err = e.type === 'polygon' ? (polygonError(e.points) ?? cornerError(e.points, e.corners, true)) : (openPathError(e.points) ?? cornerError(e.points, e.corners, false));
     if (err) return fail(`${e.id}: ${err}`);
   }
   // 회전 피처가 쓰는 프로파일은 회전축(u = 0)을 넘으면 안 된다
@@ -166,7 +168,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         const entity = sketch.entities.find((e) => e.id === cmd.entity)!;
         const pins = new Set<string>();
         let moved = entity;
-        if (entity.type === 'polygon' || entity.type === 'line') {
+        if (entity.type === 'polygon' || entity.type === 'line' || entity.type === 'path') {
           const xs = entity.points.map((p) => p[0]);
           const ys = entity.points.map((p) => p[1]);
           const c = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
@@ -291,6 +293,65 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return okUnlessCycle({ ...model, objects: [...model.objects, obj] }, cmd, id);
     }
 
+    case 'add_path': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+      const id = cmd.id ?? nextEntityId(sketch, 'path');
+      if (sketch.entities.some((e) => e.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      const err = openPathError(cmd.points);
+      if (err) return fail(`경로: ${err}`);
+      return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, { id, type: 'path', points: cmd.points }] }), cmd, sketch.id);
+    }
+
+    case 'set_corner': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
+      if (e.type !== 'polygon' && e.type !== 'path') return fail('스케치 필렛·모따기는 다각형·경로의 꼭짓점에만 할 수 있습니다 (사각형은 다각형으로 그리세요)');
+      const closed = e.type === 'polygon';
+      const n = e.points.length;
+      const all = Array.from({ length: n }, (_, k) => k).filter((k) => closed || (k > 0 && k < n - 1));
+      const ks = cmd.vertices ?? all;
+      const bad = ks.find((k) => !all.includes(k));
+      if (bad !== undefined) return fail(`꼭짓점 p${bad} 에는 모서리 처리를 할 수 없습니다${closed ? ` (꼭짓점은 p0~p${n - 1})` : ' (경로는 양 끝점을 뺀 안쪽 꼭짓점만)'}`);
+      if (!ks.length) return fail('처리할 꼭짓점이 없습니다 (경로에 꺾이는 점이 없습니다)');
+      const kept = (e.corners ?? []).filter((c) => !ks.includes(c.k));
+      const added: Corner[] = cmd.size > 0 ? ks.map((k) => ({ k, type: cmd.corner, size: cmd.size })) : [];
+      const corners = [...kept, ...added].sort((a, b) => a.k - b.k);
+      const err = cornerError(e.points, corners, closed);
+      if (err) return fail(err);
+      const { corners: _old, ...rest } = e;
+      void _old;
+      const next = corners.length ? { ...rest, corners } : rest;
+      return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
+    }
+
+    case 'sweep': {
+      const sketch = findSketch(model, cmd.sketch);
+      const pathSketch = findSketch(model, cmd.pathSketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (!pathSketch) return fail(`존재하지 않는 스케치입니다: ${cmd.pathSketch}`);
+      const prof = resolveProfile(sketch, cmd.profile);
+      if (!prof) return fail(`'${sketch.name}'에 쓸 수 있는 단면 ${cmd.profile} 이(가) 없습니다`);
+      const path = openLinePoints(pathSketch, cmd.path);
+      if (!path) return fail(`'${pathSketch.name}'에 경로(열린 선) ${cmd.path} 이(가) 없습니다`);
+      const err = sweepError(sweepProfilePoints(prof, 0.05), path);
+      if (err) return fail(err);
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'sweep');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `스윕 ${model.objects.filter((o) => o.kind === 'sweep').length + 1}`,
+        kind: 'sweep',
+        sweep: { sketch: sketch.id, profile: cmd.profile, pathSketch: pathSketch.id, path: cmd.path },
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return okUnlessCycle({ ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+
     case 'offset_entity': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
@@ -324,8 +385,9 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         const pts = offsetPolygon(e.points, d);
         const err = pts ? polygonError(pts) : '안쪽 오프셋이 너무 큽니다';
         if (!pts || err) return fail(`오프셋 결과: ${err}`);
-        entity = { id, type: 'polygon', points: pts };
-      } else return fail('구성선은 오프셋할 수 없습니다');
+        // 꼭짓점 처리는 같은 크기로 옮긴다 (들어가지 않으면 뺀다)
+        entity = { id, type: 'polygon', points: pts, ...(e.corners?.length && !cornerError(pts, e.corners, true) ? { corners: e.corners } : {}) };
+      } else return fail('구성선·경로는 오프셋할 수 없습니다');
       return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, entity], dimensions: [...sketch.dimensions, ...dims] }), cmd, sketch.id);
     }
 
@@ -337,7 +399,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const [id, part] = cmd.point.split('.') as [string, string];
       const entities = sketch.entities.map((e) => {
         if (e.id !== id) return e;
-        if (e.type === 'polygon') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) };
+        if (e.type === 'polygon' || e.type === 'path') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) };
         if (e.type === 'line') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) as [[number, number], [number, number]] };
         return { ...e, center: cmd.to };
       });
@@ -398,16 +460,25 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         const names = sketch.entities.map((e) => e.id).join(', ') || '없음';
         return fail(`'${sketch.name}'에 프로파일 ${cmd.profile} 이(가) 없습니다 (있는 요소: ${names})`);
       }
-      if (!resolveProfile(sketch, cmd.profile)) return fail(`프로파일 ${cmd.profile} 의 치수가 완전하지 않습니다`);
+      if (cmd.thin !== undefined) {
+        // 얇은 돌출·리브: 열린 선을 두께만큼 띄운 단면
+        if (!openLinePoints(sketch, cmd.profile)) return fail(`리브(얇은 돌출)는 열린 선(구성선·경로)에만 쓸 수 있습니다: ${cmd.profile}`);
+        const prof = profileOf(sketch, { profile: cmd.profile, thin: cmd.thin });
+        const err = prof?.type === 'polygon' ? polygonError(prof.points) : null;
+        if (err) return fail(`리브 단면: ${err} (두께를 줄이거나 선의 꺾임을 완만하게 하세요)`);
+      } else if (!resolveProfile(sketch, cmd.profile)) {
+        if (openLinePoints(sketch, cmd.profile)) return fail(`${cmd.profile} 은(는) 열린 선입니다. 두께(thin)를 주면 리브로 돌출됩니다`);
+        return fail(`프로파일 ${cmd.profile} 의 치수가 완전하지 않습니다`);
+      }
       if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
       const id = cmd.id ?? nextId(model, 'extrude');
       if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
       const obj: CadObject = {
         id,
-        name: cmd.name ?? `돌출 ${model.objects.filter((o) => o.kind === 'extrude').length + 1}`,
+        name: cmd.name ?? (cmd.thin !== undefined ? `리브 ${model.objects.filter((o) => o.kind === 'extrude' && o.extrude.thin !== undefined).length + 1}` : `돌출 ${model.objects.filter((o) => o.kind === 'extrude').length + 1}`),
         kind: 'extrude',
         params: { distance: cmd.distance },
-        extrude: { sketch: sketch.id, profile: cmd.profile },
+        extrude: { sketch: sketch.id, profile: cmd.profile, ...(cmd.thin !== undefined ? { thin: cmd.thin } : {}) },
         transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
       };
       return ok({ ...model, objects: [...model.objects, obj] }, cmd, id);

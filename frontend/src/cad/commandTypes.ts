@@ -163,7 +163,7 @@ export const PARAMS_SCHEMAS = {
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
-export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh' | 'fillet' | 'draft' | 'step';
+export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh' | 'fillet' | 'draft' | 'step' | 'sweep';
 export const PRIMITIVE_KINDS = Object.keys(PARAMS_SCHEMAS) as PrimitiveKind[];
 export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
@@ -173,6 +173,17 @@ export type ConeParams = z.infer<typeof ConeParamsSchema>;
 // ---- 스케치 (형식 v2) ----------------------------------------------------------
 export const Point2Schema = z.tuple([coordinate, coordinate]);
 export type Point2 = z.infer<typeof Point2Schema>;
+
+/**
+ * 꼭짓점 처리 (형식 v10, 스케치 필렛·모따기): 꼭짓점 k 를 반지름 size 의 접하는 호(fillet) 또는 양쪽으로 size 만큼 자른 직선(chamfer)으로.
+ * 규칙: cad/curves.ts (서버 app/cad/curves.py)
+ */
+export const CornerSchema = z.strictObject({
+  k: z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1),
+  type: z.enum(['fillet', 'chamfer']),
+  size: z.number().min(LIMITS.minDimension / 10).max(LIMITS.maxDimension),
+});
+const corners = z.array(CornerSchema).max(LIMITS.maxPolygonPoints).optional();
 
 export const SketchEntitySchema = z.discriminatedUnion('type', [
   z.strictObject({ id: ObjectIdSchema, type: z.literal('rectangle'), center: Point2Schema }),
@@ -185,6 +196,17 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     id: ObjectIdSchema,
     type: z.literal('polygon'),
     points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
+    corners,
+  }),
+  /**
+   * 경로 (형식 v10): 열린 꺾은선. 스윕 중심선·리브(얇은 돌출) 선. 꼭짓점 `ID.pk`, 변 `ID.ek` (pk → p(k+1), 닫히지 않음).
+   * 안쪽 꼭짓점은 corners 로 둥글게 꺾을 수 있다
+   */
+  z.strictObject({
+    id: ObjectIdSchema,
+    type: z.literal('path'),
+    points: z.array(Point2Schema).min(2).max(LIMITS.maxPolygonPoints),
+    corners,
   }),
   /**
    * 구성선 (형식 v7): 형상을 만들지 않는 보조 직선. 끝점 `ID.p0`·`ID.p1`, 변 `ID.e0` 으로 구속에 쓴다
@@ -423,7 +445,8 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     ...objectBase,
     kind: z.literal('extrude'),
     params: ExtrudeParamsSchema,
-    extrude: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema }),
+    /** thin (형식 v10, 리브·얇은 피처): 열린 선(구성선·경로)을 두께 thin 으로 띄운 단면을 돌출 */
+    extrude: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema, thin: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension).optional() }),
     shell: ShellSchema.optional(),
   }),
   /**
@@ -450,6 +473,15 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
    * 로프트 (형식 v8): 단면(스케치 프로파일)들을 순서대로 직선(룰드) 면으로 잇는다. 단면마다 둘레를 같은 수의 점으로
    * 나눠(+u 방향에서 시작, 반시계) 대응시킨다 — 두 엔진이 같은 규칙 (cad/sections.ts ↔ app/cad/sections.py)
    */
+  /**
+   * 스윕 (형식 v10): 단면(profile)을 경로(path 요소, 다른 스케치 가능)를 따라 쓸어 만든 형상.
+   * 단면은 바운딩 박스 중심이 경로 시작점에 오도록 경로 방향과 수직으로 세운다 (단면 v 축 = 경로 평면의 법선)
+   */
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('sweep'),
+    sweep: z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema, pathSketch: ObjectIdSchema, path: ObjectIdSchema }),
+  }),
   z.strictObject({
     ...objectBase,
     kind: z.literal('loft'),
@@ -497,7 +529,7 @@ export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 9;
+export const MODEL_SCHEMA_VERSION = 10;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -655,6 +687,42 @@ export const AddPolygonCommandSchema = z.strictObject({
 });
 
 /** 구성선 추가 (형상을 만들지 않는 보조선, 구속 기준) */
+/** 경로(열린 꺾은선) 추가: 스윕 중심선·리브 선 */
+export const AddPathCommandSchema = z.strictObject({
+  type: z.literal('add_path'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  points: z.array(Point2Schema).min(2).max(LIMITS.maxPolygonPoints),
+});
+
+/** 스케치 필렛·모따기: 다각형·경로의 꼭짓점(vertices 생략 = 처리할 수 있는 모든 꼭짓점). size 0 = 처리 제거 */
+export const SetCornerCommandSchema = z.strictObject({
+  type: z.literal('set_corner'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+  vertices: z.array(z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1)).max(LIMITS.maxPolygonPoints).optional(),
+  corner: z.enum(['fillet', 'chamfer']),
+  size: z.number().min(0).max(LIMITS.maxDimension),
+});
+
+/** 리브(얇은 돌출) 두께 바꾸기 */
+export const SetThinCommandSchema = z.strictObject({
+  type: z.literal('set_thin'),
+  target: ObjectIdSchema,
+  thin: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension),
+});
+
+/** 스윕: 단면을 경로를 따라 쓸기 */
+export const SweepCommandSchema = z.strictObject({
+  type: z.literal('sweep'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  sketch: ObjectIdSchema,
+  profile: ObjectIdSchema,
+  pathSketch: ObjectIdSchema,
+  path: ObjectIdSchema,
+});
+
 export const AddLineCommandSchema = z.strictObject({
   type: z.literal('add_line'),
   sketch: ObjectIdSchema,
@@ -826,6 +894,8 @@ export const ExtrudeCommandSchema = z.strictObject({
   profile: ObjectIdSchema,
   distance: extrudeDistance,
   position: Vec3Schema.optional(),
+  /** 얇은 돌출·리브 (형식 v10): profile 이 열린 선(구성선·경로)일 때 두께 */
+  thin: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension).optional(),
 });
 
 /** 박스 모서리를 둥글게 (radius 0 = 모서리 처리 제거). edges 생략 시 모든 모서리 */
@@ -946,6 +1016,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetSketchPlaneCommandSchema,
   AddPolygonCommandSchema,
   AddLineCommandSchema,
+  AddPathCommandSchema,
+  SetCornerCommandSchema,
   AddSlotCommandSchema,
   SetEntityAngleCommandSchema,
   OffsetEntityCommandSchema,
@@ -959,6 +1031,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   RevolveCommandSchema,
   HelixCommandSchema,
   LoftCommandSchema,
+  SweepCommandSchema,
+  SetThinCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,
   SetEdgeFeatureCommandSchema,

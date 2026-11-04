@@ -14,7 +14,7 @@ import { SketchDrawTool } from './SketchDrawTool';
 import { MouseScheme } from './MouseScheme';
 import { ConfirmationCorner, PendingPreview, PlanePicker } from './FeatureFlow';
 import { useEditorStore } from '../../features/selection/editorStore';
-import { LoftPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
+import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
 
 /**
  * 3D 뷰포트. 1 Three.js 단위 = 1 mm, Z-up.
@@ -89,9 +89,10 @@ export function Viewport() {
       <MeasureReadout />
       <MassPanel />
       <LoftPanel />
+      <SweepPanel />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
-          ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`
+          ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`
           : navHint(mouseScheme, false)}
       </div>
     </section>

@@ -11,9 +11,10 @@
  */
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
-import { profileBounds, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { roundedPoints, sweepError, sweepRings, toleranceStep } from '../../../cad/curves';
 import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
-import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints } from '../../../cad/sections';
+import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh } from '../../../cad/meshData';
 import { ringSolid } from './ringSolid';
 import { Vector3, type Matrix4 } from 'three';
@@ -67,7 +68,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 10, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -102,6 +103,23 @@ export function localManifold(
       if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 로프트 결과 형상이 올바르지 않습니다 (단면이 겹치거나 꼬였습니다)`);
       return solid;
     }
+    case 'sweep': {
+      const sk = sketches.get(obj.sweep.sketch);
+      const pk = sketches.get(obj.sweep.pathSketch);
+      const p = sk ? resolveProfile(sk, obj.sweep.profile) : null;
+      const path = pk ? openLinePoints(pk, obj.sweep.path) : null;
+      if (!p || !path) throw new GeometryError(`'${obj.name}': 스윕의 단면 또는 경로를 찾을 수 없습니다`);
+      const prof = sweepProfilePoints(p, tol);
+      const err = sweepError(prof, path);
+      if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+      const m = sketchLocalMatrix(modelOf(), obj.id, obj.sweep.pathSketch);
+      if (!m) throw new GeometryError(`'${obj.name}': 경로 스케치의 평면을 찾을 수 없습니다`);
+      const path3 = path.map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(m).toArray() as [number, number, number]);
+      const B = new Vector3().setFromMatrixColumn(m, 2).normalize().toArray() as [number, number, number];
+      const solid = scope.keep(ringSolid(wasm, sweepRings(prof, path3, B), prof, prof));
+      if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 스윕 결과 형상이 올바르지 않습니다 (경로가 자기 자신과 겹칩니다)`);
+      return solid;
+    }
     case 'fillet':
     case 'draft':
     case 'step':
@@ -123,12 +141,12 @@ export function localManifold(
       // 서버 CadQuery: 평면 좌표에서 rect·circle·polyline 단면을 만들어 돌출(또는 v 축 둘레 회전)한 뒤 같은 행렬로 옮긴 형상
       const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
       const sk = sketches.get(ref.sketch);
-      const p = sk ? resolveProfile(sk, ref.profile) : null;
+      const p = sk ? profileOf(sk, ref) : null;
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
       // 다각형은 꼭짓점 좌표 그대로 (구속 해석기가 푼 값). 감김 방향과 무관하게 채우도록 NonZero
       const placed =
         p.type === 'polygon'
-          ? scope.keep(new CrossSection([p.points], 'NonZero'))
+          ? scope.keep(new CrossSection([roundedPoints(p.points, p.corners, true, (r) => toleranceStep(r, tol))], 'NonZero'))
           : p.type === 'slot'
             ? slotSection(wasm, p, tol, scope)
             : scope.keep(
@@ -141,7 +159,7 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 9, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 10, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {

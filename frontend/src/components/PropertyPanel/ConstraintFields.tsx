@@ -13,7 +13,7 @@ import { CONSTRAINT_ARITY, CONSTRAINT_LABEL, degreesOfFreedom, refKind, sketchPo
 import { formatMm } from '../../cad/units';
 import { NumberField } from './NumberField';
 
-type Polygon = Extract<SketchEntity, { type: 'polygon' }>;
+type Polygon = Extract<SketchEntity, { type: 'polygon' | 'path' }>;
 
 const isFixed = (sketch: Sketch, ref: string) => sketch.constraints.some((c) => c.type === 'fix' && c.refs[0] === ref);
 
@@ -55,7 +55,7 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
         );
       })}
       <div className="muted small">변</div>
-      {polygon.points.map((a, k) => {
+      {(polygon.type === 'path' ? polygon.points.slice(0, -1) : polygon.points).map((a, k) => {
         const b = polygon.points[(k + 1) % n]!;
         const ref = `${polygon.id}.e${k}`;
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -76,7 +76,36 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
           </div>
         );
       })}
+      <CornerFields sketch={sketch} entity={polygon} />
     </>
+  );
+}
+
+/**
+ * 스케치 필렛·모따기 (형식 v10): 모든 꼭짓점(경로는 안쪽 꼭짓점)에 같은 크기로. 크기 0 = 제거.
+ * 꼭짓점 하나만 바꾸려면 AI·명령(set_corner vertices)으로
+ */
+function CornerFields({ sketch, entity }: { sketch: Sketch; entity: Polygon }) {
+  const submitNow = useSceneStore((s) => s.submitNow);
+  const first = entity.corners?.[0];
+  const [corner, setCorner] = useState<'fillet' | 'chamfer'>(first?.type ?? 'fillet');
+  const apply = (size: number) => submitNow({ type: 'set_corner', sketch: sketch.id, entity: entity.id, corner, size });
+  return (
+    <fieldset className="corner-fields">
+      <legend>꼭짓점 처리 (스케치 필렛·모따기)</legend>
+      <div className="field">
+        <label htmlFor={`corner-type-${entity.id}`}>종류</label>
+        <select id={`corner-type-${entity.id}`} data-testid="corner-type" value={corner} onChange={(e) => setCorner(e.target.value as 'fillet' | 'chamfer')}>
+          <option value="fillet">필렛 (둥글게)</option>
+          <option value="chamfer">모따기 (비스듬히)</option>
+        </select>
+      </div>
+      <NumberField label={corner === 'fillet' ? '반지름' : '거리'} unit="mm" value={first?.size ?? 0} onCommit={apply} testId="corner-size" />
+      <p className="muted small">
+        {entity.corners?.length ? `처리된 꼭짓점: ${entity.corners.map((c) => `p${c.k}`).join(', ')}` : '0 = 처리 없음'}
+        {entity.type === 'path' ? ' · 경로는 양 끝점을 뺀 꺾이는 점에만' : ''}
+      </p>
+    </fieldset>
   );
 }
 

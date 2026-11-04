@@ -26,6 +26,8 @@ from app.cad.commands import (
     sketch_feature_ref,
     Sketch,
     resolve_profile,
+    profile_of,
+    open_line_points,
     BooleanObject,
     BoxObject,
     CadObject,
@@ -41,12 +43,14 @@ from app.cad.commands import (
     FilletObject,
     DraftObject,
     StepObject,
+    SweepObject,
 )
 from app.cad.features import is_suppressed, pattern_matrices
 from app.cad.frames import extrude_local_matrix, sketch_local_matrix
 from app.cad.mesh_import import mesh_solid
 from app.cad.precise import draft, edge_feature, read_step
-from app.cad.sections import helix_error, helix_profile_points, helix_rings, loft_segments, section_points
+from app.cad.sections import helix_error, helix_profile_points, helix_rings, loft_segments, section_points, sweep_profile_points
+from app.cad.curves import corner_segments, sweep_error, sweep_rings
 
 import numpy as np
 
@@ -109,7 +113,7 @@ def local_solid(obj: CadObject) -> cq.Shape:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
         case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject() | HelixObject() | LoftObject() | MeshObject() \
-                | FilletObject() | DraftObject() | StepObject():
+                | FilletObject() | DraftObject() | StepObject() | SweepObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -138,7 +142,7 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
     음수 거리는 평면 법선 반대쪽. 회전은 Y(= v) 축 둘레 오른손 규칙: +u 점이 −w 쪽으로."""
     ref = sketch_feature_ref(obj)
     sk = sketches.get(ref.sketch)
-    p = resolve_profile(sk, ref.profile) if sk else None
+    p = profile_of(sk, ref) if sk else None
     if p is None:
         raise GeometryError(f"'{obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다")
     model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
@@ -147,6 +151,12 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
     def profile_wp() -> cq.Workplane:
         # 작업 평면의 대기 윤곽은 돌출 한 번에 소모되므로, 쓸 때마다 새로 만든다
+        if p["type"] == "polygon" and p.get("corners"):  # 꼭짓점 처리: 직선 + 정확한 원호 (curves.py 와 같은 점)
+            segs = corner_segments(p["points"], p["corners"], True)
+            w = cq.Workplane("XY").moveTo(*segs[0][1])
+            for sg in segs:
+                w = w.lineTo(*sg[2]) if sg[0] == "line" else w.threePointArc(sg[7], sg[2])
+            return w.close()
         if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
             return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
         # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
@@ -234,6 +244,26 @@ def loft_solid(obj: LoftObject, index: dict[str, CadObject], sketches: dict[str,
     return _ring_solid(rings, obj.name)
 
 
+def sweep_solid(obj: SweepObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
+    """스윕 (형식 v10): 단면을 경로 시작점에 경로와 수직으로 세우고 마이터로 잇는다 — 브라우저 엔진과 같은 고리 (curves.py)"""
+    sk = sketches.get(obj.sweep.sketch)
+    pk = sketches.get(obj.sweep.pathSketch)
+    p = resolve_profile(sk, obj.sweep.profile) if sk else None
+    path = open_line_points(pk, obj.sweep.path) if pk else None
+    if p is None or path is None:
+        raise GeometryError(f"'{obj.name}': 스윕의 단면 또는 경로를 찾을 수 없습니다")
+    prof = sweep_profile_points(p, HELIX_TOLERANCE)
+    if err := sweep_error(prof, path):
+        raise GeometryError(f"'{obj.name}': {err}")
+    model = SimpleNamespace(objects=list(index.values()), sketches=list(sketches.values()))
+    m = sketch_local_matrix(model, obj.id, obj.sweep.pathSketch)  # type: ignore[arg-type]
+    if m is None:
+        raise GeometryError(f"'{obj.name}': 경로 스케치의 평면을 찾을 수 없습니다")
+    path3 = [tuple((m @ np.array([u, v, 0.0, 1.0]))[:3]) for u, v in path]
+    b = m[:3, 2] / np.linalg.norm(m[:3, 2])
+    return _ring_solid(sweep_rings(prof, path3, tuple(b)), obj.name)
+
+
 def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """객체의 로컬 좌표계 솔리드. 불리언은 자식들을 (부모 기준 변환을 적용해) 재귀적으로 결합한다."""
     sketches = sketches or {}
@@ -241,6 +271,8 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
         return helix_solid(obj, index, sketches)
     if isinstance(obj, LoftObject):
         return loft_solid(obj, index, sketches)
+    if isinstance(obj, SweepObject):
+        return sweep_solid(obj, index, sketches)
     if isinstance(obj, MeshObject):
         return mesh_solid(obj.mesh.positions, obj.mesh.indices, obj.name)
     if isinstance(obj, (ExtrudeObject, RevolveObject)):

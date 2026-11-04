@@ -293,6 +293,34 @@ export function openLoft() {
   useEditorStore.getState().setLoftOpen(true);
 }
 
+/** 스윕: 닫힌 단면과 경로(열린 선)가 있어야 패널을 연다 */
+export function openSweep() {
+  const scene = useSceneStore.getState();
+  const model = selectModel(scene);
+  const hasProfile = model.sketches.some((sk) => sk.entities.some((e) => resolveProfile(sk, e.id)));
+  const hasPath = model.sketches.some((sk) => sk.entities.some((e) => e.type === 'path' || e.type === 'line'));
+  if (!hasProfile || !hasPath) {
+    scene.reportError('스윕: 단면(사각형·원·다각형)과 경로(스케치 탭 → 경로)가 필요합니다');
+    return;
+  }
+  useEditorStore.getState().setSweepOpen(true);
+}
+
+/**
+ * 리브(얇은 돌출): 선택한 스케치의 열린 선(경로·구성선)을 두께 2mm 로 띄워 10mm 돌출.
+ * 면 위 스케치면 안쪽(−)으로 — 판 위에 세우는 보강대는 바깥(+)이 기본이므로 + 로 둔다
+ */
+export function quickRib() {
+  const scene = useSceneStore.getState();
+  const sketch = selectSelectedSketch(scene);
+  const line = [...(sketch?.entities ?? [])].reverse().find((e) => e.type === 'path' || e.type === 'line');
+  if (!sketch || !line) {
+    scene.reportError('리브: 경로나 구성선이 있는 스케치를 선택하세요 (스케치 탭 → 경로)');
+    return;
+  }
+  scene.submitNow({ type: 'extrude', sketch: sketch.id, profile: line.id, distance: 10, thin: 2 });
+}
+
 /** STL·OBJ 가져오기 → 원점 규칙(바닥면 중심)에 맞춰 메시 객체 */
 /** STEP 파일 최대 크기: 저장 형식(base64 1,600만 자) 한도 */
 export const MAX_STEP_BYTES = 12_000_000;

@@ -13,7 +13,7 @@
 import { Matrix4, Vector3 } from 'three';
 import type { AngledPlane, CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
 import type { Profile } from './sketch';
-import { findSketch, resolveProfile, sketchFeatureRef, sketchRefs } from './sketch';
+import { findSketch, profileOf, sketchFeatureRef, sketchRefs } from './sketch';
 import { toMatrix } from './transformMath';
 
 const BASES: Record<StandardPlane['type'], [Vector3, Vector3, Vector3]> = {
@@ -106,7 +106,7 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       return [];
     case 'extrude': {
       const sk = findSketch(model, obj.extrude.sketch);
-      const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+      const p = sk ? profileOf(sk, obj.extrude) : null;
       return p?.type === 'rectangle' ? ['end', 'start', '+u', '-u', '+v', '-v'] : ['end', 'start'];
     }
     case 'boolean': {
@@ -122,6 +122,7 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
     case 'hole':
     case 'helix':
     case 'loft':
+    case 'sweep':
     case 'mesh':
     case 'fillet':
     case 'draft':
@@ -156,7 +157,7 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
       return null;
     case 'extrude': {
       const sk = findSketch(model, obj.extrude.sketch);
-      const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+      const p = sk ? profileOf(sk, obj.extrude) : null;
       const local = extrudeLocalMatrix(model, obj, depth + 1);
       if (!p || !local) return null;
       const d = obj.params.distance;
@@ -189,6 +190,7 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
     case 'hole':
     case 'helix':
     case 'loft':
+    case 'sweep':
     case 'mesh':
     case 'fillet':
     case 'draft':

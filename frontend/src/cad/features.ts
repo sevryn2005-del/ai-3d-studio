@@ -5,7 +5,7 @@
 import { Matrix4, Vector3 } from 'three';
 import type { Axis, CadObject, FaceName, ModelDefinition, ObjectId, PatternDef, Shell } from './commandTypes';
 import { LIMITS } from './commandTypes';
-import { findSketch, resolveProfile } from './sketch';
+import { findSketch, profileOf } from './sketch';
 import { formatMm } from './units';
 
 /**
@@ -133,7 +133,7 @@ export function shellError(obj: CadObject, shell: Shell, model: ModelDefinition)
     limit = Math.min(obj.params.radius, obj.params.height / 2);
   } else if (obj.kind === 'extrude') {
     const sk = findSketch(model, obj.extrude.sketch);
-    const p = sk ? resolveProfile(sk, obj.extrude.profile) : null;
+    const p = sk ? profileOf(sk, obj.extrude) : null;
     limit = Math.abs(obj.params.distance) / 2;
     if (p?.type === 'rectangle') limit = Math.min(limit, p.width / 2, p.height / 2);
     if (p?.type === 'circle') limit = Math.min(limit, p.diameter / 2);

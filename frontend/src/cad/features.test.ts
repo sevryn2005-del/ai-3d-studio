@@ -128,7 +128,7 @@ describe('형식 v7: 구성선·슬롯·각도 구속·각도 평면·크기 조
     expect(m.sketches[0]!.dimensions.map((d) => d.id)).toEqual(['sl.length', 'sl.width']);
     expect(m.sketches[0]!.entities[0]).toMatchObject({ type: 'slot', angle: 45 });
     const withLine = build(sk, { type: 'add_line', sketch: 's', id: 'l', points: [[0, 0], [10, 0]] });
-    expect(err(withLine, { type: 'extrude', sketch: 's', profile: 'l', distance: 5 })).toMatch(/치수가 완전하지 않습니다|프로파일/);
+    expect(err(withLine, { type: 'extrude', sketch: 's', profile: 'l', distance: 5 })).toMatch(/치수가 완전하지 않습니다|프로파일|열린 선/);
     expect(err(withLine, { type: 'set_entity_angle', sketch: 's', entity: 'l', angle: 10 })).toMatch(/슬롯/);
     expect(err(build(sk), { type: 'add_line', sketch: 's', points: [[0, 0], [0, 0.001]] })).toMatch(/너무 짧/);
   });

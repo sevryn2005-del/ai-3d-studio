@@ -5,7 +5,7 @@
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectKind } from './commandTypes';
 import { formatMm } from './units';
 import { describeEdgeFeature } from './edgeFeature';
-import { findSketch, profileBounds, resolveProfile } from './sketch';
+import { findSketch, profileBounds, profileOf, resolveProfile } from './sketch';
 import { extrudeLocalMatrix, extrudeLocalSize } from './sketchPlane';
 
 export interface ParamField {
@@ -65,6 +65,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
     ],
   },
   loft: { label: '로프트', params: [] },
+  sweep: { label: '스윕', params: [] },
   mesh: { label: '가져온 메시', params: [] },
   fillet: { label: '모서리 처리', params: [] },
   draft: { label: '구배', params: [] },
@@ -149,6 +150,7 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       return src ? localSize(src, model) : [0, 0, 0];
     }
     case 'loft':
+    case 'sweep':
     case 'mesh':
     case 'step':
       return [0, 0, 0]; // 크기는 엔진 메시로 (질량 특성·출력 검사)
@@ -157,7 +159,7 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
 
 export function extrudeProfile(obj: Extract<CadObject, { kind: 'extrude' }>, model: ModelDefinition) {
   const sketch = findSketch(model, obj.extrude.sketch);
-  return sketch ? resolveProfile(sketch, obj.extrude.profile) : null;
+  return sketch ? profileOf(sketch, obj.extrude) : null;
 }
 
 /** 목록 표시용 크기 요약. 예: "20×20×50", "Ø20×30", "Ø40", "− 1개" */
@@ -179,6 +181,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       if (!p) return `돌출 ${d}`;
       if (p.type === 'circle') return `Ø${formatMm(p.diameter)}×${d}`;
       if (p.type === 'slot') return `슬롯 ${formatMm(p.length + p.width)}×${formatMm(p.width)}×${d}`;
+      if (obj.extrude.thin !== undefined) return `리브 t${formatMm(obj.extrude.thin)}×${d}`;
       return `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
     }
     case 'revolve': {
@@ -202,6 +205,8 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       return `피치 ${formatMm(obj.params.pitch)} × ${formatMm(obj.params.turns)}바퀴`;
     case 'loft':
       return `단면 ${obj.loft.sections.length}개`;
+    case 'sweep':
+      return `경로 ${obj.sweep.path}`;
     case 'fillet':
       return `${obj.fillet.type === 'fillet' ? 'R' : 'C'}${formatMm(obj.fillet.size)} ${EDGE_RULE_LABEL[obj.fillet.edges]}`;
     case 'draft':

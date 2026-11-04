@@ -4,7 +4,8 @@ import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
-import { resolveProfile, slotOutline, type Profile } from '../../cad/sketch';
+import { profileOf, slotOutline, type Profile } from '../../cad/sketch';
+import { roundedPoints } from '../../cad/curves';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
@@ -27,7 +28,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 9, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 10, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -114,7 +115,7 @@ export function PreviewBody({
     );
   }
   // 로프트·메시·헬릭스: 엔진 메시가 올 때까지 미리보기 없음 (브라우저·서버 엔진 모두 빠름)
-  if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix' || object.kind === 'step') return null;
+  if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix' || object.kind === 'step' || object.kind === 'sweep') return null;
   if (object.kind === 'fillet' || object.kind === 'draft') {
     // 계산 전 미리보기: 원본 그대로
     const src = index.get(object.kind === 'fillet' ? object.fillet.source : object.draft.source);
@@ -132,7 +133,7 @@ export function PreviewBody({
     if (object.kind === 'extrude' || object.kind === 'revolve') {
       const ref = object.kind === 'extrude' ? object.extrude : object.revolve;
       const sk = sketches.get(ref.sketch);
-      profile = sk ? resolveProfile(sk, ref.profile) : null;
+      profile = sk ? profileOf(sk, ref) : null;
       local = extrudeLocalMatrix(model, object);
       if (!profile || !local) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
     }
@@ -284,7 +285,10 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
 
 /** 회전 미리보기용 단면 윤곽 (스케치 평면 u·v, 닫힌 선) */
 function profileOutline(p: Profile): Vector2[] {
-  if (p.type === 'polygon') return [...p.points, p.points[0]!].map(([x, y]) => new Vector2(x, y));
+  if (p.type === 'polygon') {
+    const pts = roundedPoints(p.points, p.corners, true);
+    return [...pts, pts[0]!].map(([x, y]) => new Vector2(x, y));
+  }
   if (p.type === 'slot') {
     const pts = slotOutline(p, 16);
     return [...pts, pts[0]!].map(([x, y]) => new Vector2(x, y));
@@ -317,7 +321,7 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
       return <sphereGeometry args={[o.params.radius, SEGMENTS, SEGMENTS / 2]} />;
     case 'extrude':
       if (profile?.type === 'polygon' || profile?.type === 'slot') {
-        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : profile.points;
+        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : roundedPoints(profile.points, profile.corners, true);
         const shape = new Shape(pts.map(([x, y]) => new Vector2(x, y)));
         return <extrudeGeometry args={[shape, { depth: Math.abs(o.params.distance), bevelEnabled: false }]} />;
       }

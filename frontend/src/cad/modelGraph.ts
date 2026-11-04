@@ -7,7 +7,7 @@ import type { CadObject, ModelDefinition, ObjectId, Sketch } from './commandType
 import { LIMITS } from './commandTypes';
 import { edgeFeatureError } from './edgeFeature';
 import { patternError, shellError } from './features';
-import { resolveProfile, sketchErrors, sketchRefs, revolveProfileError } from './sketch';
+import { refTarget, sketchErrors, sketchRefs, revolveProfileError } from './sketch';
 import { meshError } from './meshData';
 
 export function childIds(obj: CadObject): ObjectId[] {
@@ -89,10 +89,15 @@ export function validateGraph(model: ModelDefinition): string[] {
   for (const o of model.objects) {
     for (const ref of sketchRefs(o)) {
       const sk = model.sketches.find((x) => x.id === ref.sketch);
-      const prof = sk ? resolveProfile(sk, ref.profile) : null;
+      const prof = sk ? refTarget(sk, ref) : null;
       if (!sk) errors.push(`${o.id}: 존재하지 않는 스케치를 참조합니다: ${ref.sketch}`);
-      else if (!prof) errors.push(`${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${ref.profile} 이(가) 없습니다`);
-      else if (o.kind === 'revolve' || o.kind === 'helix') {
+      else if (!prof)
+        errors.push(
+          ref.open || ref.thin !== undefined
+            ? `${o.id}: 스케치 ${sk.id} 에 열린 선(구성선·경로) ${ref.profile} 이(가) 없습니다`
+            : `${o.id}: 스케치 ${sk.id} 에 사용할 수 있는 프로파일 ${ref.profile} 이(가) 없습니다`,
+        );
+      else if ((o.kind === 'revolve' || o.kind === 'helix') && !Array.isArray(prof)) {
         const err = revolveProfileError(prof);
         if (err) errors.push(`${o.id}: ${err}`);
       }

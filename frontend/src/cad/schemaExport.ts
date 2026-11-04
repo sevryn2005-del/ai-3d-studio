@@ -429,6 +429,67 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'extrude', id: 'f', sketch: 't', profile: 'sm', distance: 5 },
     ],
   },
+  'sketch-fillet-square': {
+    // 스케치 필렛 R3 네 꼭짓점: 넓이 400 − (4 − π)·9
+    volume: (400 - (4 - PI) * 9) * 5,
+    roots: 1,
+    bbox: [[-10, -10, 0], [10, 10, 5]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[-10, -10], [10, -10], [10, 10], [-10, 10]] },
+      { type: 'set_corner', sketch: 's', entity: 'p', corner: 'fillet', size: 3 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 5 },
+    ],
+  },
+  'sketch-chamfer-two-corners': {
+    // 꼭짓점 p0·p2 만 모따기 3: 넓이 400 − 2·4.5
+    volume: (400 - 9) * 5,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[-10, -10], [10, -10], [10, 10], [-10, 10]] },
+      { type: 'set_corner', sketch: 's', entity: 'p', vertices: [0, 2], corner: 'chamfer', size: 3 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 5 },
+    ],
+  },
+  'rib-l-path': {
+    // 리브: 꺾은 중심선 길이 30 × 두께 2 (마이터 이음은 넓이 = 두께 × 중심선 길이) × 높이 5
+    volume: 30 * 2 * 5,
+    roots: 1,
+    bbox: [[-0, -1, 0], [21, 10, 5]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 's', id: 'pa', points: [[0, 0], [20, 0], [20, 10]] },
+      { type: 'extrude', id: 'r', sketch: 's', profile: 'pa', distance: 5, thin: 2 },
+    ],
+  },
+  'sweep-l-pipe-sharp': {
+    // 원 Ø4 를 꺾은 경로(30 + 20)로: 부피 = 단면 넓이 × 중심선 길이 (마이터 이음).
+    // 단면은 세 엔진 모두 같은 40각형 (sections.loftSegments, 허용 오차 0.01) → 넓이 = πr² × (40/2π)·sin(2π/40)
+    volume: PI * 4 * ((40 / (2 * PI)) * Math.sin((2 * PI) / 40)) * 50,
+    roots: 1,
+    bbox: [[0, -2, -2], [32, 20, 2]],
+    commands: [
+      { type: 'create_sketch', id: 'sp', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_circle', sketch: 'sp', id: 'c', center: [0, 0], diameter: 4 },
+      { type: 'create_sketch', id: 'pp', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 'pp', id: 'pa', points: [[0, 0], [30, 0], [30, 20]] },
+      { type: 'sweep', id: 'w', sketch: 'sp', profile: 'c', pathSketch: 'pp', path: 'pa' },
+    ],
+  },
+  'sweep-rect-bent-path': {
+    // 사각형 4×2 를 둥글게 꺾은(R6) 경로로: 부피 = 8 × (30 + 20 − 2·6 + π/2·6) (호는 π/32 간격 표본)
+    volume: 8 * (38 + (PI / 2) * 6),
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 'sp', plane: { type: 'YZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 'sp', id: 'r', center: [0, 0], width: 4, height: 2 },
+      { type: 'create_sketch', id: 'pp', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 'pp', id: 'pa', points: [[0, 0], [30, 0], [30, 20]] },
+      { type: 'set_corner', sketch: 'pp', entity: 'pa', corner: 'fillet', size: 6 },
+      { type: 'sweep', id: 'w', sketch: 'sp', profile: 'r', pathSketch: 'pp', path: 'pa' },
+    ],
+  },
   'suppressed-tool-and-root': {
     volume: 16000,
     roots: 1,

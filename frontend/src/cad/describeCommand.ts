@@ -117,6 +117,16 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `${sketchName(cmd.sketch)}의 ${cmd.profile} 헬릭스 (피치 ${formatMm(cmd.pitch)}mm × ${formatMm(cmd.turns)}바퀴)`;
     case 'loft':
       return `로프트 (${cmd.sections.map((s) => sketchName(s.sketch)).join(' → ')})`;
+    case 'sweep':
+      return `스윕 (${sketchName(cmd.sketch)} ${cmd.profile} → ${sketchName(cmd.pathSketch)} ${cmd.path} 경로)`;
+    case 'set_thin':
+      return `${name(cmd.target)} 두께 → ${formatMm(cmd.thin)}mm`;
+    case 'add_path':
+      return `${sketchName(cmd.sketch)}에 경로 추가 (점 ${cmd.points.length}개)`;
+    case 'set_corner':
+      return cmd.size > 0
+        ? `${sketchName(cmd.sketch)}의 ${cmd.entity} 꼭짓점 ${cmd.corner === 'fillet' ? `필렛 R${formatMm(cmd.size)}` : `모따기 ${formatMm(cmd.size)}`}`
+        : `${sketchName(cmd.sketch)}의 ${cmd.entity} 꼭짓점 처리 제거`;
     case 'import_mesh':
       return `메시 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
     case 'offset_entity':

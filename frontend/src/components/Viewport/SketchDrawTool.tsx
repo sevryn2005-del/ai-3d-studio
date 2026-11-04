@@ -39,17 +39,19 @@ export function SketchDrawTool() {
     setDrag(null);
     setPoly([]);
   }, [tool, sketch?.id]);
+  const multi = tool === 'polygon' || tool === 'path';
   const finishPolygon = (points: Point2[]) => {
     setPoly([]);
     const store = useSceneStore.getState();
-    const cmds = drawShapeCommands(store.history.present.model, store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null, { type: 'polygon', points });
+    const type = tool === 'path' ? 'path' : 'polygon';
+    const cmds = drawShapeCommands(store.history.present.model, store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null, { type, points });
     if (cmds) store.dispatchBatch(cmds);
-    else store.reportError('다각형을 만들 수 없습니다 (변이 교차하거나 넓이가 없습니다)');
+    else store.reportError(type === 'path' ? '경로를 만들 수 없습니다 (같은 점이 겹치거나 되돌아갑니다)' : '다각형을 만들 수 없습니다 (변이 교차하거나 넓이가 없습니다)');
   };
   useEffect(() => {
-    if (tool !== 'polygon') return;
+    if (!multi) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && polyRef.current.length >= 3) {
+      if (e.key === 'Enter' && polyRef.current.length >= (tool === 'path' ? 2 : 3)) {
         e.preventDefault();
         finishPolygon(polyRef.current);
       }
@@ -72,7 +74,7 @@ export function SketchDrawTool() {
     const p = world.clone().applyMatrix4(inverse);
     return [Math.round(p.x / step) * step, Math.round(p.y / step) * step];
   };
-  const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' }> =>
+  const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' | 'path' }> =>
     tool === 'rectangle'
       ? { type: 'rectangle', from: d.from, to: d.to }
       : { type: 'circle', center: d.from, radius: Math.round(Math.hypot(d.to[0] - d.from[0], d.to[1] - d.from[1]) / step) * step };
@@ -80,12 +82,15 @@ export function SketchDrawTool() {
   const down = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    if (tool === 'polygon') {
+    if (multi) {
       const p = toSketch(e.point);
       const pts = polyRef.current;
       const first = pts[0];
-      if (pts.length >= 3 && first && Math.hypot(p[0] - first[0], p[1] - first[1]) <= Math.max(1.5 * step, 1)) return finishPolygon(pts);
       const last = pts.at(-1);
+      const near = (q: Point2 | undefined) => !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= Math.max(1.5 * step, 1);
+      // 다각형: 첫 점을 다시 누르면 닫힘. 경로: 마지막 점을 다시 누르면 끝 (열린 선)
+      if (tool === 'polygon' && pts.length >= 3 && near(first)) return finishPolygon(pts);
+      if (tool === 'path' && pts.length >= 2 && near(last)) return finishPolygon(pts);
       if (!last || last[0] !== p[0] || last[1] !== p[1]) setPoly([...pts, p]);
       return;
     }
@@ -94,7 +99,7 @@ export function SketchDrawTool() {
     setDrag({ from: p, to: p });
   };
   const move = (e: ThreeEvent<PointerEvent>) => {
-    if (tool === 'polygon') {
+    if (multi) {
       setHover(toSketch(e.point));
       return;
     }
@@ -103,7 +108,7 @@ export function SketchDrawTool() {
     setDrag({ from: dragRef.current.from, to: toSketch(e.point) });
   };
   const up = (e: ThreeEvent<PointerEvent>) => {
-    if (tool === 'polygon') return;
+    if (multi) return;
     const d = dragRef.current;
     if (!d) return;
     e.stopPropagation();
@@ -121,12 +126,12 @@ export function SketchDrawTool() {
         <meshBasicMaterial transparent opacity={0} depthWrite={false} side={DoubleSide} />
       </mesh>
       {drag && <DrawPreview shape={shapeOf(drag)} />}
-      {tool === 'polygon' && poly.length > 0 && <PolylinePreview points={hover ? [...poly, hover] : poly} count={poly.length} />}
+      {multi && poly.length > 0 && <PolylinePreview points={hover ? [...poly, hover] : poly} count={poly.length} />}
     </group>
   );
 }
 
-function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' }> }) {
+function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' }> }) {
   const { geometry, label, anchor } = useMemo(() => {
     const pts: number[] = [];
     let label: string;

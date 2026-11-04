@@ -179,7 +179,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
               key={f.key}
               label={f.label}
               unit={f.unit ?? 'mm'}
-              value={(object.params as Record<string, number>)[f.key]!}
+              value={('params' in object ? (object.params as Record<string, number>)[f.key] : 0) ?? 0}
               onCommit={(v) => submit({ type: 'set_params', target: object.id, params: { [f.key]: v } })}
               testId={`param-${f.key}`}
             />

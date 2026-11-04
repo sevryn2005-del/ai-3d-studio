@@ -7,10 +7,11 @@
  */
 import type { Point2 } from './commandTypes';
 import { profileBounds, slotOutline, type Profile } from './sketch';
+import { roundedPoints } from './curves';
 
 export function outline(p: Profile): Point2[] {
   let pts: Point2[];
-  if (p.type === 'polygon') pts = p.points.map((q) => [q[0], q[1]]);
+  if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true);
   else if (p.type === 'rectangle') {
     const [cx, cy] = p.center;
     const [w, h] = [p.width / 2, p.height / 2];
@@ -123,4 +124,10 @@ export function helixError(pts: Point2[], pitch: number): string | null {
   const h = Math.max(...pts.map((q) => q[1])) - Math.min(...pts.map((q) => q[1]));
   if (pitch <= h + 1e-9) return `피치(${Math.round(pitch * 1000) / 1000}mm)가 프로파일 높이(${Math.round(h * 1000) / 1000}mm)보다 커야 바퀴끼리 겹치지 않습니다`;
   return null;
+}
+
+/** 스윕 단면 점 (형식 v10): 헬릭스와 같은 점을 바운딩 박스 중심 기준 u·v 로 */
+export function sweepProfilePoints(p: Profile, tol: number): Point2[] {
+  const [cx, cy] = profileBounds(p).center;
+  return helixProfilePoints(p, tol).map(([u, v]) => [u - cx, v - cy] as Point2);
 }

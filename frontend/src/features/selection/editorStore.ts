@@ -8,7 +8,7 @@ import { DEFAULT_SNAP, type SnapSettings } from '../../cad/transformUtils';
 
 export type TransformMode = 'translate' | 'rotate';
 /** 뷰포트 직접 그리기 도구 (null = 선택·이동 모드) */
-export type DrawTool = 'rectangle' | 'circle' | 'polygon' | null;
+export type DrawTool = 'rectangle' | 'circle' | 'polygon' | 'path' | null;
 /**
  * 마우스 방식
  * - solidworks: 가운데 버튼 드래그 = 회전, Ctrl + 가운데 = 이동, Shift + 가운데 = 확대/축소, 휠 = 확대/축소, 왼쪽 = 선택
@@ -59,6 +59,8 @@ interface EditorState {
   massOpen: boolean;
   screenshotRequest: number;
   loftOpen: boolean;
+  sweepOpen: boolean;
+  setSweepOpen: (open: boolean) => void;
   setLoftOpen: (on: boolean) => void;
   /** 원근(기본) / 직교 투영 */
   projection: 'perspective' | 'orthographic';
@@ -117,6 +119,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   massOpen: false,
   screenshotRequest: 0,
   loftOpen: false,
+  sweepOpen: false,
+  setSweepOpen: (sweepOpen) => set({ sweepOpen }),
   setLoftOpen: (loftOpen) => set({ loftOpen }),
   projection: loadPref('ai3d.projection', ['perspective', 'orthographic'] as const, 'perspective'),
   toggleProjection: () =>

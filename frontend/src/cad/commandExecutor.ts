@@ -36,7 +36,8 @@ import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
 import { meshError } from './meshData';
 import { helixError, helixProfilePoints } from './sections';
-import { resolveProfile } from './sketch';
+import { profileOf, resolveProfile } from './sketch';
+import { polygonError } from './solver';
 import { facesOf, faceLocalMatrix } from './sketchPlane';
 import { edgeFeatureError } from './edgeFeature';
 import { executeSketchCommand, isSketchCommand } from './sketchCommands';
@@ -329,6 +330,18 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
       if (target.kind !== 'fillet') return fail(`'${target.name}'은(는) 모서리 처리가 아닙니다`);
       const f = { ...target.fillet, ...(cmd.feature ? { type: cmd.feature } : {}), ...(cmd.size !== undefined ? { size: cmd.size } : {}), ...(cmd.edges ? { edges: cmd.edges } : {}) };
       return done(model, replaceObject(model, { ...target, fillet: f }), cmd, target.id);
+    }
+
+    case 'set_thin': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'extrude' || target.extrude.thin === undefined) return fail(`'${target.name}'은(는) 리브(얇은 돌출)가 아닙니다`);
+      const next = { ...target, extrude: { ...target.extrude, thin: cmd.thin } };
+      const sk = model.sketches.find((x) => x.id === target.extrude.sketch);
+      const prof = sk ? profileOf(sk, next.extrude) : null;
+      const err = prof?.type === 'polygon' ? polygonError(prof.points) : null;
+      if (err) return fail(`리브 단면: ${err} (두께를 줄이세요)`);
+      return done(model, replaceObject(model, next), cmd, target.id);
     }
 
     case 'set_draft': {

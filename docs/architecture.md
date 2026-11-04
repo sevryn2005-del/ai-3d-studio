@@ -109,6 +109,15 @@ Three.js 뷰포트 ◀───────────────────�
   `test_primitives.py::test_edge_features` 와 `geometry.test.ts` 가 같은 값으로 각각 검사한다.
 - (형식 v5 박스 전용 방식, 계속 읽음.) 형식 v9 부터는 아래 정밀 피처가 모든 형상을 다룬다.
 
+## 곡선 규칙 (형식 v10: 경로·꼭짓점 처리·스윕·리브)
+
+- 단일 규칙 `cad/curves.ts` ↔ `app/cad/curves.py`. 엔진은 이 점·조각을 그대로 쓴다: 꼭짓점 처리 조각(직선 + 원호 중심·반지름·방향),
+  열린 선 표본(경로의 둥근 꺾임 = π/32 간격), 리브 단면(`thinPolygon`, 마이터), 스윕 고리(`sweepRings`).
+- 정밀 엔진(브라우저 OCCT·CadQuery)은 다각형 꼭짓점 필렛을 정확한 원호로 만든다(OCCT `gp_Circ` ±Z, CadQuery `threePointArc`).
+  메시 엔진은 `toleranceStep`(현의 오차) 간격 점. 로프트·헬릭스·스윕 단면 점은 세 엔진 모두 π/32 표본(같은 점).
+- 리브 = `extrude.thin` 이 있으면 `profileOf` 가 열린 선을 두께만큼 띄운 다각형 단면을 돌려준다 → 돌출 코드 그대로.
+- 스윕 단면 배치: 바운딩 박스 중심을 경로 시작점에, 단면 u = 경로 평면 안에서 경로에 수직, v = 경로 평면 법선. 평면 경로라 비틀림이 없다.
+
 ## 정밀 피처 (형식 v9: `fillet`·`draft`·`step`)
 
 - 감싸는 객체: `fillet {source, type, size, edges: all|vertical|top|bottom}`, `draft {source, angle}` — 패턴과 같이 원본을 자식으로,

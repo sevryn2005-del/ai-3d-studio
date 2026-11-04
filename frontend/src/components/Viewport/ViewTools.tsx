@@ -239,3 +239,51 @@ export function LoftPanel() {
     </div>
   );
 }
+
+/** 스윕: 단면(닫힌 요소)과 경로(열린 선)를 고른다 */
+export function SweepPanel() {
+  const open = useEditorStore((s) => s.sweepOpen);
+  const model = useSceneStore(selectModel);
+  const [profile, setProfile] = useState('');
+  const [path, setPath] = useState('');
+  if (!open) return null;
+  const profiles = model.sketches.flatMap((sk) => sk.entities.filter((e) => resolveProfile(sk, e.id)).map((e) => ({ key: `${sk.id}/${e.id}`, label: `${sk.name} · ${e.id}` })));
+  const paths = model.sketches.flatMap((sk) => sk.entities.filter((e) => e.type === 'path' || e.type === 'line').map((e) => ({ key: `${sk.id}/${e.id}`, label: `${sk.name} · ${e.id}` })));
+  const p = profile || profiles[0]?.key || '';
+  const q = path || paths.at(-1)?.key || '';
+  const close = () => useEditorStore.getState().setSweepOpen(false);
+  const run = () => {
+    const [sketch, prof] = p.split('/') as [string, string];
+    const [pathSketch, pathId] = q.split('/') as [string, string];
+    const r = useSceneStore.getState().submitNow({ type: 'sweep', sketch, profile: prof, pathSketch, path: pathId });
+    if (r.status === 'applied') close();
+  };
+  return (
+    <div className="view-panel mass-panel" role="dialog" aria-label="스윕" data-testid="sweep-panel">
+      <div className="pm-head">
+        <strong>스윕 — 단면을 경로를 따라</strong>
+      </div>
+      <label className="field">
+        단면
+        <select value={p} onChange={(e) => setProfile(e.target.value)} data-testid="sweep-profile">
+          {profiles.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+        </select>
+      </label>
+      <label className="field">
+        경로
+        <select value={q} onChange={(e) => setPath(e.target.value)} data-testid="sweep-path">
+          {paths.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+        </select>
+      </label>
+      <p className="muted small">단면은 경로 시작점에 경로와 수직으로 세웁니다 (단면의 위쪽 = 경로 평면의 법선).</p>
+      <div className="row">
+        <button className="ok" disabled={!p || !q} onClick={run} data-testid="sweep-ok">
+          ✓ 스윕
+        </button>
+        <button className="cancel" onClick={close}>
+          ✕ 취소
+        </button>
+      </div>
+    </div>
+  );
+}

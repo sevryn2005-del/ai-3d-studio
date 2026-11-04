@@ -8,6 +8,7 @@ import { byId, parentMap } from './modelGraph';
 import { findSketch, resolveProfile, slotOutline } from './sketch';
 import { composeTransform } from './transformMath';
 import { polygonError } from './solver';
+import { openPathError } from './curves';
 
 /** 객체의 월드 변환과 그 객체를 포함한 최상위 객체 (불리언 자식이면 상위 변환을 합성) */
 export function worldPlacement(model: ModelDefinition, id: ObjectId): { world: Transform; root: ObjectId } {
@@ -127,7 +128,8 @@ export function throughHoleCommands(
 export type DrawnShape =
   | { type: 'rectangle'; from: Point2; to: Point2 }
   | { type: 'circle'; center: Point2; radius: number }
-  | { type: 'polygon'; points: Point2[] };
+  | { type: 'polygon'; points: Point2[] }
+  | { type: 'path'; points: Point2[] };
 
 /** 그리기로 만들 수 있는 최소 크기 (mm). 이보다 작으면 클릭으로 보고 무시한다 */
 export const MIN_DRAWN_SIZE = 0.5;
@@ -147,7 +149,11 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
   };
   const round = (v: number) => Math.round(v * 1000) / 1000;
   let add: CadCommand;
-  if (shape.type === 'polygon') {
+  if (shape.type === 'path') {
+    const points = shape.points.map(([x, y]) => [round(x), round(y)] as Point2);
+    if (points.length < 2 || openPathError(points)) return null;
+    add = { type: 'add_path', sketch: sid, id: entityId('path'), points };
+  } else if (shape.type === 'polygon') {
     const points = shape.points.map(([x, y]) => [round(x), round(y)] as Point2);
     if (points.length < 3 || polygonError(points)) return null; // 꼬였거나 넓이가 없으면 만들지 않는다
     add = { type: 'add_polygon', sketch: sid, id: entityId('poly'), points };

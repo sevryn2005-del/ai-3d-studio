@@ -4,12 +4,14 @@
  */
 import type { CadObject, DimensionKind, ModelDefinition, ObjectId, Point2, Sketch, SketchEntity, SketchPlane } from './commandTypes';
 import { CHECK_TOLERANCE, constraintError, constraintResiduals, polygonError } from './solver';
+import { cornerError, openPathError, roundedPoints, thinPolygon, type Corner } from './curves';
 
 export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> = {
   rectangle: ['width', 'height'],
   circle: ['diameter'],
   polygon: [], // 다각형은 꼭짓점 좌표 + 구속(constraints)
   line: [], // 구성선: 끝점 좌표 + 구속. 형상을 만들지 않음
+  path: [], // 경로(형식 v10): 열린 꺾은선, 꼭짓점 좌표 + 구속
   slot: ['length', 'width'], // 반원 중심 거리, 폭
 };
 
@@ -25,7 +27,7 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
 export type Profile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
-  | { type: 'polygon'; points: Point2[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
+  | { type: 'polygon'; points: Point2[]; corners?: Corner[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
 
 /** 슬롯 윤곽 (반원마다 segs 개 점, 반시계). 미리보기·바운딩 크기용 — 엔진은 정확한 원호/다각형 근사를 따로 만든다 */
@@ -63,16 +65,10 @@ export function slotHalfExtent(p: { length: number; width: number; angle: number
 
 export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | null {
   const e = sketch.entities.find((x) => x.id === entityId);
-  if (!e || e.type === 'line') return null; // 구성선은 단면이 아니다
+  if (!e || e.type === 'line' || e.type === 'path') return null; // 구성선·경로는 닫힌 단면이 아니다
   const z = sketch.plane.offset;
   const plane = sketch.plane;
-  if (e.type === 'polygon') {
-    // center·width·height = 바운딩 박스 (크기 표시·구멍 위치 기본값용). 형상은 points 그대로
-    const xs = e.points.map((p) => p[0]);
-    const ys = e.points.map((p) => p[1]);
-    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    return { type: 'polygon', points: e.points, center: [(x0 + x1) / 2, (y0 + y1) / 2], width: x1 - x0, height: y1 - y0, z, plane };
-  }
+  if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane);
   if (e.type === 'rectangle') {
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
@@ -85,6 +81,45 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
   }
   const diameter = dimensionValue(sketch, e.id, 'diameter');
   return diameter ? { type: 'circle', center: e.center, diameter, z, plane } : null;
+}
+
+/**
+ * 다각형 단면. center·width·height = (꼭짓점 처리 후 윤곽의) 바운딩 박스 — 크기 표시·구멍 위치 기본값·단면 기준점.
+ * 형상은 points(+ corners) 그대로
+ */
+function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: number, plane: SketchPlane): Profile {
+  const outline = roundedPoints(points, corners, true);
+  const xs = outline.map((p) => p[0]);
+  const ys = outline.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  return {
+    type: 'polygon',
+    points,
+    ...(corners?.length ? { corners } : {}),
+    center: [(x0 + x1) / 2, (y0 + y1) / 2],
+    width: x1 - x0,
+    height: y1 - y0,
+    z,
+    plane,
+  };
+}
+
+/** 열린 선(구성선·경로)의 점 — 경로의 둥근 꺾임은 윤곽 표본으로. 열린 선이 아니면 null */
+export function openLinePoints(sketch: Sketch, entityId: ObjectId): Point2[] | null {
+  const e = sketch.entities.find((x) => x.id === entityId);
+  if (!e || (e.type !== 'line' && e.type !== 'path')) return null;
+  return roundedPoints(e.points, e.type === 'path' ? e.corners : undefined, false);
+}
+
+/**
+ * 피처 참조의 단면. thin(얇은 돌출·리브)이면 열린 선을 두께만큼 띄운 다각형, 아니면 닫힌 요소의 단면.
+ * 얇은 돌출에 닫힌 요소를 주거나, 보통 돌출에 열린 선을 주면 null
+ */
+export function profileOf(sketch: Sketch, ref: { profile: ObjectId; thin?: number }): Profile | null {
+  if (ref.thin === undefined) return resolveProfile(sketch, ref.profile);
+  const pts = openLinePoints(sketch, ref.profile);
+  if (!pts) return null;
+  return polygonProfile(thinPolygon(pts, ref.thin), undefined, sketch.plane.offset, sketch.plane);
 }
 
 /** 스케치 하나의 규칙 위반 (요소 ID 중복, 치수 누락·중복·잘못된 종류, 치수 ID 형식) */
@@ -106,7 +141,11 @@ export function sketchErrors(sketch: Sketch): string[] {
   }
   for (const e of sketch.entities) {
     if (e.type === 'polygon') {
-      const err = polygonError(e.points);
+      const err = polygonError(e.points) ?? cornerError(e.points, e.corners, true);
+      if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
+    }
+    if (e.type === 'path') {
+      const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
   }
@@ -129,26 +168,44 @@ export function sketchErrors(sketch: Sketch): string[] {
   return errors;
 }
 
-/** 스케치를 참조하는 피처(돌출·회전)의 참조. 다른 종류면 null */
-export function sketchFeatureRef(obj: CadObject): { sketch: ObjectId; profile: ObjectId } | null {
+/** 스케치를 참조하는 피처(돌출·회전·헬릭스)의 참조. 다른 종류면 null. 돌출은 thin(얇은 돌출)을 함께 돌려준다 */
+export function sketchFeatureRef(obj: CadObject): { sketch: ObjectId; profile: ObjectId; thin?: number } | null {
   if (obj.kind === 'extrude') return obj.extrude;
   if (obj.kind === 'revolve') return obj.revolve;
   if (obj.kind === 'helix') return obj.helix;
   return null;
 }
 
-/** 객체가 참조하는 모든 스케치 프로파일 (로프트는 단면 여러 개). 삭제 막기·의존 순환·검증용 */
-export function sketchRefs(obj: CadObject): { sketch: ObjectId; profile: ObjectId }[] {
+/** 피처가 참조하는 스케치 요소. open = 열린 선(스윕 경로)을 참조 */
+export interface FeatureRef {
+  sketch: ObjectId;
+  profile: ObjectId;
+  thin?: number;
+  open?: boolean;
+}
+
+/** 객체가 참조하는 모든 스케치 요소 (로프트는 단면 여러 개, 스윕은 단면 + 경로). 삭제 막기·의존 순환·검증용 */
+export function sketchRefs(obj: CadObject): FeatureRef[] {
   if (obj.kind === 'loft') return obj.loft.sections;
+  if (obj.kind === 'sweep')
+    return [
+      { sketch: obj.sweep.sketch, profile: obj.sweep.profile },
+      { sketch: obj.sweep.pathSketch, profile: obj.sweep.path, open: true },
+    ];
   const r = sketchFeatureRef(obj);
   return r ? [r] : [];
+}
+
+/** 참조가 쓸 수 있는지: 열린 선 참조면 그 선의 점, 아니면 단면. 못 쓰면 null */
+export function refTarget(sketch: Sketch, ref: FeatureRef): Profile | Point2[] | null {
+  return ref.open ? openLinePoints(sketch, ref.profile) : profileOf(sketch, ref);
 }
 
 /** 회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지. 문제가 없으면 null */
 export function revolveProfileError(p: Profile): string | null {
   const minU =
     p.type === 'polygon'
-      ? Math.min(...p.points.map((q) => q[0]))
+      ? Math.min(...roundedPoints(p.points, p.corners, true).map((q) => q[0]))
       : p.type === 'circle'
         ? p.center[0] - p.diameter / 2
         : p.type === 'slot'

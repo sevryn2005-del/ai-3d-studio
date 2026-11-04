@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+from app.cad.curves import corner_error, open_path_error
 from app.cad.commands import Sketch, SketchConstraint
 
 CHECK_TOLERANCE = 1e-4
@@ -37,7 +38,7 @@ ARITY: dict[str, tuple[list[tuple[str, ...]], bool]] = {
 def sketch_points(sk: Sketch) -> dict[str, tuple[float, float]]:
     pts: dict[str, tuple[float, float]] = {}
     for e in sk.entities:
-        if e.type in ("polygon", "line"):
+        if e.type in ("polygon", "line", "path"):
             for k, p in enumerate(e.points):
                 pts[f"{e.id}.p{k}"] = (p[0], p[1])
         else:
@@ -53,11 +54,11 @@ def ref_kind(sk: Sketch, ref: str) -> str | None:
     if not part:
         return "circle" if e.type == "circle" else None
     if part == "center":
-        return None if e.type in ("polygon", "line") else "point"
-    if e.type not in ("polygon", "line"):
+        return None if e.type in ("polygon", "line", "path") else "point"
+    if e.type not in ("polygon", "line", "path"):
         return None
-    # 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선: 끝점 2개, 변 1개
-    if int(part[1:]) >= (1 if part[0] == "e" and e.type == "line" else len(e.points)):
+    # 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선·경로: 열린 선 → 변 = 점 수 − 1
+    if int(part[1:]) >= (len(e.points) - 1 if part[0] == "e" and e.type != "polygon" else len(e.points)):
         return None
     return "point" if part[0] == "p" else "edge"
 
@@ -176,7 +177,9 @@ def constraint_errors(sk: Sketch) -> list[str]:
     """스케치의 다각형·구속 문제 목록 (validation.sketch_errors 에서 사용)."""
     errors: list[str] = []
     for e in sk.entities:
-        if e.type == "polygon" and (err := polygon_error(e.points)):
+        if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True)):
+            errors.append(f"{sk.id}: {e.id} {err}")
+        if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False)):
             errors.append(f"{sk.id}: {e.id} {err}")
     seen: set[str] = set()
     for c in sk.constraints:

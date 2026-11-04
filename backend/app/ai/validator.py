@@ -53,7 +53,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
     # 구속 해석기: 다각형 꼭짓점 수, 구속 id → 값이 있는지 (참조 형식은 app/cad/constraints.ARITY)
     poly_sizes: dict[tuple[str, str], int] = {
-        (sk.id, e.id): len(e.points) for sk in model.sketches for e in sk.entities if e.type in ("polygon", "line")
+        (sk.id, e.id): len(e.points) for sk in model.sketches for e in sk.entities if e.type in ("polygon", "line", "path")
     }
     constraint_ids: dict[str, dict[str, bool]] = {sk.id: {c.id: c.value is not None for c in sk.constraints} for sk in model.sketches}
 
@@ -65,10 +65,11 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         if not part:
             return "circle" if etype == "circle" else None
         if part == "center":
-            return None if etype in ("polygon", "line") else "point"
-        if etype not in ("polygon", "line"):
+            return None if etype in ("polygon", "line", "path") else "point"
+        if etype not in ("polygon", "line", "path"):
             return None
-        limit = 1 if (part[0] == "e" and etype == "line") else poly_sizes.get((sid, eid), 0)
+        size = poly_sizes.get((sid, eid), 0)
+        limit = size - 1 if (part[0] == "e" and etype != "polygon") else size
         if int(part[1:]) >= limit:
             return None
         return "point" if part[0] == "p" else "edge"
@@ -194,7 +195,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         elif t == "offset_entity":
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]
-                if c["entity"] not in ents or ents[c["entity"]] == "line":
+                if c["entity"] not in ents or ents[c["entity"]] in ("line", "path"):
                     errors.append(f"commands[{i}].entity: sketch '{c['sketch']}' has no closed element '{c['entity']}'")
                 else:
                     etype = ents[c["entity"]]
@@ -205,7 +206,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         elif t in ("helix", "loft"):
             refs = [(c["sketch"], c["profile"])] if t == "helix" else [(s["sketch"], s["profile"]) for s in c["sections"]]
             for sid, pid in refs:
-                if sketch_exists(i, sid) and (pid not in sketches[sid] or sketches[sid][pid] == "line"):
+                if sketch_exists(i, sid) and (pid not in sketches[sid] or sketches[sid][pid] in ("line", "path")):
                     errors.append(f"commands[{i}]: sketch '{sid}' has no closed profile '{pid}'")
             new_id = c.get("id")
             if new_id is not None:
@@ -213,6 +214,31 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(f"commands[{i}].id: id '{new_id}' is already used")
                 kinds[new_id] = t
                 extrude_refs[new_id] = refs[0]
+        elif t == "add_path":
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                eid = c.get("id") or next_entity_id(ents, "path")
+                if eid in ents:
+                    errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                ents[eid] = "path"
+                poly_sizes[(c["sketch"], eid)] = len(c["points"])
+        elif t == "set_corner":
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) not in ("polygon", "path"):
+                errors.append(f"commands[{i}].entity: '{c['entity']}' is not a polygon or path of sketch '{c['sketch']}' "
+                              "(sketch fillet/chamfer works on polygon and path vertices; draw a rectangle as add_polygon to round it)")
+        elif t == "sweep":
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["profile"]) in (None, "line", "path"):
+                errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no closed profile '{c['profile']}'")
+            if sketch_exists(i, c["pathSketch"]) and sketches[c["pathSketch"]].get(c["path"]) not in ("line", "path"):
+                errors.append(f"commands[{i}].path: sketch '{c['pathSketch']}' has no path or line '{c['path']}' (add one with add_path)")
+            new_id = c.get("id")
+            if new_id is not None:
+                if id_used(new_id):
+                    errors.append(f"commands[{i}].id: id '{new_id}' is already used")
+                kinds[new_id] = "sweep"
+        elif t == "set_thin":
+            if exists(i, c["target"], "target") and kinds[c["target"]] != "extrude":
+                errors.append(f"commands[{i}].target: '{c['target']}' is not a rib (extrude with thin)")
         elif t == "import_mesh":
             errors.append(f"commands[{i}]: import_mesh is only for files the user opens, not for AI")
         elif t in ("add_line", "add_slot"):
@@ -289,6 +315,12 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             if sketch_exists(i, c["sketch"]) and c["profile"] not in sketches[c["sketch"]]:
                 existing = ", ".join(sorted(sketches[c["sketch"]])) or "none"
                 errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no element '{c['profile']}' (existing: {existing})")
+            elif sketch_exists(i, c["sketch"]):
+                is_open = sketches[c["sketch"]][c["profile"]] in ("line", "path")
+                if c.get("thin") is not None and not is_open:
+                    errors.append(f"commands[{i}].thin: thin (rib) needs an open line or path, '{c['profile']}' is closed")
+                elif c.get("thin") is None and is_open:
+                    errors.append(f"commands[{i}].profile: '{c['profile']}' is an open line; give thin (thickness) to extrude it as a rib")
             new_id = c.get("id")
             if new_id is not None:
                 if id_used(new_id):

@@ -6,7 +6,7 @@ import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
 import {
-  importMeshFile, openLoft, quickDraft, quickEdgeFeature, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+  importMeshFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
@@ -50,7 +50,7 @@ export function Toolbar() {
   const massOpen = useEditorStore((s) => s.massOpen);
   const projection = useEditorStore((s) => s.projection);
   const editor = useEditorStore.getState();
-  const draw = (t: 'rectangle' | 'circle' | 'polygon') => editor.setDrawTool(drawTool === t ? null : t);
+  const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
     <header className="toolbar">
@@ -101,6 +101,8 @@ export function Toolbar() {
             <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓)" onClick={() => startFeature('extrude')} />
             <Cmd icon="revolve" label="회전 보스/베이스" title="선택한 스케치를 v 축 둘레로 회전" onClick={() => startFeature('revolve')} />
             <Cmd icon="extrudeCut" label="돌출 컷" title="선택한 스케치를 돌출해 바디에서 뺌 (면 위 스케치는 안쪽으로)" onClick={() => startFeature('extrude', true)} testId="cmd-extrude-cut" />
+            <Cmd icon="sweep" label="스윕" title="단면을 경로를 따라 쓸기 (파이프·손잡이·레일)" onClick={openSweep} testId="cmd-sweep" />
+            <Cmd icon="rib" label="리브" title="선택한 스케치의 경로·구성선을 두께 2mm 로 세우기 (보강대·얇은 벽, 속성에서 두께·높이)" onClick={quickRib} testId="cmd-rib" />
             <Cmd icon="loft" label="로프트" title="여러 스케치 단면을 순서대로 이어 형상 만들기" onClick={openLoft} testId="cmd-loft" />
             <Cmd icon="helix" label="헬릭스" title="선택한 스케치 단면을 나선으로 감기 (스프링·코일)" onClick={quickHelix} testId="cmd-helix" />
             <Cmd icon="thread" label="나사산" title="선택한 원통에 나사산(피치 1.5mm) 감아 합치기" onClick={() => quickThread()} testId="cmd-thread" />
@@ -142,6 +144,7 @@ export function Toolbar() {
             <Cmd icon="slot" label="슬롯" title="선택한 스케치에 슬롯(긴 구멍) 추가" onClick={quickSlot} testId="cmd-slot" />
             <Cmd icon="line" label="구성선" title="선택한 스케치에 구성선(형상 없는 기준선) 추가 — 각도·평행 구속 기준" onClick={quickLine} testId="cmd-line" />
             <Cmd icon="polygon" label="다각형" shortcut="P" title="다각형 그리기 (P): 클릭으로 꼭짓점, 첫 점을 다시 클릭하거나 Enter 로 닫기" pressed={drawTool === 'polygon'} onClick={() => draw('polygon')} />
+            <Cmd icon="path" label="경로" title="경로(열린 선) 그리기: 클릭으로 점, 마지막 점을 다시 클릭하거나 Enter 로 끝 — 스윕·리브 중심선" pressed={drawTool === 'path'} onClick={() => draw('path')} testId="cmd-path" />
             <span className="sep" />
             <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
           </>

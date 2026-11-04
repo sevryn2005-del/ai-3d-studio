@@ -25,7 +25,8 @@ from app.cad.commands import (
     PatternObject,
     Sketch,
     max_edge_size,
-    resolve_profile,
+    open_line_points,
+    profile_of,
 )
 from app.cad.constraints import constraint_errors
 from app.cad.mesh_data import mesh_error
@@ -135,12 +136,14 @@ def check_model(model: ModelDefinition) -> list[Issue]:
         for ref in sketch_refs(obj):
             field = obj.kind  # "extrude" | "revolve" | "helix" | "loft"
             sk = sketches.get(ref.sketch)
-            prof = resolve_profile(sk, ref.profile) if sk else None
+            is_open = getattr(ref, "open", False) or getattr(ref, "thin", None) is not None
+            prof = (open_line_points(sk, ref.profile) if getattr(ref, "open", False) else profile_of(sk, ref)) if sk else None
             if sk is None:
                 issues.append(Issue(path=f"objects.{i}.{field}.sketch", message=f"{obj.id}: 존재하지 않는 스케치를 참조합니다: {ref.sketch}"))
             elif prof is None:
+                what = "열린 선(구성선·경로)" if is_open else "사용할 수 있는 프로파일"
                 issues.append(Issue(path=f"objects.{i}.{field}.profile",
-                                    message=f"{obj.id}: 스케치 {sk.id} 에 사용할 수 있는 프로파일 {ref.profile} 이(가) 없습니다"))
+                                    message=f"{obj.id}: 스케치 {sk.id} 에 {what} {ref.profile} 이(가) 없습니다"))
             elif isinstance(obj, (RevolveObject, HelixObject)) and (err := revolve_profile_error(prof)):
                 issues.append(Issue(path=f"objects.{i}.{field}.profile", message=f"{obj.id}: {err}"))
 

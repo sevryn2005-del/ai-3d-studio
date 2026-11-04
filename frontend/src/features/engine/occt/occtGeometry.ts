@@ -16,9 +16,10 @@ import type { OpenCascadeInstance, TopoDS_Edge, TopoDS_Face, TopoDS_Shape } from
 import { Matrix4, Vector3 } from 'three';
 import type { CadObject, EdgeRule, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects } from '../../../cad/modelGraph';
-import { resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { openLinePoints, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { cornerSegments, sweepError, sweepRings } from '../../../cad/curves';
 import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
-import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints } from '../../../cad/sections';
+import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
@@ -69,7 +70,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 9, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 10, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -166,7 +167,21 @@ function faceOf(c: Ctx, wire: ReturnType<typeof polygonWire>): TopoDS_Face {
 
 /** 평면 좌표(u, v) 단면 — CadQuery rect·circle·polyline·slot2D 와 같은 윤곽 */
 function profileFace(c: Ctx, p: Profile): TopoDS_Face {
-  if (p.type === 'polygon') return faceOf(c, polygonWire(c, p.points.map(([u, v]) => [u, v, 0])));
+  if (p.type === 'polygon') {
+    if (!p.corners?.length) return faceOf(c, polygonWire(c, p.points.map(([u, v]) => [u, v, 0])));
+    // 꼭짓점 처리: 직선 + 정확한 원호 (호 방향은 원 축 ±Z 로)
+    const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
+    for (const sg of cornerSegments(p.points, p.corners, true)) {
+      const a = pnt(c, sg.a[0], sg.a[1], 0);
+      const b = pnt(c, sg.b[0], sg.b[1], 0);
+      if (sg.type === 'line') mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge()));
+      else {
+        const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [sg.c[0], sg.c[1], 0], [0, 0, sg.ccw ? 1 : -1]), sg.r));
+        mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge()));
+      }
+    }
+    return faceOf(c, c.gc.k(mw.Wire()));
+  }
   const [cx, cy] = p.center;
   if (p.type === 'rectangle') {
     const w = p.width / 2;
@@ -473,7 +488,9 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
     case 'extrude':
     case 'revolve': {
       const ref = obj.kind === 'extrude' ? obj.extrude : obj.revolve;
-      const p = sketchProfile(c, obj, ref.sketch, ref.profile);
+      const sk = c.sketches.get(ref.sketch);
+      const p = sk ? profileOf(sk, ref) : null;
+      if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
       const local = extrudeLocalMatrix(modelOf(c), obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       const face = profileFace(c, p);
@@ -530,6 +547,21 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
         sectionPoints(p, n).map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(m).toArray() as [number, number, number]),
       );
       return ringSolid(c, rings, obj.name);
+    }
+    case 'sweep': {
+      const sk = c.sketches.get(obj.sweep.sketch);
+      const pk = c.sketches.get(obj.sweep.pathSketch);
+      const p = sk ? resolveProfile(sk, obj.sweep.profile) : null;
+      const path = pk ? openLinePoints(pk, obj.sweep.path) : null;
+      if (!p || !path) throw new GeometryError(`'${obj.name}': 스윕의 단면 또는 경로를 찾을 수 없습니다`);
+      const prof = sweepProfilePoints(p, SECTION_TOLERANCE);
+      const err = sweepError(prof, path);
+      if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+      const m = sketchLocalMatrix(modelOf(c), obj.id, obj.sweep.pathSketch);
+      if (!m) throw new GeometryError(`'${obj.name}': 경로 스케치의 평면을 찾을 수 없습니다`);
+      const path3 = path.map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(m).toArray() as [number, number, number]);
+      const B = new Vector3().setFromMatrixColumn(m, 2).normalize().toArray() as [number, number, number];
+      return ringSolid(c, sweepRings(prof, path3, B), obj.name);
     }
     case 'mesh': {
       const m = decodeMesh(obj.mesh);

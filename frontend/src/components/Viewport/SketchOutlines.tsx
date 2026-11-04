@@ -3,6 +3,7 @@ import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { dimensionValue, sketchFeatureRef, sketchRefs, slotOutline } from '../../cad/sketch';
+import { roundedPoints } from '../../cad/curves';
 import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 
@@ -49,7 +50,12 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
   const geometry = useMemo(() => {
     const z = 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 평면에서 살짝 띄움
     const pts: number[] = [];
-    if (entity.type === 'polygon' || entity.type === 'line') {
+    if (entity.type === 'polygon' || entity.type === 'path') {
+      // 꼭짓점 처리(필렛·모따기)를 반영한 윤곽. 경로는 열린 선 → 끝에서 처음으로 잇지 않도록 되돌아가는 점을 붙인다
+      const outline = roundedPoints(entity.points, entity.corners, entity.type === 'polygon');
+      const all = entity.type === 'path' ? [...outline, ...outline.slice(1, -1).reverse()] : outline;
+      for (const [x, y] of all) pts.push(x, y, z);
+    } else if (entity.type === 'line') {
       for (const [x, y] of entity.points) pts.push(x, y, z);
     } else if (entity.type === 'slot') {
       const length = dimensionValue(sketch, entity.id, 'length') ?? 0;

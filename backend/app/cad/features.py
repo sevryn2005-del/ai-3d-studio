@@ -16,7 +16,7 @@ from app.cad.commands import (
     Limits,
     ModelDefinition,
     PatternObject,
-    resolve_profile,
+    profile_of,
     sketch_feature_ref,
 )
 
@@ -139,7 +139,7 @@ def shell_error(obj, shell, model: ModelDefinition) -> str | None:
     elif isinstance(obj, ExtrudeObject):
         ref = sketch_feature_ref(obj)
         sk = next((s for s in model.sketches if s.id == ref.sketch), None)
-        p = resolve_profile(sk, ref.profile) if sk else None
+        p = profile_of(sk, ref) if sk else None
         limit = abs(obj.params.distance) / 2
         if p and p["type"] == "rectangle":
             limit = min(limit, p["width"] / 2, p["height"] / 2)

@@ -53,7 +53,7 @@ export const CONSTRAINT_ARITY: Record<ConstraintType, { refs: RefKind[][]; value
 export function sketchPoints(sketch: Sketch): Map<string, Point2> {
   const pts = new Map<string, Point2>();
   for (const e of sketch.entities) {
-    if (e.type === 'polygon' || e.type === 'line') e.points.forEach((p, k) => pts.set(`${e.id}.p${k}`, p));
+    if (e.type === 'polygon' || e.type === 'line' || e.type === 'path') e.points.forEach((p, k) => pts.set(`${e.id}.p${k}`, p));
     else pts.set(`${e.id}.center`, e.center);
   }
   return pts;
@@ -69,18 +69,18 @@ export function refKind(sketch: Sketch, ref: string): RefKind | null {
   if (!e) return null;
   const [, part] = ref.split('.');
   if (part === undefined) return e.type === 'circle' ? 'circle' : null;
-  if (part === 'center') return e.type === 'polygon' || e.type === 'line' ? null : 'point';
-  if (e.type !== 'polygon' && e.type !== 'line') return null;
+  if (part === 'center') return e.type === 'polygon' || e.type === 'line' || e.type === 'path' ? null : 'point';
+  if (e.type !== 'polygon' && e.type !== 'line' && e.type !== 'path') return null;
   const k = Number(part.slice(1));
-  // 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선: 끝점 2개, 변 1개
-  if (k >= (part[0] === 'e' && e.type === 'line' ? 1 : e.points.length)) return null;
+  // 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선·경로: 열린 선 → 변 = 점 수 − 1
+  if (k >= (part[0] === 'e' && e.type !== 'polygon' ? e.points.length - 1 : e.points.length)) return null;
   return part[0] === 'p' ? 'point' : 'edge';
 }
 
 /** 변 → 두 끝점 이름 */
 function edgeEnds(sketch: Sketch, ref: string): [string, string] {
   const [id, part] = ref.split('.') as [string, string];
-  const e = entityOf(sketch, ref) as Extract<SketchEntity, { type: 'polygon' | 'line' }>;
+  const e = entityOf(sketch, ref) as Extract<SketchEntity, { type: 'polygon' | 'line' | 'path' }>;
   const k = Number(part.slice(1));
   return [`${id}.p${k}`, `${id}.p${(k + 1) % e.points.length}`];
 }
@@ -261,7 +261,7 @@ export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Se
   const round = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
   const get = getter(x);
   const entities = sketch.entities.map((e): SketchEntity => {
-    if (e.type === 'polygon') return { ...e, points: e.points.map((_, k) => get(`${e.id}.p${k}`).map(round) as Point2) };
+    if (e.type === 'polygon' || e.type === 'path') return { ...e, points: e.points.map((_, k) => get(`${e.id}.p${k}`).map(round) as Point2) };
     if (e.type === 'line') return { ...e, points: [get(`${e.id}.p0`).map(round) as Point2, get(`${e.id}.p1`).map(round) as Point2] };
     return { ...e, center: get(`${e.id}.center`).map(round) as Point2 };
   });

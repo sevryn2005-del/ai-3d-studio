@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
-import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile, revolveProfileError, sketchRefs } from '../../cad/sketch';
+import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, profileOf, resolveProfile, revolveProfileError, sketchRefs } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
 import { ConstraintPanel, PolygonFields } from './ConstraintFields';
@@ -13,7 +13,7 @@ const dimLabel = (kind: DimensionKind, plane: SketchPlane, type?: SketchEntity['
   : kind === 'length' ? '길이 (반원 중심 사이)'
   : type === 'slot' && kind === 'width' ? '폭'
   : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
-export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯' };
+export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯', path: '경로' };
 
 /**
  * 스케치 요소 하나의 치수·중심 입력. 바꾸면 set_dimension / set_entity_center 1건
@@ -21,7 +21,7 @@ export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '
  */
 function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEntity }) {
   const submitNow = useSceneStore((s) => s.submitNow);
-  if (entity.type === 'polygon') return <PolygonFields sketch={sketch} polygon={entity} />;
+  if (entity.type === 'polygon' || entity.type === 'path') return <PolygonFields sketch={sketch} polygon={entity} />;
   if (entity.type === 'line') {
     const [u, v] = planeAxes(sketch.plane);
     const setPoint = (k: 0 | 1, axis: 0 | 1) => (val: number) => {
@@ -258,12 +258,19 @@ function RevolveAction({ sketch, entityId }: { sketch: Sketch; entityId: string 
 /** 돌출 객체: 원본 스케치 윤곽 치수(직접 수정) + 관통 구멍 */
 export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { kind: 'extrude' | 'revolve' }>; model: ModelDefinition }) {
   const select = useSceneStore((s) => s.select);
+  const submitNow = useSceneStore((s) => s.submitNow);
   const ref = object.kind === 'extrude' ? object.extrude : object.revolve;
   const sketch = findSketch(model, ref.sketch);
   const entity = sketch?.entities.find((e) => e.id === ref.profile);
   if (!sketch || !entity) return <p className="muted small">원본 스케치를 찾을 수 없습니다: {ref.sketch}</p>;
   return (
     <>
+      {object.kind === 'extrude' && object.extrude.thin !== undefined && (
+        <fieldset>
+          <legend>리브 (얇은 돌출)</legend>
+          <NumberField label="두께" unit="mm" value={object.extrude.thin} onCommit={(v) => submitNow({ type: 'set_thin', target: object.id, thin: v })} testId="rib-thin" />
+        </fieldset>
+      )}
       <fieldset>
         <legend>윤곽 ({sketch.name})</legend>
         <EntityDimensions sketch={sketch} entity={entity} />
@@ -271,7 +278,7 @@ export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { 
           스케치 열기
         </button>
       </fieldset>
-      {object.kind === 'extrude' && <HoleAction object={object} model={model} />}
+      {object.kind === 'extrude' && object.extrude.thin === undefined && <HoleAction object={object} model={model} />}
     </>
   );
 }
@@ -279,7 +286,7 @@ export function ExtrudeFields({ object, model }: { object: Extract<CadObject, { 
 function HoleAction({ object, model }: { object: Extract<CadObject, { kind: 'extrude' }>; model: ModelDefinition }) {
   const dispatchBatch = useSceneStore((s) => s.dispatchBatch);
   const sketch = findSketch(model, object.extrude.sketch);
-  const profile = sketch ? resolveProfile(sketch, object.extrude.profile) : null;
+  const profile = sketch ? profileOf(sketch, object.extrude) : null;
   const [diameter, setDiameter] = useState(6);
   const [center, setCenter] = useState<Point2 | null>(null);
   if (!profile) return null;

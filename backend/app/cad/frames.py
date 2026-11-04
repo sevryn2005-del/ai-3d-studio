@@ -31,7 +31,7 @@ from app.cad.commands import (
     StandardPlane,
     Transform,
     PatternObject,
-    resolve_profile,
+    profile_of,
 )
 
 MAX_DEPTH = 16  # 면 참조 재귀 한도 (순환은 validation.check_model 이 따로 거부)
@@ -104,7 +104,7 @@ def object_world_matrix(model: ModelDefinition, oid: str) -> np.ndarray:
 def _profile(model: ModelDefinition, obj: ExtrudeObject) -> dict | None:
     ref = sketch_feature_ref(obj)
     sk = next((s for s in model.sketches if s.id == ref.sketch), None)
-    return resolve_profile(sk, ref.profile) if sk else None
+    return profile_of(sk, ref) if sk else None
 
 
 def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str]:

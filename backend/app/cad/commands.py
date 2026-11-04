@@ -14,9 +14,11 @@ tests/test_contract.py 가 검사한다. 한쪽만 바꾸면 테스트가 실패
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from typing import Annotated, Literal, Union
 
+from app.cad.curves import rounded_points, thin_polygon
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, model_validator
 
 
@@ -190,12 +192,33 @@ class CircleEntity(Strict):
     center: Point2
 
 
+class Corner(Strict):
+    """꼭짓점 처리 (형식 v10, 스케치 필렛·모따기) — curves.py"""
+
+    k: Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]
+    type: Literal["fillet", "chamfer"]
+    size: Annotated[float, _num(Limits.MIN_DIMENSION / 10, Limits.MAX_DIMENSION)]
+
+
+Corners = Annotated[list[Corner], Field(max_length=Limits.MAX_POLYGON_POINTS)]
+
+
 class PolygonEntity(Strict):
-    """닫힌 다각형 (형식 v4). 꼭짓점 = 구속 해석기가 푼 좌표. 꼭짓점 k = ID.pk, 변 k = ID.ek."""
+    """닫힌 다각형 (형식 v4). 꼭짓점 = 구속 해석기가 푼 좌표. 꼭짓점 k = ID.pk, 변 k = ID.ek. corners (v10)."""
 
     id: ObjectId
     type: Literal["polygon"]
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
+    corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
+
+
+class PathEntity(Strict):
+    """경로 (형식 v10): 열린 꺾은선. 꼭짓점 ID.pk, 변 ID.ek (닫히지 않음). 안쪽 꼭짓점 corners."""
+
+    id: ObjectId
+    type: Literal["path"]
+    points: Annotated[list[Point2], Field(min_length=2, max_length=Limits.MAX_POLYGON_POINTS)]
+    corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class LineEntity(Strict):
@@ -218,7 +241,7 @@ class SlotEntity(Strict):
     angle: SketchAngle
 
 
-SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity], Field(discriminator="type")]
+SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity, PathEntity], Field(discriminator="type")]
 
 ConstraintType = Literal[
     "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent",
@@ -285,7 +308,7 @@ class Sketch(Strict):
     constraints: Annotated[list[SketchConstraint], Field(max_length=Limits.MAX_SKETCH_CONSTRAINTS)]
 
 
-REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width")}
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width"), "path": ()}
 
 
 def slot_half_extent(p: dict) -> tuple[float, float]:
@@ -297,7 +320,7 @@ def slot_half_extent(p: dict) -> tuple[float, float]:
 def revolve_profile_error(p: dict) -> str | None:
     """회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지 (frontend sketch.ts revolveProfileError 와 같음)."""
     if p["type"] == "polygon":
-        min_u = min(q[0] for q in p["points"])
+        min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True))
     elif p["type"] == "circle":
         min_u = p["center"][0] - p["diameter"] / 2
     elif p["type"] == "slot":
@@ -309,18 +332,46 @@ def revolve_profile_error(p: dict) -> str | None:
     return None
 
 
+def _polygon_profile(points, corners, z, plane) -> dict:
+    """다각형 단면 (sketch.ts polygonProfile 과 같음): 중심·크기 = 꼭짓점 처리 후 윤곽의 바운딩 박스"""
+    outline = rounded_points(points, corners, True)
+    xs = [p[0] for p in outline]
+    ys = [p[1] for p in outline]
+    out = {"type": "polygon", "points": [tuple(p) for p in points], "center": ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
+           "width": max(xs) - min(xs), "height": max(ys) - min(ys), "z": z, "plane": plane}
+    if corners:
+        out["corners"] = [c.model_dump() if hasattr(c, "model_dump") else c for c in corners]
+    return out
+
+
+def open_line_points(sketch: Sketch, entity_id: str) -> list | None:
+    """열린 선(구성선·경로)의 점 — 경로의 둥근 꺾임은 윤곽 표본으로 (sketch.ts openLinePoints)"""
+    e = next((x for x in sketch.entities if x.id == entity_id), None)
+    if e is None or e.type not in ("line", "path"):
+        return None
+    return rounded_points(e.points, e.corners if e.type == "path" else None, False)
+
+
+def profile_of(sketch: Sketch, ref) -> dict | None:
+    """참조의 단면: thin 이면 열린 선을 두께만큼 띄운 다각형 (sketch.ts profileOf)"""
+    thin = getattr(ref, "thin", None)
+    if thin is None:
+        return resolve_profile(sketch, ref.profile)
+    pts = open_line_points(sketch, ref.profile)
+    if pts is None:
+        return None
+    return _polygon_profile(thin_polygon(pts, thin), None, sketch.plane.offset, sketch.plane)
+
+
 def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     """돌출 단면 (프론트엔드 cad/sketch.ts 의 resolveProfile 과 같은 규칙)."""
     e = next((x for x in sketch.entities if x.id == entity_id), None)
-    if e is None or e.type == "line":
+    if e is None or e.type in ("line", "path"):
         return None
     dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
     z = sketch.plane.offset
     if e.type == "polygon":
-        xs = [p[0] for p in e.points]
-        ys = [p[1] for p in e.points]
-        return {"type": "polygon", "points": list(e.points), "center": ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
-                "width": max(xs) - min(xs), "height": max(ys) - min(ys), "z": z, "plane": sketch.plane}
+        return _polygon_profile(e.points, e.corners, z, sketch.plane)
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
@@ -423,10 +474,16 @@ class ExtrudeRef(Strict):
     profile: ObjectId
 
 
+class ThinExtrudeRef(ExtrudeRef):
+    """돌출 참조 (형식 v10: thin = 리브·얇은 돌출 두께, 열린 선 참조)"""
+
+    thin: Annotated[float | None, Field(exclude_if=lambda v: v is None)] = None
+
+
 class ExtrudeObject(_ObjectBase):
     kind: Literal["extrude"]
     params: ExtrudeParams
-    extrude: ExtrudeRef
+    extrude: ThinExtrudeRef
     shell: Shell | None = _opt()
 
 
@@ -458,6 +515,20 @@ class LoftObject(_ObjectBase):
 MeshBase64 = Annotated[str, StringConstraints(strict=True, max_length=16_000_000, pattern=r"^[A-Za-z0-9+/]*={0,2}$")]
 
 
+class SweepDef(Strict):
+    sketch: ObjectId
+    profile: ObjectId
+    pathSketch: ObjectId
+    path: ObjectId
+
+
+class SweepObject(_ObjectBase):
+    """스윕 (형식 v10): 단면을 경로를 따라 (curves.py sweep_rings)"""
+
+    kind: Literal["sweep"]
+    sweep: SweepDef
+
+
 class MeshData(Strict):
     positions: MeshBase64
     indices: MeshBase64
@@ -481,10 +552,22 @@ def sketch_feature_ref(obj) -> ExtrudeRef | None:
     return None
 
 
-def sketch_refs(obj) -> list[ExtrudeRef]:
-    """객체가 참조하는 모든 스케치 프로파일 (로프트는 단면 여러 개)"""
+@dataclass(frozen=True)
+class FeatureRef:
+    """sketch.ts FeatureRef: open = 열린 선(스윕 경로) 참조"""
+
+    sketch: str
+    profile: str
+    thin: float | None = None
+    open: bool = False
+
+
+def sketch_refs(obj) -> list:
+    """객체가 참조하는 모든 스케치 요소 (로프트 = 단면 여러 개, 스윕 = 단면 + 경로)"""
     if isinstance(obj, LoftObject):
         return list(obj.loft.sections)
+    if isinstance(obj, SweepObject):
+        return [FeatureRef(obj.sweep.sketch, obj.sweep.profile), FeatureRef(obj.sweep.pathSketch, obj.sweep.path, open=True)]
     r = sketch_feature_ref(obj)
     return [r] if r else []
 
@@ -620,18 +703,18 @@ class StepObject(_ObjectBase):
 PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
     BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject,
+    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject,
 )
 
 CadObject = Annotated[
     Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject],
+          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject],
     Field(discriminator="kind"),
 ]
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[9]
+    schemaVersion: Literal[10]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -726,6 +809,39 @@ class AddPolygon(Strict):
     sketch: ObjectId
     id: ObjectId | None = None
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
+
+
+class AddPath(Strict):
+    type: Literal["add_path"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    points: Annotated[list[Point2], Field(min_length=2, max_length=Limits.MAX_POLYGON_POINTS)]
+
+
+class SetCorner(Strict):
+    type: Literal["set_corner"]
+    sketch: ObjectId
+    entity: ObjectId
+    vertices: Annotated[list[Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]],
+                        Field(max_length=Limits.MAX_POLYGON_POINTS)] | None = None
+    corner: Literal["fillet", "chamfer"]
+    size: Annotated[float, _num(0, Limits.MAX_DIMENSION)]
+
+
+class SweepCommand(Strict):
+    type: Literal["sweep"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    sketch: ObjectId
+    profile: ObjectId
+    pathSketch: ObjectId
+    path: ObjectId
+
+
+class SetThin(Strict):
+    type: Literal["set_thin"]
+    target: ObjectId
+    thin: Dimension
 
 
 class AddLine(Strict):
@@ -884,6 +1000,7 @@ class Extrude(Strict):
     profile: ObjectId
     distance: ExtrudeDistance
     position: Vec3 | None = None
+    thin: Dimension | None = None
 
 
 class _BooleanCommandBase(Strict):
@@ -1046,6 +1163,8 @@ CadCommand = Annotated[
         SetSketchPlane,
         AddPolygon,
         AddLine,
+        AddPath,
+        SetCorner,
         AddSlot,
         SetEntityAngle,
         OffsetEntity,
@@ -1059,6 +1178,8 @@ CadCommand = Annotated[
         Revolve,
         Helix,
         Loft,
+        SweepCommand,
+        SetThin,
         ImportMesh,
         EdgeFeatureCommand,
         SetEdgeFeature,
@@ -1102,6 +1223,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetSketchPlane,
     AddPolygon,
     AddLine,
+    AddPath,
+    SetCorner,
     AddSlot,
     SetEntityAngle,
     OffsetEntity,
@@ -1115,6 +1238,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     Revolve,
     Helix,
     Loft,
+    SweepCommand,
+    SetThin,
     ImportMesh,
     EdgeFeatureCommand,
     SetEdgeFeature,
