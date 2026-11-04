@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
-import { Box3, PerspectiveCamera, Sphere, Vector3 } from 'three';
+import { Box3, OrthographicCamera, PerspectiveCamera, Sphere, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { fitDistance } from '../../cad/transformUtils';
 import { useEditorStore, type ViewName } from '../../features/selection/editorStore';
@@ -34,7 +34,9 @@ export function CameraFitter() {
   const size = useThree((s) => s.size);
 
   useEffect(() => {
-    if ((fitRequest === 0 && !viewRequest) || !controls || !(camera instanceof PerspectiveCamera)) return;
+    if ((fitRequest === 0 && !viewRequest) || !controls) return;
+    const ortho = camera instanceof OrthographicCamera;
+    if (!ortho && !(camera instanceof PerspectiveCamera)) return;
 
     const box = new Box3();
     scene.traverse((o) => {
@@ -47,7 +49,8 @@ export function CameraFitter() {
       new Vector3().subVectors(camera.position, controls.target).normalize();
     lastView.n = viewRequest?.n ?? 0;
     if (dir.lengthSq() === 0) dir.set(0.5, -0.7, 0.5).normalize();
-    const dist = fitDistance(sphere.radius, camera.fov, size.width / size.height);
+    const dist = fitDistance(sphere.radius, ortho ? 45 : (camera as PerspectiveCamera).fov, size.width / size.height);
+    if (ortho) camera.zoom = Math.min(size.width, size.height) / (2 * Math.max(sphere.radius, 1) * 1.25);
 
     controls.target.copy(sphere.center);
     camera.position.copy(sphere.center).addScaledVector(dir, dist);

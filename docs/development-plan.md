@@ -200,3 +200,11 @@
 - 두 엔진 교차 검증: 공유 픽스처 `feature-cases.json` 15가지 (해석적 부피·닫힌 메시) — `features.test.ts`, `test_features.py`.
 - 보기·분석: 표시 모드 4종, 단면 보기, 두 점 측정, 질량 특성(재료별 질량), 화면 PNG 저장.
 - AI: 새 명령(shell·hole·pattern·set_suppressed·set_appearance) 프롬프트·검증기.
+
+## 18. 묶음 2 (형식 v7) — ✅ 완료
+
+- 스케치: 슬롯(`slot`, 치수 length·width, 방향), 구성선(`line`, 형상 없는 구속 기준), 각도 구속(`angle`, 두 변 사이 °).
+- 각도 기준 평면(`plane.type 'angled'`: 기준 평면을 u·v 축 둘레로 기울임 + 법선 거리).
+- 크기 조정(`pattern` type `scale`, 축별 배율), 돌출 컷·회전 컷(속성 관리자 "컷 대상" → 피처 + 빼기 한 묶음).
+- 원근/직교 투영 전환 (위치·크기 유지).
+- 두 엔진 공유 픽스처 `feature-cases.json` 20가지 (v7 5가지 추가: 슬롯 돌출, 슬롯 회전(파푸스), 각도 평면, 비균일 배율, 각도 구속 삼각형 — 부피·바운딩 박스).

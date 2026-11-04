@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 6
+      "const": 7
     },
     "units": {
       "type": "string",
@@ -88,6 +88,48 @@
                   "type",
                   "object",
                   "face",
+                  "offset"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "angled"
+                  },
+                  "base": {
+                    "type": "string",
+                    "enum": [
+                      "XY",
+                      "XZ",
+                      "YZ"
+                    ]
+                  },
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "u",
+                      "v"
+                    ]
+                  },
+                  "angle": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                  },
+                  "offset": {
+                    "type": "number",
+                    "minimum": -10000,
+                    "maximum": 10000
+                  }
+                },
+                "required": [
+                  "type",
+                  "base",
+                  "axis",
+                  "angle",
                   "offset"
                 ],
                 "additionalProperties": false
@@ -214,6 +256,112 @@
                     "points"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "line"
+                    },
+                    "points": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number",
+                              "minimum": -10000,
+                              "maximum": 10000
+                            },
+                            {
+                              "type": "number",
+                              "minimum": -10000,
+                              "maximum": 10000
+                            }
+                          ],
+                          "items": false,
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number",
+                              "minimum": -10000,
+                              "maximum": 10000
+                            },
+                            {
+                              "type": "number",
+                              "minimum": -10000,
+                              "maximum": 10000
+                            }
+                          ],
+                          "items": false,
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "slot"
+                    },
+                    "center": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        },
+                        {
+                          "type": "number",
+                          "minimum": -10000,
+                          "maximum": 10000
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "angle": {
+                      "type": "number",
+                      "minimum": -360,
+                      "maximum": 360
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "center",
+                    "angle"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -226,7 +374,7 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter)$"
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter|length)$"
                 },
                 "entity": {
                   "type": "string",
@@ -237,7 +385,8 @@
                   "enum": [
                     "width",
                     "height",
-                    "diameter"
+                    "diameter",
+                    "length"
                   ]
                 },
                 "value": {
@@ -278,7 +427,8 @@
                     "equal",
                     "length",
                     "distance",
-                    "tangent"
+                    "tangent",
+                    "angle"
                   ]
                 },
                 "refs": {
@@ -1645,6 +1795,42 @@
                       "source",
                       "plane",
                       "offset"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "scale"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 100
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 100
+                      },
+                      "z": {
+                        "type": "number",
+                        "minimum": 0.01,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "source",
+                      "x",
+                      "y",
+                      "z"
                     ],
                     "additionalProperties": false
                   }

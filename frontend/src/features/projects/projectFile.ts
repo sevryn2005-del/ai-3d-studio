@@ -17,9 +17,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 4: + 스케치 다각형(polygon)과 기하 구속(sketch.constraints). model.schemaVersion 4
  * - 5: + 회전 객체(kind 'revolve'). model.schemaVersion 5. v4 내용은 그대로 유효
  * - 6: + 억제·숨김·외관색, 쉘, 패턴·대칭(kind 'pattern'), 구멍 도구(kind 'hole'). model.schemaVersion 6. v5 내용은 그대로 유효
- * 읽기는 1~6 모두, 쓰기는 항상 최신(6). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 7: + 스케치 구성선(line)·슬롯(slot)·각도 구속, 각도 기준 평면(angled), 크기 조정(pattern type 'scale'). v6 내용은 그대로 유효
+ * 읽기는 1~7 모두, 쓰기는 항상 최신(7). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 6;
+export const PROJECT_FORMAT_VERSION = 7;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -115,8 +116,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 6) {
     // v5 → v6: 선택 필드와 새 객체 종류만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 5 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 5 ? { ...model, schemaVersion: 6 } : model;
     file = { ...file, formatVersion: 6, model: migrated };
+  }
+  if ((file.formatVersion as number) < 7) {
+    // v6 → v7: 새 요소·평면·패턴 종류만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 6 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 7, model: migrated };
   }
   return file;
 }

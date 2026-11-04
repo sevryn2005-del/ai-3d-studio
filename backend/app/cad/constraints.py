@@ -14,7 +14,7 @@ CHECK_TOLERANCE = 1e-4
 
 LABEL = {
     "fix": "고정", "coincident": "일치", "concentric": "동심", "horizontal": "수평", "vertical": "수직", "parallel": "평행",
-    "perpendicular": "직교", "equal": "같은 길이", "length": "길이", "distance": "거리", "tangent": "접선",
+    "perpendicular": "직교", "equal": "같은 길이", "length": "길이", "distance": "거리", "tangent": "접선", "angle": "각도",
 }
 
 # 구속 종류별 참조 형식 (solver.ts CONSTRAINT_ARITY 와 같음)
@@ -30,13 +30,14 @@ ARITY: dict[str, tuple[list[tuple[str, ...]], bool]] = {
     "length": ([("edge",)], True),
     "distance": ([("point", "point")], True),
     "tangent": ([("edge", "circle")], False),
+    "angle": ([("edge", "edge")], True),
 }
 
 
 def sketch_points(sk: Sketch) -> dict[str, tuple[float, float]]:
     pts: dict[str, tuple[float, float]] = {}
     for e in sk.entities:
-        if e.type == "polygon":
+        if e.type in ("polygon", "line"):
             for k, p in enumerate(e.points):
                 pts[f"{e.id}.p{k}"] = (p[0], p[1])
         else:
@@ -52,8 +53,11 @@ def ref_kind(sk: Sketch, ref: str) -> str | None:
     if not part:
         return "circle" if e.type == "circle" else None
     if part == "center":
-        return None if e.type == "polygon" else "point"
-    if e.type != "polygon" or int(part[1:]) >= len(e.points):
+        return None if e.type in ("polygon", "line") else "point"
+    if e.type not in ("polygon", "line"):
+        return None
+    # 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선: 끝점 2개, 변 1개
+    if int(part[1:]) >= (1 if part[0] == "e" and e.type == "line" else len(e.points)):
         return None
     return "point" if part[0] == "p" else "edge"
 
@@ -72,6 +76,8 @@ def constraint_error(sk: Sketch, c: SketchConstraint) -> str | None:
         return f"{LABEL[c.type]} 구속에는 값을 넣지 않습니다"
     if len(c.refs) == 2 and c.refs[0] == c.refs[1]:
         return "같은 대상을 두 번 참조할 수 없습니다"
+    if c.type == "angle" and not (0 < c.value < 180):
+        return "각도는 0° 보다 크고 180° 보다 작아야 합니다"
     return None
 
 
@@ -118,6 +124,11 @@ def residuals(sk: Sketch, c: SketchConstraint) -> list[float]:
     if t == "distance":
         a, b = P(c.refs[0]), P(c.refs[1])
         return [math.hypot(b[0] - a[0], b[1] - a[1]) - c.value]
+    if t == "angle":
+        u, v = d(c.refs[0]), d(c.refs[1])
+        n = max(math.hypot(*u) * math.hypot(*v), 1e-12)
+        a = math.radians(c.value)
+        return [((u[0] * v[1] - u[1] * v[0]) * math.cos(a) - (u[0] * v[0] + u[1] * v[1]) * math.sin(a)) / n]
     if t == "tangent":
         a, b = _edge(sk, pts, c.refs[0])
         o = P(c.refs[1])

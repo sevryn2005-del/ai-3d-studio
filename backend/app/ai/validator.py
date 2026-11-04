@@ -53,7 +53,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
     sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
     # 구속 해석기: 다각형 꼭짓점 수, 구속 id → 값이 있는지 (참조 형식은 app/cad/constraints.ARITY)
     poly_sizes: dict[tuple[str, str], int] = {
-        (sk.id, e.id): len(e.points) for sk in model.sketches for e in sk.entities if e.type == "polygon"
+        (sk.id, e.id): len(e.points) for sk in model.sketches for e in sk.entities if e.type in ("polygon", "line")
     }
     constraint_ids: dict[str, dict[str, bool]] = {sk.id: {c.id: c.value is not None for c in sk.constraints} for sk in model.sketches}
 
@@ -65,8 +65,11 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         if not part:
             return "circle" if etype == "circle" else None
         if part == "center":
-            return None if etype == "polygon" else "point"
-        if etype != "polygon" or int(part[1:]) >= poly_sizes.get((sid, eid), 0):
+            return None if etype in ("polygon", "line") else "point"
+        if etype not in ("polygon", "line"):
+            return None
+        limit = 1 if (part[0] == "e" and etype == "line") else poly_sizes.get((sid, eid), 0)
+        if int(part[1:]) >= limit:
             return None
         return "point" if part[0] == "p" else "edge"
 
@@ -188,6 +191,19 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     errors.append(f"commands[{i}].points: {err}")
                 ents[eid] = "polygon"
                 poly_sizes[(c["sketch"], eid)] = len(c["points"])
+        elif t in ("add_line", "add_slot"):
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                etype = "line" if t == "add_line" else "slot"
+                eid = c.get("id") or next_entity_id(ents, etype)
+                if eid in ents:
+                    errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                ents[eid] = etype
+                if etype == "line":
+                    poly_sizes[(c["sketch"], eid)] = 2
+        elif t == "set_entity_angle":
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) != "slot":
+                errors.append(f"commands[{i}].entity: '{c['entity']}' is not a slot of sketch '{c['sketch']}'")
         elif t == "move_point":
             if sketch_exists(i, c["sketch"]) and geom_kind(c["sketch"], c["point"]) != "point":
                 errors.append(f"commands[{i}].point: '{c['point']}' is not a point of sketch '{c['sketch']}' "

@@ -25,6 +25,7 @@ const AXIS: Record<Axis, [number, number, number]> = { x: [1, 0, 0], y: [0, 1, 0
 
 /** 패턴 사본 수 (원본 포함) */
 export function patternCopyCount(p: PatternDef): number {
+  if (p.type === 'scale') return 1;
   if (p.type === 'mirror') return 2;
   if (p.type === 'circular') return p.count;
   return p.count * (p.axis2 ? (p.count2 ?? 1) : 1);
@@ -32,6 +33,7 @@ export function patternCopyCount(p: PatternDef): number {
 
 /** 패턴 좌표계에서 원본(자식 변환 적용 후)에 곱할 사본 행렬들. 첫 번째 = 단위 행렬 (원본) */
 export function patternMatrices(p: PatternDef): Matrix4[] {
+  if (p.type === 'scale') return [new Matrix4().makeScale(p.x, p.y, p.z)]; // 원본 대신 배율 적용본 하나
   if (p.type === 'mirror') {
     const n = new Vector3(...{ XY: AXIS.z, XZ: AXIS.y, YZ: AXIS.x }[p.plane]);
     // 반사 R = I − 2nnᵀ, 평면이 원점에서 offset 만큼 → T(offset·n) · R · T(−offset·n)

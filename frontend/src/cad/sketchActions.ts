@@ -5,7 +5,7 @@
 import type { CadCommand, ModelDefinition, ObjectId, Point2, Transform } from './commandTypes';
 import { nextId } from './commandExecutor';
 import { byId, parentMap } from './modelGraph';
-import { findSketch, resolveProfile } from './sketch';
+import { findSketch, resolveProfile, slotOutline } from './sketch';
 import { composeTransform } from './transformMath';
 import { polygonError } from './solver';
 
@@ -90,7 +90,12 @@ export function throughHoleCommands(
       ? Math.abs(dx) + r + HOLE_MIN_WALL <= profile.width / 2 && Math.abs(dy) + r + HOLE_MIN_WALL <= profile.height / 2
       : profile.type === 'circle'
         ? Math.hypot(dx, dy) + r + HOLE_MIN_WALL <= profile.diameter / 2
-        : pointInPolygon(hole.center, profile.points) && edgeDistance(hole.center, profile.points) >= r + HOLE_MIN_WALL;
+        : profile.type === 'slot'
+          ? (() => {
+              const pts = slotOutline(profile, 24);
+              return pointInPolygon(hole.center, pts) && edgeDistance(hole.center, pts) >= r + HOLE_MIN_WALL;
+            })()
+          : pointInPolygon(hole.center, profile.points) && edgeDistance(hole.center, profile.points) >= r + HOLE_MIN_WALL;
   if (!fits) return { ok: false, error: `구멍이 판 가장자리에서 ${HOLE_MIN_WALL}mm 이상 안쪽에 있어야 합니다` };
 
   const { world, root } = worldPlacement(model, plate.id);

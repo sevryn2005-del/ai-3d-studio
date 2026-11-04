@@ -7,7 +7,7 @@ import { nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { resolveProfile, revolveProfileError } from '../../cad/sketch';
 import { facesOf } from '../../cad/sketchPlane';
-import { childIds } from '../../cad/modelGraph';
+import { childIds, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
 import { useEditorStore, type PendingFeature } from './editorStore';
 
@@ -17,11 +17,22 @@ export function pendingCommand(p: PendingFeature): CadCommand {
     : { type: 'revolve', sketch: p.sketch, profile: p.profile, angle: p.angle };
 }
 
-/** 확인(✓): 명령 1건으로 확정. 거부되면 속성 관리자를 그대로 두고 이유는 상태바에 */
+/**
+ * 확인(✓): 명령 1건(컷이면 피처 + 빼기 2건을 한 묶음 = 실행 취소 1번)으로 확정.
+ * 거부되면 속성 관리자를 그대로 두고 이유는 상태바에
+ */
 export function commitPending(): boolean {
   const ed = useEditorStore.getState();
-  if (!ed.pending) return false;
-  const r = useSceneStore.getState().submitNow(pendingCommand(ed.pending));
+  const p = ed.pending;
+  if (!p) return false;
+  const scene = useSceneStore.getState();
+  if (p.cutTarget) {
+    const id = nextId(selectModel(scene), p.kind);
+    const r = scene.dispatchBatch([{ ...pendingCommand(p), id }, { type: 'cut', base: p.cutTarget, tools: [id] }]);
+    if (r.ok) ed.setPending(null);
+    return r.ok;
+  }
+  const r = scene.submitNow(pendingCommand(p));
   if (r.status === 'applied') ed.setPending(null);
   return r.status === 'applied';
 }
@@ -65,7 +76,7 @@ export function startSketch() {
  * 툴바 "돌출 보스/베이스"·"회전 보스/베이스": 선택한 스케치의 첫(사용 가능한) 프로파일로 속성 관리자를 연다.
  * 스케치가 없으면 이유를 상태바에.
  */
-export function startFeature(kind: PendingFeature['kind']) {
+export function startFeature(kind: PendingFeature['kind'], cut = false) {
   const scene = useSceneStore.getState();
   const sketch = selectSelectedSketch(scene);
   if (!sketch) {
@@ -85,8 +96,24 @@ export function startFeature(kind: PendingFeature['kind']) {
     return;
   }
   const profile = usable[0]!.id;
+  // 컷: 면 위 스케치면 그 면의 (최상위) 바디, 아니면 첫 최상위 바디에서 뺀다. 음수 돌출(면 안쪽)이 기본
+  let cutTarget: string | undefined;
+  if (cut) {
+    const model = selectModel(scene);
+    const parents = new Map(model.objects.flatMap((o) => childIds(o).map((c) => [c, o.id] as const)));
+    let anchor = sketch.plane.type === 'face' ? sketch.plane.object : topLevelObjects(model)[0]?.id;
+    while (anchor && parents.has(anchor)) anchor = parents.get(anchor);
+    if (!anchor) {
+      scene.reportError('뺄 바디가 없습니다. 먼저 형상을 만드세요');
+      return;
+    }
+    cutTarget = anchor;
+  }
+  const distance = cut && sketch.plane.type === 'face' ? -10 : 10;
   useEditorStore.getState().setPending(
-    kind === 'extrude' ? { kind, sketch: sketch.id, profile, distance: 10 } : { kind, sketch: sketch.id, profile, angle: 360 },
+    kind === 'extrude'
+      ? { kind, sketch: sketch.id, profile, distance, ...(cutTarget ? { cutTarget } : {}) }
+      : { kind, sketch: sketch.id, profile, angle: 360, ...(cutTarget ? { cutTarget } : {}) },
   );
   // 스케치에 수직인 보기에서는 두께가 안 보인다 → 등각 보기로 미리보기 전체를 보여 준다 (솔리드웍스와 같은 동작)
   useEditorStore.getState().requestView('iso');
@@ -150,4 +177,30 @@ export function quickHole() {
   }
   const depth = Math.max(1, Math.round(Math.abs(localSize(obj, model)[2]) * 10) / 10);
   scene.submitNow({ type: 'hole', target: obj.id, face, at: [0, 0], diameter: 5, depth });
+}
+
+/** 크기 조정: 선택한 객체를 원점 기준 1.5배 (속성에서 축별 배율 조정) */
+export function quickScale() {
+  const s = selectedRoot('크기 조정');
+  if (!s) return;
+  s.scene.submitNow({ type: 'pattern', pattern: { type: 'scale', source: s.obj.id, x: 1.5, y: 1.5, z: 1.5 } });
+}
+
+function selectedSketchFor(action: string) {
+  const scene = useSceneStore.getState();
+  const sketch = selectSelectedSketch(scene);
+  if (!sketch) scene.reportError(`${action}: 스케치를 먼저 고르세요 (피처 트리에서 스케치를 클릭하거나 "스케치" 로 새로 만들기)`);
+  return sketch ? { scene, sketch } : null;
+}
+
+/** 슬롯 추가: 원점에 길이 20·폭 8 (속성에서 치수·위치·방향 조정) */
+export function quickSlot() {
+  const s = selectedSketchFor('슬롯');
+  if (s) s.scene.submitNow({ type: 'add_slot', sketch: s.sketch.id, center: [0, 0], length: 20, width: 8 });
+}
+
+/** 구성선 추가: u 축 위 −20 ~ 20 (구속 기준선) */
+export function quickLine() {
+  const s = selectedSketchFor('구성선');
+  if (s) s.scene.submitNow({ type: 'add_line', sketch: s.sketch.id, points: [[-20, 0], [20, 0]] });
 }

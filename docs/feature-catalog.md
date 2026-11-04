@@ -23,8 +23,8 @@
 | 대칭 복사 | Mirror | Mirror modifier | ✅ |
 | 피처 억제 / 해제 | Suppress | 모디파이어 끄기 | ✅ |
 | 외관 색 · 숨기기 | Appearance / Hide | Material / Hide | ✅ |
-| 회전 컷 | Revolved Cut | — | ⬜ 다음 묶음 |
-| 크기 조정 (배율) | Scale | Scale | ⬜ 다음 묶음 |
+| 돌출 컷 · 회전 컷 (다른 바디에서 빼기) | Extruded / Revolved Cut | Boolean | ✅ |
+| 크기 조정 (균일·축별 배율) | Scale | Scale | ✅ |
 | 스윕 (경로 따라 단면) | Swept Boss/Cut | Curve bevel | ⬜ |
 | 로프트 (단면 사이 잇기) | Lofted Boss/Cut | Skin/Bridge | ⬜ |
 | 구배 (빼기 각) | Draft | — | ⬜ (OCCT) |
@@ -42,11 +42,13 @@
 |------|-----------|------|
 | 사각형·원·다각형, 치수, 평면 XY/XZ/YZ, 면 위 스케치 | Sketch | ✅ |
 | 기하 구속 11종 + 자유도·완전 정의 표시, 충돌 구속 진단 | Relations / SketchXpert | ✅ |
-| 직선·호·스플라인·타원·슬롯 | Line/Arc/Spline/Ellipse/Slot | ⬜ |
+| 슬롯 (방향·길이·폭) | Straight Slot | ✅ |
+| 직선 프로파일 경계·호·스플라인·타원 | Line/Arc/Spline/Ellipse | ⬜ |
 | 스케치 필렛·모따기·잘라내기·연장·오프셋 | Sketch Fillet/Trim/Extend/Offset | ⬜ |
-| 참조선(구성선)·중심선 | Construction | ⬜ |
+| 구성선 (구속 기준선) | Construction / Centerline | ✅ |
 | 스케치 대칭·패턴 | Mirror/Pattern Entities | ⬜ |
-| 각도 구속·대칭 구속 | Angle / Symmetric | ⬜ |
+| 각도 구속 | Angle | ✅ |
+| 대칭 구속 | Symmetric | ⬜ |
 | 뷰포트에서 꼭짓점 끌기, 구속 기호 표시 | Drag / Display relations | ⬜ |
 | DXF/SVG 가져오기 | DXF import | ⬜ |
 | 텍스트 (각인·양각) | Sketch Text | ⬜ |
@@ -56,7 +58,8 @@
 | 기능 | 상태 |
 |------|------|
 | 기준 평면 3개, 원점 | ✅ |
-| 사용자 평면(오프셋·각도), 축, 점, 좌표계 | ⬜ |
+| 오프셋 평면, 각도 평면 (기준 평면을 u·v 축 둘레로) | ✅ |
+| 세 점·면 기준 평면, 축, 점, 좌표계 | ⬜ |
 
 ## 4. 보기 · 분석
 
@@ -70,7 +73,7 @@
 | 질량 특성 (부피·겉넓이·무게 중심·크기·재료별 질량) | Mass Properties / 3D Print Toolbox | ✅ |
 | 화면 이미지 저장 (PNG) | Save image / Render | ✅ |
 | 출력 전 검사 (바닥·떠 있음·크기·얇음·겹침) | — / 3D Print Toolbox | ✅ |
-| 원근/직교 투영 전환 | Perspective / Numpad 5 | ⬜ |
+| 원근/직교 투영 전환 | Perspective / Numpad 5 | ✅ |
 | 간섭 검사 · 구배 분석 · 두께 분석 | Interference / Draft / Thickness | ⬜ |
 | 측정: 면·모서리 선택, 각도, 반지름 | Measure | ⬜ |
 
@@ -116,8 +119,9 @@
 ## 구현 순서 (묶음)
 
 1. ✅ 묶음 1 (형식 v6): 억제·외관·숨기기·쉘·구멍·선형/원형 패턴·대칭 + 보기 도구 (표시 모드·단면·측정·질량 특성·PNG)
-2. 묶음 2: 회전 컷·배율·원근/직교·사용자 평면·축 + 스케치 직선·호·슬롯·구성선·각도 구속
-3. 묶음 3: 스윕·로프트·나사산·리브 + STL/OBJ/STEP 가져오기 + 3MF 색
+2. ✅ 묶음 2 (형식 v7): 돌출·회전 컷, 크기 조정, 원근/직교, 각도 평면, 스케치 슬롯·구성선·각도 구속
+   (남은 스케치 요소 — 호·스플라인·잘라내기·오프셋 — 는 묶음 3에 합침)
+3. 묶음 3: 스케치 호·필렛·잘라내기·오프셋 + 스윕·로프트·나사산·리브 + STL/OBJ/STEP 가져오기 + 3MF 색
 4. 묶음 4: 브라우저 OCCT(WASM) 엔진 → 임의 모서리 필렛·구배·면 선택 (웹·Windows 동일)
 5. 묶음 5: 조립품 (부품 삽입·메이트) → 묶음 6: 도면
 6. 이후: 메시 편집·스컬프트(블렌더), 판금, 렌더, 해석, 애니메이션

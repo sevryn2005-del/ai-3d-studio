@@ -46,5 +46,15 @@ describe('형식 v6 피처: 두 엔진 공유 픽스처 (해석적 부피, 닫�
     const r = stl(toBinaryStl(meshes));
     expect(r.bad).toBe(0);
     expect(Math.abs(r.volume - c.volume) / c.volume).toBeLessThan(3e-3);
+    if ('bbox' in c && c.bbox) {
+      const [lo, hi] = [[Infinity, Infinity, Infinity], [-Infinity, -Infinity, -Infinity]];
+      for (const m of meshes)
+        for (let i = 0; i < m.positions.length; i += 3)
+          for (let k = 0; k < 3; k++) {
+            lo[k] = Math.min(lo[k]!, m.positions[i + k]!);
+            hi[k] = Math.max(hi[k]!, m.positions[i + k]!);
+          }
+      [...lo, ...hi].forEach((v, i) => expect(v).toBeCloseTo([...c.bbox![0]!, ...c.bbox![1]!][i]!, 3));
+    }
   });
 });

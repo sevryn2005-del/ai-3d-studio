@@ -16,8 +16,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import cadquery as cq
-from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
-from OCP.gp import gp_Trsf
+from OCP.BRepBuilderAPI import BRepBuilderAPI_GTransform, BRepBuilderAPI_Transform
+from OCP.gp import gp_GTrsf, gp_Trsf
 
 from app.cad.commands import (
     ExtrudeObject,
@@ -136,6 +136,8 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
             return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
         # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
         w = cq.Workplane("XY").pushPoints([tuple(p["center"])])
+        if p["type"] == "slot":  # slot2D 길이 = 끝에서 끝 (= 반원 중심 거리 + 폭)
+            return w.slot2D(p["length"] + p["width"], p["width"], p["angle"])
         return w.rect(p["width"], p["height"]) if p["type"] == "rectangle" else w.circle(p["diameter"] / 2)
 
     wp = profile_wp()
@@ -206,6 +208,16 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
 def pattern_solid(obj: PatternObject, src: cq.Shape) -> cq.Shape:
     """패턴·대칭: 원본 ∪ 사본. 대칭은 반사(행렬식 −1)라 강체 변환 대신 mirror 로 만든다."""
     p = obj.pattern
+    if p.type == "scale":
+        # 일반(비균일) 배율: gp_GTrsf → BRepBuilderAPI_GTransform (균일 배율도 같은 경로)
+        g = gp_GTrsf()
+        g.SetValue(1, 1, p.x)
+        g.SetValue(2, 2, p.y)
+        g.SetValue(3, 3, p.z)
+        result = cq.Shape.cast(BRepBuilderAPI_GTransform(src.wrapped, g, True).Shape())
+        if not result.isValid():
+            raise GeometryError(f"'{obj.name}': 크기 조정 결과 형상이 올바르지 않습니다")
+        return result
     if p.type == "mirror":
         normal = {"XY": (0, 0, 1), "XZ": (0, 1, 0), "YZ": (1, 0, 0)}[p.plane]
         copies = [src.mirror(p.plane, cq.Vector(*normal) * p.offset)]

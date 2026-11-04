@@ -4,7 +4,7 @@ import { formatMm } from '../../cad/units';
 interface Props {
   label: string;
   value: number;
-  unit: 'mm' | '°';
+  unit: 'mm' | '°' | '×' | '개';
   onCommit: (value: number) => void;
   testId?: string;
 }

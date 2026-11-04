@@ -322,6 +322,48 @@
                 "offset"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "angled"
+                },
+                "base": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "u",
+                    "v"
+                  ]
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": -360,
+                  "maximum": 360
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              },
+              "required": [
+                "type",
+                "base",
+                "axis",
+                "angle",
+                "offset"
+              ],
+              "additionalProperties": false
             }
           ]
         }
@@ -442,7 +484,7 @@
         },
         "dimension": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter)$"
+          "pattern": "^[a-z][a-z0-9_]{0,63}\\.(width|height|diameter|length)$"
         },
         "value": {
           "type": "number",
@@ -600,6 +642,48 @@
                 "offset"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "angled"
+                },
+                "base": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "axis": {
+                  "type": "string",
+                  "enum": [
+                    "u",
+                    "v"
+                  ]
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": -360,
+                  "maximum": 360
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              },
+              "required": [
+                "type",
+                "base",
+                "axis",
+                "angle",
+                "offset"
+              ],
+              "additionalProperties": false
             }
           ]
         }
@@ -654,6 +738,159 @@
         "type",
         "sketch",
         "points"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "add_line"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "points": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                },
+                {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            },
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                },
+                {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "add_slot"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "center": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "length": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "length",
+        "width"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_entity_angle"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "entity",
+        "angle"
       ],
       "additionalProperties": false
     },
@@ -727,7 +964,8 @@
             "equal",
             "length",
             "distance",
-            "tangent"
+            "tangent",
+            "angle"
           ]
         },
         "refs": {
@@ -1692,6 +1930,42 @@
                 "offset"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "scale"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                "z": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "x",
+                "y",
+                "z"
+              ],
+              "additionalProperties": false
             }
           ]
         }
@@ -1841,6 +2115,42 @@
                 "source",
                 "plane",
                 "offset"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "scale"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                },
+                "z": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "x",
+                "y",
+                "z"
               ],
               "additionalProperties": false
             }

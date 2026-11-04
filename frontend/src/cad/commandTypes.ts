@@ -172,15 +172,25 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     type: z.literal('polygon'),
     points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
   }),
+  /**
+   * 구성선 (형식 v7): 형상을 만들지 않는 보조 직선. 끝점 `ID.p0`·`ID.p1`, 변 `ID.e0` 으로 구속에 쓴다
+   * (대칭 축·기준선·각도 기준).
+   */
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('line'), points: z.tuple([Point2Schema, Point2Schema]) }),
+  /**
+   * 슬롯 (형식 v7, 긴 구멍): 중심, 방향 angle(°, u 축 기준 반시계). 치수 `ID.length` = 두 반원 중심 사이 거리,
+   * `ID.width` = 폭(반원 지름). 전체 길이 = length + width
+   */
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('slot'), center: Point2Schema, angle: z.number().min(-360).max(360) }),
 ]);
 export type SketchEntity = z.infer<typeof SketchEntitySchema>;
 
-export const DimensionKindSchema = z.enum(['width', 'height', 'diameter']);
+export const DimensionKindSchema = z.enum(['width', 'height', 'diameter', 'length']);
 export type DimensionKind = z.infer<typeof DimensionKindSchema>;
 /** 치수 ID = `요소ID.종류` (예: r1.width) */
 export const DimensionIdSchema = z
   .string()
-  .regex(/^[a-z][a-z0-9_]{0,63}\.(width|height|diameter)$/, '치수 ID 는 "요소ID.width|height|diameter" 형식입니다');
+  .regex(/^[a-z][a-z0-9_]{0,63}\.(width|height|diameter|length)$/, '치수 ID 는 "요소ID.width|height|diameter|length" 형식입니다');
 
 export const SketchDimensionSchema = z.strictObject({
   id: DimensionIdSchema,
@@ -213,10 +223,24 @@ export const FacePlaneSchema = z.strictObject({
   offset: coordinate,
 });
 
+/**
+ * 각도 기준 평면 (형식 v7, 솔리드웍스 "참조 평면 — 각도"): 기준 평면 base 를 그 평면의 u 또는 v 축 둘레로 angle(°)
+ * 돌린 뒤 새 법선 방향으로 offset 만큼 옮긴 평면. 예: XY 를 u(X) 축 둘레 30° = X 축을 지나는 30° 기운 평면.
+ */
+export const AngledPlaneSchema = z.strictObject({
+  type: z.literal('angled'),
+  base: SketchPlaneTypeSchema,
+  axis: z.enum(['u', 'v']),
+  angle: z.number().min(-360).max(360),
+  offset: coordinate,
+});
+
 export const SketchPlaneSchema = z.discriminatedUnion('type', [
   StandardPlaneSchema,
   FacePlaneSchema,
+  AngledPlaneSchema,
 ]);
+export type AngledPlane = z.infer<typeof AngledPlaneSchema>;
 export type SketchPlane = z.infer<typeof SketchPlaneSchema>;
 export type StandardPlane = z.infer<typeof StandardPlaneSchema>;
 export type FacePlane = z.infer<typeof FacePlaneSchema>;
@@ -229,6 +253,7 @@ export type FacePlane = z.infer<typeof FacePlaneSchema>;
  */
 export const ConstraintTypeSchema = z.enum([
   'fix', 'coincident', 'concentric', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'equal', 'length', 'distance', 'tangent',
+  'angle', // 형식 v7: 두 변 사이 각도(°, 첫 변 → 둘째 변 반시계)
 ]);
 export type ConstraintType = z.infer<typeof ConstraintTypeSchema>;
 export const GeomRefSchema = z
@@ -322,6 +347,14 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     plane: z.enum(['XY', 'XZ', 'YZ']),
     offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
   }),
+  /** 크기 조정 (형식 v7): 패턴 좌표계 원점 기준 축별 배율 (같으면 균일). 원본 하나만 (사본 없음) */
+  z.strictObject({
+    type: z.literal('scale'),
+    source: ObjectIdSchema,
+    x: z.number().min(0.01).max(100),
+    y: z.number().min(0.01).max(100),
+    z: z.number().min(0.01).max(100),
+  }),
 ]);
 export type PatternDef = z.infer<typeof PatternDefSchema>;
 
@@ -388,7 +421,7 @@ export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 6;
+export const MODEL_SCHEMA_VERSION = 7;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -541,6 +574,33 @@ export const AddPolygonCommandSchema = z.strictObject({
   sketch: ObjectIdSchema,
   id: ObjectIdSchema.optional(),
   points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
+});
+
+/** 구성선 추가 (형상을 만들지 않는 보조선, 구속 기준) */
+export const AddLineCommandSchema = z.strictObject({
+  type: z.literal('add_line'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  points: z.tuple([Point2Schema, Point2Schema]),
+});
+
+/** 슬롯(긴 구멍) 추가: length = 반원 중심 사이 거리, width = 폭, angle = 방향(°) */
+export const AddSlotCommandSchema = z.strictObject({
+  type: z.literal('add_slot'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  center: Point2Schema.optional(),
+  length: dimension,
+  width: dimension,
+  angle: z.number().min(-360).max(360).optional(),
+});
+
+/** 슬롯 방향(°) 바꾸기 */
+export const SetEntityAngleCommandSchema = z.strictObject({
+  type: z.literal('set_entity_angle'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+  angle: z.number().min(-360).max(360),
 });
 
 /** 점(다각형 꼭짓점·원/사각형 중심)을 옮기고 구속을 다시 푼다. 구속과 모순되면 거부 */
@@ -726,6 +786,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   DeleteSketchEntityCommandSchema,
   SetSketchPlaneCommandSchema,
   AddPolygonCommandSchema,
+  AddLineCommandSchema,
+  AddSlotCommandSchema,
+  SetEntityAngleCommandSchema,
   MovePointCommandSchema,
   AddConstraintCommandSchema,
   SetConstraintCommandSchema,

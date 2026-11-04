@@ -69,7 +69,20 @@ def transform_matrix(t: Transform) -> np.ndarray:
     return m
 
 
-def plane_matrix(plane: StandardPlane) -> np.ndarray:
+def plane_matrix(plane) -> np.ndarray:
+    """기준 평면 / 각도 평면 (= 기준(offset 0) · R(u 또는 v 축, angle) · T(0, 0, offset)) → 객체 로컬"""
+    if plane.type == "angled":
+        u, v, n = (np.asarray(x, float) for x in _BASES[plane.base])
+        base = np.eye(4)
+        base[:3, 0], base[:3, 1], base[:3, 2] = u, v, n
+        a = math.radians(plane.angle)
+        c, s = math.cos(a), math.sin(a)
+        rot = np.eye(4)
+        if plane.axis == "u":
+            rot[1:3, 1:3] = [[c, -s], [s, c]]
+        else:
+            rot[0, 0], rot[0, 2], rot[2, 0], rot[2, 2] = c, s, -s, c
+        return base @ rot @ translation(0, 0, plane.offset)
     u, v, n = (np.asarray(x, float) for x in _BASES[plane.type])
     m = np.eye(4)
     m[:3, 0], m[:3, 1], m[:3, 2], m[:3, 3] = u, v, n, n * plane.offset
@@ -110,6 +123,8 @@ def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str
             base = next((o for o in model.objects if o.id == obj.boolean.base), None)
             return faces_of(model, base, depth + 1) if base else []
         case PatternObject():
+            if obj.pattern.type == "scale":  # 크기 조정은 면 위치가 바뀌므로 아직 면 없음
+                return []
             src = next((o for o in model.objects if o.id == obj.pattern.source), None)
             return faces_of(model, src, depth + 1) if src else []
     return []
@@ -177,7 +192,7 @@ def extrude_local_matrix(model: ModelDefinition, obj: ExtrudeObject | RevolveObj
     sk: Sketch | None = next((s for s in model.sketches if s.id == sketch_feature_ref(obj).sketch), None)
     if sk is None:
         return None
-    if isinstance(sk.plane, StandardPlane):
+    if not isinstance(sk.plane, FacePlane):
         return plane_matrix(sk.plane)
     world = _face_world_matrix(model, sk.plane, depth)
     return None if world is None else np.linalg.inv(object_world_matrix(model, obj.id)) @ world

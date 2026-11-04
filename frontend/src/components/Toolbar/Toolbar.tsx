@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
-import { quickHole, quickPattern, quickShell, startFeature, startSketch } from '../../features/selection/featureFlow';
+import { quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, startFeature, startSketch } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
 import { useIsDirty, useProjectStore } from '../../features/projects/projectStore';
@@ -46,6 +46,7 @@ export function Toolbar() {
   const section = useEditorStore((s) => s.section);
   const measuring = useEditorStore((s) => s.measuring);
   const massOpen = useEditorStore((s) => s.massOpen);
+  const projection = useEditorStore((s) => s.projection);
   const editor = useEditorStore.getState();
   const draw = (t: 'rectangle' | 'circle' | 'polygon') => editor.setDrawTool(drawTool === t ? null : t);
 
@@ -94,11 +95,14 @@ export function Toolbar() {
           <>
             <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓)" onClick={() => startFeature('extrude')} />
             <Cmd icon="revolve" label="회전 보스/베이스" title="선택한 스케치를 v 축 둘레로 회전" onClick={() => startFeature('revolve')} />
+            <Cmd icon="extrudeCut" label="돌출 컷" title="선택한 스케치를 돌출해 바디에서 뺌 (면 위 스케치는 안쪽으로)" onClick={() => startFeature('extrude', true)} testId="cmd-extrude-cut" />
+            <Cmd icon="revolveCut" label="회전 컷" title="선택한 스케치를 회전해 바디에서 뺌 (홈·구멍)" onClick={() => startFeature('revolve', true)} testId="cmd-revolve-cut" />
             <span className="sep" />
             <Cmd icon="hole" label="구멍 가공" title="선택한 객체의 윗면 중심에 구멍 (속성에서 위치·종류 조정)" onClick={quickHole} testId="cmd-hole" />
             <Cmd icon="shell" label="쉘" title="선택한 박스·원통·돌출의 속을 비움 (윗면 열림)" onClick={quickShell} testId="cmd-shell" />
             <Cmd icon="linear" label="선형 패턴" title="선택한 객체를 X 방향으로 반복" onClick={() => quickPattern('linear')} testId="cmd-linear" />
             <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />
+            <Cmd icon="scale" label="크기 조정" title="선택한 객체를 원점 기준으로 늘리거나 줄임 (축별 배율)" onClick={quickScale} testId="cmd-scale" />
             <Cmd icon="mirror" label="대칭 복사" title="선택한 객체를 YZ 평면에 대칭 복사" onClick={() => quickPattern('mirror')} testId="cmd-mirror" />
             <span className="sep" />
             <span className="cmd-group-label">기본 도형</span>
@@ -123,6 +127,8 @@ export function Toolbar() {
             <span className="sep" />
             <Cmd icon="rectangle" label="사각형" shortcut="R" title="사각형 그리기 (R): 선택한 스케치에, 없으면 바닥(윗면)에 새 스케치" pressed={drawTool === 'rectangle'} onClick={() => draw('rectangle')} />
             <Cmd icon="circle" label="원" shortcut="C" title="원 그리기 (C): 중심 → 반지름 드래그" pressed={drawTool === 'circle'} onClick={() => draw('circle')} />
+            <Cmd icon="slot" label="슬롯" title="선택한 스케치에 슬롯(긴 구멍) 추가" onClick={quickSlot} testId="cmd-slot" />
+            <Cmd icon="line" label="구성선" title="선택한 스케치에 구성선(형상 없는 기준선) 추가 — 각도·평행 구속 기준" onClick={quickLine} testId="cmd-line" />
             <Cmd icon="polygon" label="다각형" shortcut="P" title="다각형 그리기 (P): 클릭으로 꼭짓점, 첫 점을 다시 클릭하거나 Enter 로 닫기" pressed={drawTool === 'polygon'} onClick={() => draw('polygon')} />
             <span className="sep" />
             <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
@@ -138,6 +144,7 @@ export function Toolbar() {
               <Cmd key={d.id} icon={d.icon} label={d.label} title={d.title} pressed={displayMode === d.id} onClick={() => editor.setDisplayMode(d.id)} testId={`display-${d.id}`} />
             ))}
             <span className="sep" />
+            <Cmd icon="perspective" label={projection === 'perspective' ? '원근' : '직교'} title="원근 / 직교 투영 전환 (직교: 치수 확인·도면처럼 평행하게)" pressed={projection === 'orthographic'} onClick={editor.toggleProjection} testId="cmd-projection" />
             <Cmd icon="section" label="단면 보기" title="모델을 평면으로 잘라 안쪽을 봅니다" pressed={!!section} onClick={() => editor.setSection(section ? null : { axis: 'x', offset: 0, flip: false })} testId="cmd-section" />
             <Cmd icon="measure" label="측정" title="모델 위 두 점 사이 거리" pressed={measuring} onClick={editor.toggleMeasure} testId="cmd-measure" />
             <Cmd icon="mass" label="질량 특성" title="부피·겉넓이·무게 중심·질량(재료별)" pressed={massOpen} onClick={editor.toggleMass} testId="cmd-mass" />

@@ -5,7 +5,7 @@
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectKind } from './commandTypes';
 import { formatMm } from './units';
 import { describeEdgeFeature } from './edgeFeature';
-import { findSketch, resolveProfile } from './sketch';
+import { findSketch, profileBounds, resolveProfile } from './sketch';
 import { extrudeLocalMatrix, extrudeLocalSize } from './sketchPlane';
 
 export interface ParamField {
@@ -59,7 +59,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
   pattern: { label: '패턴', params: [] },
 };
 
-export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', mirror: '대칭 복사' } as const;
+export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', mirror: '대칭 복사', scale: '크기 조정' } as const;
 
 export const OPERATION_INFO: Record<BooleanOperation, { label: string; symbol: string; verb: string }> = {
   union: { label: '합치기', symbol: '∪', verb: '합치기' },
@@ -91,7 +91,8 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       if (!p) return [0, 0, obj.params.distance];
       const d = obj.params.distance;
       const local = extrudeLocalMatrix(model, obj);
-      const size: [number, number, number] = p.type === 'circle' ? [p.diameter, p.diameter, Math.abs(d)] : [p.width, p.height, Math.abs(d)];
+      const b = profileBounds(p);
+      const size: [number, number, number] = [b.width, b.height, Math.abs(d)];
       return local ? extrudeLocalSize(local, size) : size;
     }
     case 'revolve': {
@@ -99,8 +100,9 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
       const sk = findSketch(model, obj.revolve.sketch);
       const p = sk ? resolveProfile(sk, obj.revolve.profile) : null;
       if (!p) return [0, 0, 0];
-      const r = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
-      const h = p.type === 'circle' ? p.diameter : p.height;
+      const b = profileBounds(p);
+      const r = b.center[0] + b.width / 2;
+      const h = b.height;
       const local = extrudeLocalMatrix(model, obj);
       return local ? extrudeLocalSize(local, [2 * r, h, 2 * r]) : [2 * r, h, 2 * r];
     }
@@ -141,15 +143,17 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       const p = model ? extrudeProfile(obj, model) : null;
       const d = formatMm(obj.params.distance);
       if (!p) return `돌출 ${d}`;
-      return p.type === 'circle' ? `Ø${formatMm(p.diameter)}×${d}` : `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
+      if (p.type === 'circle') return `Ø${formatMm(p.diameter)}×${d}`;
+      if (p.type === 'slot') return `슬롯 ${formatMm(p.length + p.width)}×${formatMm(p.width)}×${d}`;
+      return `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
     }
     case 'revolve': {
       const sk = model ? findSketch(model, obj.revolve.sketch) : undefined;
       const p = sk ? resolveProfile(sk, obj.revolve.profile) : null;
       const a = `${formatMm(obj.params.angle)}°`;
       if (!p) return `회전 ${a}`;
-      const r = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
-      return `Ø${formatMm(2 * r)}×${formatMm(p.type === 'circle' ? p.diameter : p.height)} ${a}`;
+      const b = profileBounds(p);
+      return `Ø${formatMm(2 * (b.center[0] + b.width / 2))}×${formatMm(b.height)} ${a}`;
     }
     case 'boolean': {
       const n = obj.boolean.tools.length;
@@ -163,6 +167,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
     case 'pattern': {
       const p = obj.pattern;
       if (p.type === 'mirror') return `${p.plane} 평면`;
+      if (p.type === 'scale') return p.x === p.y && p.y === p.z ? `×${formatMm(p.x)}` : `×(${[p.x, p.y, p.z].map(formatMm).join(', ')})`;
       if (p.type === 'circular') return `${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`;
       return p.axis2 ? `${p.count}×${p.count2 ?? 1}개` : `${p.axis.toUpperCase()} ${p.count}개 간격 ${formatMm(p.spacing)}`;
     }

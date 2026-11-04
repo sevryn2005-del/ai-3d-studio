@@ -35,6 +35,8 @@ def is_suppressed(obj, index: dict, depth: int = 0) -> bool:
 
 
 def pattern_copy_count(p) -> int:
+    if p.type == "scale":
+        return 1
     if p.type == "mirror":
         return 2
     if p.type == "circular":
@@ -56,7 +58,9 @@ def _rotation(axis: str, deg: float) -> np.ndarray:
 
 
 def pattern_matrices(p) -> list[np.ndarray]:
-    """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본)."""
+    """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본). 크기 조정은 배율 행렬 하나."""
+    if p.type == "scale":
+        return [np.diag([p.x, p.y, p.z, 1.0])]
     if p.type == "mirror":
         n = np.array({"XY": _AXIS["z"], "XZ": _AXIS["y"], "YZ": _AXIS["x"]}[p.plane])
         m = np.eye(4)

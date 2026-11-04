@@ -27,6 +27,12 @@ const PATHS: Record<string, string> = {
   section: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M2 13h20',
   measure: 'M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
   mass: 'M6 8h12l2 13H4zM9 8a3 3 0 0 1 6 0',
+  extrudeCut: 'M4 8l8-4 8 4v8l-8 4-8-4zM9 9.5l3 1.5 3-1.5v5l-3 1.5-3-1.5zM12 2v6',
+  revolveCut: 'M12 3v18M7 7a7 3 0 1 0 10 0M9 12h6v4H9z',
+  scale: 'M4 20h7v-7H4zM10 4h10v10M20 4l-9 9M15 4h5v5',
+  slot: 'M8 8h8a4 4 0 0 1 0 8H8a4 4 0 0 1 0-8z',
+  line: 'M3 20L21 4M3 20h2M19 4h2',
+  perspective: 'M4 6h16M6 18h12M4 6l2 12M20 6l-2 12',
   camera: 'M3 8h4l2-3h6l2 3h4v12H3zM12 10a4 4 0 1 0 0 8a4 4 0 1 0 0-8',
 };
 

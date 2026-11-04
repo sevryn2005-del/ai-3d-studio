@@ -3,7 +3,7 @@
     "volume": 7152,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -42,7 +42,7 @@
     "volume": 9024,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -79,7 +79,7 @@
     "volume": 7360,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -119,7 +119,7 @@
     "volume": 2664.0705702441446,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -157,7 +157,7 @@
     "volume": 2792,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [
         {
@@ -241,7 +241,7 @@
     "volume": 2672,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [
         {
@@ -316,7 +316,7 @@
     "volume": 15434.513322353838,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -422,7 +422,7 @@
     "volume": 15450.221285621787,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -503,7 +503,7 @@
     "volume": 15604.159325647686,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -584,7 +584,7 @@
     "volume": 6000,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -644,7 +644,7 @@
     "volume": 2000,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -701,7 +701,7 @@
     "volume": 3392.9200658769764,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -757,7 +757,7 @@
     "volume": 2000,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -813,7 +813,7 @@
     "volume": 31434.513322353836,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -913,11 +913,429 @@
       ]
     }
   },
+  "slot-extrude": {
+    "volume": 1051.3274122871835,
+    "roots": 1,
+    "bbox": [
+      [
+        -14,
+        -4,
+        0
+      ],
+      [
+        14,
+        4,
+        5
+      ]
+    ],
+    "model": {
+      "schemaVersion": 7,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "sl",
+              "type": "slot",
+              "center": [
+                0,
+                0
+              ],
+              "angle": 0
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "sl.length",
+              "entity": "sl",
+              "kind": "length",
+              "value": 20
+            },
+            {
+              "id": "sl.width",
+              "entity": "sl",
+              "kind": "width",
+              "value": 8
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": 5
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "sl"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "slot-revolve-pappus": {
+    "volume": 39634.1096995078,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 7,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XZ",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "sl",
+              "type": "slot",
+              "center": [
+                30,
+                0
+              ],
+              "angle": 90
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "sl.length",
+              "entity": "sl",
+              "kind": "length",
+              "value": 20
+            },
+            {
+              "id": "sl.width",
+              "entity": "sl",
+              "kind": "width",
+              "value": 8
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "v",
+          "name": "회전 1",
+          "kind": "revolve",
+          "params": {
+            "angle": 360
+          },
+          "revolve": {
+            "sketch": "s",
+            "profile": "sl"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "angled-plane-extrude": {
+    "volume": 1000,
+    "roots": 1,
+    "bbox": [
+      [
+        -5,
+        -9.330127018922195,
+        -2.5
+      ],
+      [
+        5,
+        4.330127018922194,
+        11.160254037844387
+      ]
+    ],
+    "model": {
+      "schemaVersion": 7,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "angled",
+            "base": "XY",
+            "axis": "u",
+            "angle": 30,
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "r",
+              "type": "rectangle",
+              "center": [
+                0,
+                0
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "r.width",
+              "entity": "r",
+              "kind": "width",
+              "value": 10
+            },
+            {
+              "id": "r.height",
+              "entity": "r",
+              "kind": "height",
+              "value": 10
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": 10
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "r"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "scale-nonuniform": {
+    "volume": 1000,
+    "roots": 1,
+    "bbox": [
+      [
+        -10,
+        -5,
+        0
+      ],
+      [
+        10,
+        5,
+        5
+      ]
+    ],
+    "model": {
+      "schemaVersion": 7,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "pattern_1",
+          "name": "크기 조정 1",
+          "kind": "pattern",
+          "pattern": {
+            "type": "scale",
+            "source": "b",
+            "x": 2,
+            "y": 1,
+            "z": 0.5
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "angle-constraint-triangle": {
+    "volume": 553.4046510711299,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 7,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XY",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "t",
+              "type": "polygon",
+              "points": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  19.964487,
+                  1.191319
+                ],
+                [
+                  7.149423,
+                  14.286346
+                ]
+              ]
+            },
+            {
+              "id": "ref",
+              "type": "line",
+              "points": [
+                [
+                  -0.000309,
+                  -5.596738
+                ],
+                [
+                  20.000309,
+                  -4.403262
+                ]
+              ]
+            }
+          ],
+          "dimensions": [],
+          "constraints": [
+            {
+              "id": "k1",
+              "type": "fix",
+              "refs": [
+                "t.p0"
+              ]
+            },
+            {
+              "id": "k2",
+              "type": "parallel",
+              "refs": [
+                "t.e0",
+                "ref.e0"
+              ]
+            },
+            {
+              "id": "k3",
+              "type": "length",
+              "refs": [
+                "t.e0"
+              ],
+              "value": 20
+            },
+            {
+              "id": "k4",
+              "type": "angle",
+              "refs": [
+                "ref.e0",
+                "t.e2"
+              ],
+              "value": 60
+            }
+          ]
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": 4
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "t"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
   "suppressed-tool-and-root": {
     "volume": 16000,
     "roots": 1,
     "model": {
-      "schemaVersion": 6,
+      "schemaVersion": 7,
       "units": "mm",
       "sketches": [],
       "objects": [

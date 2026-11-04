@@ -7,12 +7,13 @@ import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
 import { findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from './sketch';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
-import { CONSTRAINT_LABEL, constraintError, polygonError, refKind, solveSketch } from './solver';
+import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, polygonError, refKind, solveSketch } from './solver';
 
 const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
+  'add_line', 'add_slot', 'set_entity_angle',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -165,10 +166,15 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         const entity = sketch.entities.find((e) => e.id === cmd.entity)!;
         const pins = new Set<string>();
         let moved = entity;
-        if (entity.type === 'polygon') {
-          const prof = resolveProfile(sketch, entity.id)!;
-          const [dx, dy] = [cmd.center[0] - prof.center[0], cmd.center[1] - prof.center[1]];
-          moved = { ...entity, points: entity.points.map(([x, y]) => [x + dx, y + dy]) };
+        if (entity.type === 'polygon' || entity.type === 'line') {
+          const xs = entity.points.map((p) => p[0]);
+          const ys = entity.points.map((p) => p[1]);
+          const c = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+          const [dx, dy] = [cmd.center[0] - c[0]!, cmd.center[1] - c[1]!];
+          moved =
+            entity.type === 'line'
+              ? { ...entity, points: entity.points.map(([x, y]) => [x + dx, y + dy]) as [[number, number], [number, number]] }
+              : { ...entity, points: entity.points.map(([x, y]) => [x + dx, y + dy] as [number, number]) };
           entity.points.forEach((_, k) => pins.add(`${entity.id}.p${k}`));
         } else {
           moved = { ...entity, center: cmd.center };
@@ -211,6 +217,39 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return ok(replaceSketch(model, next), cmd, sketch.id);
     }
 
+    case 'add_line':
+    case 'add_slot': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+      const id = cmd.id ?? nextEntityId(sketch, cmd.type === 'add_line' ? 'line' : 'slot');
+      if (sketch.entities.some((e) => e.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      if (cmd.type === 'add_line') {
+        const [a, b] = cmd.points;
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_EDGE) return fail(`구성선이 너무 짧습니다 (${MIN_EDGE}mm 미만)`);
+        return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, { id, type: 'line', points: cmd.points }] }), cmd, sketch.id);
+      }
+      const next: Sketch = {
+        ...sketch,
+        entities: [...sketch.entities, { id, type: 'slot', center: cmd.center ?? [0, 0], angle: cmd.angle ?? 0 }],
+        dimensions: [
+          ...sketch.dimensions,
+          { id: `${id}.length`, entity: id, kind: 'length', value: cmd.length },
+          { id: `${id}.width`, entity: id, kind: 'width', value: cmd.width },
+        ],
+      };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
+    }
+
+    case 'set_entity_angle': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
+      if (e.type !== 'slot') return fail('방향(각도)은 슬롯에만 있습니다');
+      return solvedResult(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? { ...e, angle: cmd.angle } : x)) }, cmd, null);
+    }
+
     case 'move_point': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
@@ -220,6 +259,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const entities = sketch.entities.map((e) => {
         if (e.id !== id) return e;
         if (e.type === 'polygon') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) };
+        if (e.type === 'line') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) as [[number, number], [number, number]] };
         return { ...e, center: cmd.to };
       });
       return solvedResult(model, { ...sketch, entities }, cmd, null, new Set([cmd.point]));

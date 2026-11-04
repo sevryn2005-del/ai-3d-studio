@@ -98,11 +98,18 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
     case 'set_pattern': {
       const p = cmd.pattern;
       const what =
-        p.type === 'mirror' ? `대칭 복사 (${p.plane} 평면${p.offset ? ` ${formatMm(p.offset)}mm` : ''})`
+        p.type === 'scale' ? `크기 조정 ×(${[p.x, p.y, p.z].map(formatMm).join(', ')})`
+        : p.type === 'mirror' ? `대칭 복사 (${p.plane} 평면${p.offset ? ` ${formatMm(p.offset)}mm` : ''})`
         : p.type === 'circular' ? `원형 패턴 ${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`
         : `선형 패턴 ${p.axis.toUpperCase()} ${p.count}개 × ${formatMm(p.spacing)}mm${p.axis2 ? `, ${p.axis2.toUpperCase()} ${p.count2}개 × ${formatMm(p.spacing2 ?? 0)}mm` : ''}`;
       return `${name(p.source)} ${what}`;
     }
+    case 'add_line':
+      return `${sketchName(cmd.sketch)}에 구성선 추가`;
+    case 'add_slot':
+      return `${sketchName(cmd.sketch)}에 슬롯 ${formatMm(cmd.length + cmd.width)}×${formatMm(cmd.width)}mm`;
+    case 'set_entity_angle':
+      return `${sketchName(cmd.sketch)}의 ${cmd.entity} 방향 → ${formatMm(cmd.angle)}°`;
     case 'hole': {
       const extra = cmd.cboreDiameter ? ` 카운터보어 Ø${formatMm(cmd.cboreDiameter)}` : cmd.csinkDiameter ? ` 카운터싱크 Ø${formatMm(cmd.csinkDiameter)}` : '';
       return `${name(cmd.target)} ${cmd.face} 면에 구멍 Ø${formatMm(cmd.diameter)} × ${formatMm(cmd.depth)}mm${extra}`;

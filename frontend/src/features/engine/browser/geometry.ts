@@ -11,7 +11,7 @@
  */
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
-import { resolveProfile, revolveProfileError } from '../../../cad/sketch';
+import { profileBounds, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
 import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix } from '../../../cad/sketchPlane';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
@@ -75,7 +75,9 @@ export function localManifold(
       const placed =
         p.type === 'polygon'
           ? scope.keep(new CrossSection([p.points], 'NonZero'))
-          : scope.keep(
+          : p.type === 'slot'
+            ? slotSection(wasm, p, tol, scope)
+            : scope.keep(
               scope
                 .keep(
                   p.type === 'rectangle'
@@ -85,13 +87,14 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 6, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 7, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
         const err = revolveProfileError(p);
         if (err) throw new GeometryError(`'${obj.name}': ${err}`);
-        const rMax = p.type === 'circle' ? p.center[0] + p.diameter / 2 : p.center[0] + p.width / 2;
+        const b = profileBounds(p);
+        const rMax = b.center[0] + b.width / 2;
         const segs = Math.max(8, Math.ceil((circularSegments(rMax, tol) * obj.params.angle) / 360));
         const turned = scope.keep(placed.revolve(segs, obj.params.angle));
         inPlane = scope.keep(turned.transform(MANIFOLD_REVOLVE_TO_PLANE.elements as unknown as Parameters<Manifold['transform']>[0]));
@@ -215,6 +218,16 @@ export function localManifold(
       return result;
     }
   }
+}
+
+/** 슬롯 단면: 두 반원(지름 = 폭)의 볼록 껍질을 방향만큼 돌려 중심에 놓는다 (CadQuery slot2D 와 같은 형상) */
+function slotSection(wasm: ManifoldToplevel, p: Extract<Profile, { type: 'slot' }>, tol: number, scope: Scope) {
+  const { CrossSection } = wasm;
+  const r = p.width / 2;
+  const n = circularSegments(r, tol);
+  const ends = [-p.length / 2, p.length / 2].map((x) => scope.keep(scope.keep(CrossSection.circle(r, n)).translate([x, 0])));
+  const hull = scope.keep(CrossSection.hull(ends));
+  return scope.keep(scope.keep(hull.rotate(p.angle)).translate(p.center));
 }
 
 export function worldManifold(

@@ -9,6 +9,8 @@ export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> 
   rectangle: ['width', 'height'],
   circle: ['diameter'],
   polygon: [], // 다각형은 꼭짓점 좌표 + 구속(constraints)
+  line: [], // 구성선: 끝점 좌표 + 구속. 형상을 만들지 않음
+  slot: ['length', 'width'], // 반원 중심 거리, 폭
 };
 
 export function findSketch(model: ModelDefinition, id: ObjectId): Sketch | undefined {
@@ -23,11 +25,45 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
 export type Profile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
-  | { type: 'polygon'; points: Point2[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane };
+  | { type: 'polygon'; points: Point2[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
+  | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
+
+/** 슬롯 윤곽 (반원마다 segs 개 점, 반시계). 미리보기·바운딩 크기용 — 엔진은 정확한 원호/다각형 근사를 따로 만든다 */
+export function slotOutline(p: { center: Point2; length: number; width: number; angle: number }, segs = 16): Point2[] {
+  const a = (p.angle * Math.PI) / 180;
+  const r = p.width / 2;
+  const out: Point2[] = [];
+  for (const [end, start] of [[p.length / 2, -Math.PI / 2], [-p.length / 2, Math.PI / 2]] as const) {
+    for (let i = 0; i <= segs; i++) {
+      const t = start + (i / segs) * Math.PI;
+      const lx = end + r * Math.cos(t);
+      const ly = r * Math.sin(t);
+      out.push([p.center[0] + lx * Math.cos(a) - ly * Math.sin(a), p.center[1] + lx * Math.sin(a) + ly * Math.cos(a)]);
+    }
+  }
+  return out;
+}
+
+/** 단면의 바운딩 박스 (평면 좌표): 중심·폭(u)·높이(v). 크기 표시·회전 반지름용 */
+export function profileBounds(p: Profile): { center: Point2; width: number; height: number } {
+  if (p.type === 'circle') return { center: p.center, width: p.diameter, height: p.diameter };
+  if (p.type === 'slot') {
+    const [hu, hv] = slotHalfExtent(p);
+    return { center: p.center, width: 2 * hu, height: 2 * hv };
+  }
+  return { center: p.center, width: p.width, height: p.height };
+}
+
+/** 슬롯 축 방향 바운딩 반폭 [u, v] */
+export function slotHalfExtent(p: { length: number; width: number; angle: number }): [number, number] {
+  const a = (p.angle * Math.PI) / 180;
+  const r = p.width / 2;
+  return [Math.abs(Math.cos(a)) * (p.length / 2) + r, Math.abs(Math.sin(a)) * (p.length / 2) + r];
+}
 
 export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | null {
   const e = sketch.entities.find((x) => x.id === entityId);
-  if (!e) return null;
+  if (!e || e.type === 'line') return null; // 구성선은 단면이 아니다
   const z = sketch.plane.offset;
   const plane = sketch.plane;
   if (e.type === 'polygon') {
@@ -41,6 +77,11 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
     return width && height ? { type: 'rectangle', center: e.center, width, height, z, plane } : null;
+  }
+  if (e.type === 'slot') {
+    const length = dimensionValue(sketch, e.id, 'length');
+    const width = dimensionValue(sketch, e.id, 'width');
+    return length && width ? { type: 'slot', center: e.center, length, width, angle: e.angle, z, plane } : null;
   }
   const diameter = dimensionValue(sketch, e.id, 'diameter');
   return diameter ? { type: 'circle', center: e.center, diameter, z, plane } : null;
@@ -102,6 +143,8 @@ export function revolveProfileError(p: Profile): string | null {
       ? Math.min(...p.points.map((q) => q[0]))
       : p.type === 'circle'
         ? p.center[0] - p.diameter / 2
-        : p.center[0] - p.width / 2;
+        : p.type === 'slot'
+          ? p.center[0] - slotHalfExtent(p)[0]
+          : p.center[0] - p.width / 2;
   return minU < -1e-9 ? `회전 프로파일은 회전축(스케치 v 축, u = 0)의 한쪽(u ≥ 0)에 있어야 합니다 (지금 u 최소 ${Math.round(minU * 1000) / 1000})` : null;
 }

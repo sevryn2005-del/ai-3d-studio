@@ -6,6 +6,7 @@ import { CadNode } from './CadObjectMesh';
 import { byId, topLevelObjects } from '../../cad/modelGraph';
 import { SelectionGizmo } from './SelectionGizmo';
 import { CameraFitter } from './CameraFitter';
+import { ProjectionSwitch } from './ProjectionSwitch';
 import { ViewportToolbar } from './ViewportToolbar';
 import { DevProbe } from './DevProbe';
 import { SketchOutlines } from './SketchOutlines';
@@ -72,6 +73,7 @@ export function Viewport() {
         <ScreenshotTaker />
         {!drawTool && <SelectionGizmo activeRef={gizmoActiveRef} />}
         <CameraFitter />
+        <ProjectionSwitch />
         {import.meta.env.DEV && <DevProbe />}
 
         {/* 마우스 버튼 배정은 MouseScheme (솔리드웍스식 / 간편). 그리기 중 왼쪽 버튼은 그리기 */}

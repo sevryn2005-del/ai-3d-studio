@@ -103,7 +103,7 @@ export function ConstraintPanel({ sketch }: { sketch: Sketch }) {
             {c.value !== undefined && (
               <NumberField
                 label={c.id}
-                unit="mm"
+                unit={c.type === 'angle' ? '°' : 'mm'}
                 value={c.value}
                 onCommit={(v) => submitNow({ type: 'set_constraint', sketch: sketch.id, constraint: c.id, value: v })}
                 testId={`cval-${c.id}`}
@@ -124,7 +124,7 @@ export function ConstraintPanel({ sketch }: { sketch: Sketch }) {
   );
 }
 
-const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'equal', 'coincident', 'distance', 'concentric', 'tangent'];
+const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'angle', 'equal', 'coincident', 'distance', 'concentric', 'tangent'];
 
 function PairConstraintForm({ sketch }: { sketch: Sketch }) {
   const submitNow = useSceneStore((s) => s.submitNow);
@@ -137,6 +137,7 @@ function PairConstraintForm({ sketch }: { sketch: Sketch }) {
     const refs: string[] = [...sketchPoints(sketch).keys()];
     for (const e of sketch.entities) {
       if (e.type === 'polygon') e.points.forEach((_, k) => refs.push(`${e.id}.e${k}`));
+      if (e.type === 'line') refs.push(`${e.id}.e0`);
       if (e.type === 'circle') refs.push(e.id);
     }
     return refs;
@@ -175,7 +176,7 @@ function PairConstraintForm({ sketch }: { sketch: Sketch }) {
           ))}
         </select>
       </div>
-      {needsValue && <NumberField label="거리" unit="mm" value={value} onCommit={setValue} testId="pair-value" />}
+      {needsValue && <NumberField label={type === 'angle' ? '각도' : '거리'} unit={type === 'angle' ? '°' : 'mm'} value={value} onCommit={setValue} testId="pair-value" />}
       <button
         data-testid="pair-add"
         disabled={!ra || !rb}

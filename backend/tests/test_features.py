@@ -9,7 +9,7 @@ import copy
 import pytest
 
 from app.cad.commands import ModelDefinition
-from app.cad.exporter import mesh_volume
+from app.cad.exporter import EXPORT_LINEAR_TOLERANCE, mesh_volume
 from app.cad.validation import active_top_level_ids, check_model
 
 from .conftest import load_json
@@ -29,6 +29,10 @@ def test_feature_cases_match_browser_engine(client, name):
     assert is_watertight(tris)
     assert outward(tris)
     assert mesh_volume(tris) == pytest.approx(case["volume"], rel=3e-3)
+    if "bbox" in case:
+        pts = tris.reshape(-1, 3)
+        assert pts.min(axis=0).tolist() == pytest.approx(case["bbox"][0], abs=EXPORT_LINEAR_TOLERANCE)
+        assert pts.max(axis=0).tolist() == pytest.approx(case["bbox"][1], abs=EXPORT_LINEAR_TOLERANCE)
 
 
 def _first(name: str) -> dict:

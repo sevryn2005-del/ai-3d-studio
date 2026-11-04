@@ -233,7 +233,7 @@ const box = (id: string, w: number, d: number, h: number, position?: number[]) =
  * 형식 v6 피처 (쉘·구멍·패턴·대칭·억제). 두 엔진 모두 닫힌 메시·같은 부피(해석값)여야 한다:
  * 브라우저 features.test.ts, 서버 test_features.py. roots = 계산되는(억제 안 된) 최상위 객체 수
  */
-export const FEATURE_CASES: Record<string, { volume: number; roots: number; commands: unknown[] }> = {
+export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: number; commands: unknown[]; bbox?: number[][] }> = {
   'shell-box-open-top': { volume: 24000 - 36 * 26 * 18, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['top'] }] },
   'shell-box-closed': { volume: 24000 - 36 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2 }] },
   'shell-box-two-sides': { volume: 24000 - 40 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['+X', '-X'] }] },
@@ -313,6 +313,58 @@ export const FEATURE_CASES: Record<string, { volume: number; roots: number; comm
       { type: 'pattern', pattern: { type: 'mirror', source: 'cut_1', plane: 'YZ', offset: 0 } },
     ],
   },
+  // ---- 형식 v7 ----
+  'slot-extrude': {
+    volume: (20 * 8 + PI * 16) * 5,
+    roots: 1,
+    bbox: [[-14, -4, 0], [14, 4, 5]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_slot', sketch: 's', id: 'sl', center: [0, 0], length: 20, width: 8 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'sl', distance: 5 },
+    ],
+  },
+  'slot-revolve-pappus': {
+    // 파푸스 정리: 부피 = 2π × (도심까지 거리 30) × 단면 넓이
+    volume: 2 * PI * 30 * (20 * 8 + PI * 16),
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_slot', sketch: 's', id: 'sl', center: [30, 0], length: 20, width: 8, angle: 90 },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 'sl', angle: 360 },
+    ],
+  },
+  'angled-plane-extrude': {
+    volume: 1000,
+    roots: 1,
+    // XY 를 u(X) 축 둘레 30°: (u, v, w) → (u, v·cos30 − w·sin30, v·sin30 + w·cos30)
+    bbox: [[-5, -5 * Math.cos(PI / 6) - 10 * 0.5, -2.5], [5, 5 * Math.cos(PI / 6), 2.5 + 10 * Math.cos(PI / 6)]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'angled', base: 'XY', axis: 'u', angle: 30, offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 10, height: 10 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 10 },
+    ],
+  },
+  'scale-nonuniform': {
+    volume: 1000,
+    roots: 1,
+    bbox: [[-10, -5, 0], [10, 5, 5]],
+    commands: [box('b', 10, 10, 10), { type: 'pattern', pattern: { type: 'scale', source: 'b', x: 2, y: 1, z: 0.5 } }],
+  },
+  'angle-constraint-triangle': {
+    volume: 'polygon',
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 't', points: [[0, 0], [20, 0], [5, 15]] },
+      { type: 'add_line', sketch: 's', id: 'ref', points: [[0, -5], [20, -5]] },
+      { type: 'add_constraint', sketch: 's', constraint: 'fix', refs: ['t.p0'] },
+      { type: 'add_constraint', sketch: 's', constraint: 'parallel', refs: ['t.e0', 'ref.e0'] },
+      { type: 'add_constraint', sketch: 's', constraint: 'length', refs: ['t.e0'], value: 20 },
+      { type: 'add_constraint', sketch: 's', constraint: 'angle', refs: ['ref.e0', 't.e2'], value: 60 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 't', distance: 4 },
+    ],
+  },
   'suppressed-tool-and-root': {
     volume: 16000,
     roots: 1,
@@ -329,7 +381,18 @@ export const FEATURE_CASES: Record<string, { volume: number; roots: number; comm
 
 export function buildFeatureFixture() {
   return Object.fromEntries(
-    Object.entries(FEATURE_CASES).map(([name, c]) => [name, { volume: c.volume, roots: c.roots, model: buildSketchPlateFixture(c.commands) }]),
+    Object.entries(FEATURE_CASES).map(([name, c]) => {
+      const model = buildSketchPlateFixture(c.commands);
+      // 'polygon': 구속으로 풀린 다각형 넓이 × 돌출 거리 (첫 다각형·첫 돌출)
+      let volume = c.volume;
+      if (volume === 'polygon') {
+        const poly = model.sketches.flatMap((s) => s.entities).find((e) => e.type === 'polygon') as { points: number[][] };
+        const ext = model.objects.find((o) => o.kind === 'extrude') as { params: { distance: number } };
+        const area = Math.abs(poly.points.reduce((a, p, i) => { const q = poly.points[(i + 1) % poly.points.length]!; return a + p[0]! * q[1]! - q[0]! * p[1]!; }, 0)) / 2;
+        volume = area * Math.abs(ext.params.distance);
+      }
+      return [name, { volume, roots: c.roots, ...(c.bbox ? { bbox: c.bbox } : {}), model }];
+    }),
   );
 }
 

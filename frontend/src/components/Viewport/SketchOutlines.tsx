@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { dimensionValue, sketchFeatureRef } from '../../cad/sketch';
+import { dimensionValue, sketchFeatureRef, slotOutline } from '../../cad/sketch';
 import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 
@@ -49,8 +49,12 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
   const geometry = useMemo(() => {
     const z = 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 평면에서 살짝 띄움
     const pts: number[] = [];
-    if (entity.type === 'polygon') {
+    if (entity.type === 'polygon' || entity.type === 'line') {
       for (const [x, y] of entity.points) pts.push(x, y, z);
+    } else if (entity.type === 'slot') {
+      const length = dimensionValue(sketch, entity.id, 'length') ?? 0;
+      const width = dimensionValue(sketch, entity.id, 'width') ?? 0;
+      for (const [x, y] of slotOutline({ center: entity.center, angle: entity.angle, length, width }, 24)) pts.push(x, y, z);
     } else if (entity.type === 'rectangle') {
       const [cx, cy] = entity.center;
       const w = (dimensionValue(sketch, entity.id, 'width') ?? 0) / 2;

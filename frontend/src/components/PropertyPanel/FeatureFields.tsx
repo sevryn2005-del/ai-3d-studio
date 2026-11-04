@@ -111,7 +111,17 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
       <div className="operands">
         원본: <button onClick={() => select(p.source)}>{src?.name ?? p.source}</button>
       </div>
-      {p.type === 'mirror' ? (
+      {p.type === 'scale' ? (
+        <>
+          {(['x', 'y', 'z'] as const).map((k) => (
+            <NumberField key={k} label={`배율 ${k.toUpperCase()}`} unit="×" value={p[k]} onCommit={(v) => set({ [k]: v })} testId={`scale-${k}`} />
+          ))}
+          <button onClick={() => set({ x: p.x, y: p.x, z: p.x })} title="Y·Z 를 X 와 같게 (균일)">
+            균일하게
+          </button>
+          <p className="muted small">패턴 원점(만들 때 월드 원점) 기준으로 늘리거나 줄입니다.</p>
+        </>
+      ) : p.type === 'mirror' ? (
         <>
           <AxisSelect label="대칭 평면" value={p.plane} options={['XY', 'XZ', 'YZ']} onChange={(v) => set({ plane: v as 'XY' })} />
           <NumberField label="평면 위치 (법선 방향)" unit="mm" value={p.offset} onCommit={(v) => set({ offset: v })} testId="pattern-offset" />
@@ -119,13 +129,13 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
       ) : p.type === 'circular' ? (
         <>
           <AxisSelect label="회전축 (원점 지남)" value={p.axis} options={AXES} onChange={(v) => set({ axis: v as Axis })} />
-          <NumberField label="개수 (원본 포함)" unit="mm" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
+          <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
         </>
       ) : (
         <>
           <AxisSelect label="방향 1" value={p.axis} options={AXES} onChange={(v) => set({ axis: v as Axis })} />
-          <NumberField label="개수 (원본 포함)" unit="mm" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
+          <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="간격" unit="mm" value={p.spacing} onCommit={(v) => set({ spacing: v })} testId="pattern-spacing" />
           <label className="check">
             <input
@@ -143,7 +153,7 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           {p.axis2 && (
             <>
               <AxisSelect label="방향 2" value={p.axis2} options={AXES} onChange={(v) => set({ axis2: v as Axis })} />
-              <NumberField label="개수 2" unit="mm" value={p.count2 ?? 1} onCommit={(v) => set({ count2: Math.round(v) })} testId="pattern-count2" />
+              <NumberField label="개수 2" unit="개" value={p.count2 ?? 1} onCommit={(v) => set({ count2: Math.round(v) })} testId="pattern-count2" />
               <NumberField label="간격 2" unit="mm" value={p.spacing2 ?? 0} onCommit={(v) => set({ spacing2: v })} testId="pattern-spacing2" />
             </>
           )}

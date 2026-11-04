@@ -26,6 +26,7 @@ export const CONSTRAINT_LABEL: Record<ConstraintType, string> = {
   length: '길이',
   distance: '거리',
   tangent: '접선',
+  angle: '각도',
 };
 
 type RefKind = 'point' | 'edge' | 'circle';
@@ -43,6 +44,7 @@ export const CONSTRAINT_ARITY: Record<ConstraintType, { refs: RefKind[][]; value
   length: { refs: [['edge']], value: true },
   distance: { refs: [['point', 'point']], value: true },
   tangent: { refs: [['edge', 'circle']], value: false },
+  angle: { refs: [['edge', 'edge']], value: true },
 };
 
 // ---- 참조 해석 ---------------------------------------------------------------
@@ -51,7 +53,7 @@ export const CONSTRAINT_ARITY: Record<ConstraintType, { refs: RefKind[][]; value
 export function sketchPoints(sketch: Sketch): Map<string, Point2> {
   const pts = new Map<string, Point2>();
   for (const e of sketch.entities) {
-    if (e.type === 'polygon') e.points.forEach((p, k) => pts.set(`${e.id}.p${k}`, p));
+    if (e.type === 'polygon' || e.type === 'line') e.points.forEach((p, k) => pts.set(`${e.id}.p${k}`, p));
     else pts.set(`${e.id}.center`, e.center);
   }
   return pts;
@@ -67,17 +69,18 @@ export function refKind(sketch: Sketch, ref: string): RefKind | null {
   if (!e) return null;
   const [, part] = ref.split('.');
   if (part === undefined) return e.type === 'circle' ? 'circle' : null;
-  if (part === 'center') return e.type === 'polygon' ? null : 'point';
-  if (e.type !== 'polygon') return null;
+  if (part === 'center') return e.type === 'polygon' || e.type === 'line' ? null : 'point';
+  if (e.type !== 'polygon' && e.type !== 'line') return null;
   const k = Number(part.slice(1));
-  if (k >= e.points.length) return null;
+  // 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선: 끝점 2개, 변 1개
+  if (k >= (part[0] === 'e' && e.type === 'line' ? 1 : e.points.length)) return null;
   return part[0] === 'p' ? 'point' : 'edge';
 }
 
 /** 변 → 두 끝점 이름 */
 function edgeEnds(sketch: Sketch, ref: string): [string, string] {
   const [id, part] = ref.split('.') as [string, string];
-  const e = entityOf(sketch, ref) as Extract<SketchEntity, { type: 'polygon' }>;
+  const e = entityOf(sketch, ref) as Extract<SketchEntity, { type: 'polygon' | 'line' }>;
   const k = Number(part.slice(1));
   return [`${id}.p${k}`, `${id}.p${(k + 1) % e.points.length}`];
 }
@@ -99,6 +102,7 @@ export function constraintError(sketch: Sketch, c: Pick<SketchConstraint, 'type'
   if (spec.value && c.value === undefined) return `${CONSTRAINT_LABEL[c.type]} 구속에는 값(mm)이 필요합니다`;
   if (!spec.value && c.value !== undefined) return `${CONSTRAINT_LABEL[c.type]} 구속에는 값을 넣지 않습니다`;
   if (c.refs.length === 2 && c.refs[0] === c.refs[1]) return '같은 대상을 두 번 참조할 수 없습니다';
+  if (c.type === 'angle' && (c.value! <= 0 || c.value! >= 180)) return '각도는 0° 보다 크고 180° 보다 작아야 합니다';
   return null;
 }
 
@@ -149,6 +153,14 @@ function residuals(sketch: Sketch, c: SketchConstraint, get: Get): number[] {
       const a = P(c.refs[0]!);
       const b = P(c.refs[1]!);
       return [Math.hypot(b[0] - a[0], b[1] - a[1]) - c.value!];
+    }
+    case 'angle': {
+      // 첫 변 → 둘째 변 반시계 각 θ: (u×v)cosθ − (u·v)sinθ = 0 (길이로 나눠 무차원). θ 와 θ+180° 는 같은 직선 쌍
+      const u = dir(c.refs[0]!);
+      const v = dir(c.refs[1]!);
+      const n = Math.max(len(u) * len(v), 1e-12);
+      const t = (c.value! * Math.PI) / 180;
+      return [((u[0] * v[1] - u[1] * v[0]) * Math.cos(t) - (u[0] * v[0] + u[1] * v[1]) * Math.sin(t)) / n];
     }
     case 'tangent': {
       const [a, b] = edgeEnds(sketch, c.refs[0]!).map(get) as [Point2, Point2];
@@ -250,6 +262,7 @@ export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Se
   const get = getter(x);
   const entities = sketch.entities.map((e): SketchEntity => {
     if (e.type === 'polygon') return { ...e, points: e.points.map((_, k) => get(`${e.id}.p${k}`).map(round) as Point2) };
+    if (e.type === 'line') return { ...e, points: [get(`${e.id}.p0`).map(round) as Point2, get(`${e.id}.p1`).map(round) as Point2] };
     return { ...e, center: get(`${e.id}.center`).map(round) as Point2 };
   });
   const solved: Sketch = { ...sketch, entities };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
+import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
 import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, resolveProfile, revolveProfileError, sketchFeatureRef } from '../../cad/sketch';
@@ -8,9 +8,12 @@ import { NumberField } from './NumberField';
 import { ConstraintPanel, PolygonFields } from './ConstraintFields';
 
 /** 평면의 u·v 가 가리키는 축 이름 (sketchPlane.ts 규약, 면 평면은 u·v) */
-const dimLabel = (kind: DimensionKind, plane: SketchPlane) =>
-  kind === 'diameter' ? '지름' : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
-const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형' };
+const dimLabel = (kind: DimensionKind, plane: SketchPlane, type?: SketchEntity['type']) =>
+  kind === 'diameter' ? '지름'
+  : kind === 'length' ? '길이 (반원 중심 사이)'
+  : type === 'slot' && kind === 'width' ? '폭'
+  : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
+export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯' };
 
 /**
  * 스케치 요소 하나의 치수·중심 입력. 바꾸면 set_dimension / set_entity_center 1건
@@ -19,6 +22,25 @@ const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각�
 function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEntity }) {
   const submitNow = useSceneStore((s) => s.submitNow);
   if (entity.type === 'polygon') return <PolygonFields sketch={sketch} polygon={entity} />;
+  if (entity.type === 'line') {
+    const [u, v] = planeAxes(sketch.plane);
+    const setPoint = (k: 0 | 1, axis: 0 | 1) => (val: number) => {
+      const to: Point2 = [...entity.points[k]];
+      to[axis] = val;
+      submitNow({ type: 'move_point', sketch: sketch.id, point: `${entity.id}.p${k}`, to });
+    };
+    return (
+      <>
+        {([0, 1] as const).map((k) => (
+          <div key={k} className="vertex-row">
+            <NumberField label={`끝점 ${k + 1} ${u}`} unit="mm" value={entity.points[k][0]} onCommit={setPoint(k, 0)} testId={`line-${entity.id}-p${k}-x`} />
+            <NumberField label={`끝점 ${k + 1} ${v}`} unit="mm" value={entity.points[k][1]} onCommit={setPoint(k, 1)} testId={`line-${entity.id}-p${k}-y`} />
+          </div>
+        ))}
+        <p className="muted small">구성선은 형상을 만들지 않습니다. 구속(각도·평행·일치 등)의 기준으로 씁니다 ({entity.id}.e0, {entity.id}.p0, {entity.id}.p1).</p>
+      </>
+    );
+  }
   const setCenter = (axis: 0 | 1) => (v: number) => {
     const center: Point2 = [...entity.center];
     center[axis] = v;
@@ -29,7 +51,7 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
       {REQUIRED_DIMENSIONS[entity.type].map((kind) => (
         <NumberField
           key={kind}
-          label={dimLabel(kind, sketch.plane)}
+          label={dimLabel(kind, sketch.plane, entity.type)}
           unit="mm"
           value={dimensionValue(sketch, entity.id, kind) ?? 0}
           onCommit={(v) => submitNow({ type: 'set_dimension', sketch: sketch.id, dimension: `${entity.id}.${kind}`, value: v })}
@@ -38,6 +60,15 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
       ))}
       <NumberField label={`중심 ${planeAxes(sketch.plane)[0]}`} unit="mm" value={entity.center[0]} onCommit={setCenter(0)} testId={`center-${entity.id}-x`} />
       <NumberField label={`중심 ${planeAxes(sketch.plane)[1]}`} unit="mm" value={entity.center[1]} onCommit={setCenter(1)} testId={`center-${entity.id}-y`} />
+      {entity.type === 'slot' && (
+        <NumberField
+          label="방향"
+          unit="°"
+          value={entity.angle}
+          onCommit={(v) => submitNow({ type: 'set_entity_angle', sketch: sketch.id, entity: entity.id, angle: v })}
+          testId={`angle-${entity.id}`}
+        />
+      )}
     </>
   );
 }
@@ -80,14 +111,18 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
             id="sketch-plane"
             data-testid="sketch-plane"
             value={sketch.plane.type}
-            onChange={(e) =>
-              e.target.value !== 'face' &&
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === 'face') return;
+              const base: StandardPlane['type'] = sketch.plane.type === 'angled' ? sketch.plane.base : sketch.plane.type === 'face' ? 'XY' : sketch.plane.type;
               submitNow({
                 type: 'set_sketch_plane',
                 sketch: sketch.id,
-                plane: { type: e.target.value as StandardPlane['type'], offset: sketch.plane.offset },
-              })
-            }
+                plane: v === 'angled'
+                  ? { type: 'angled', base, axis: 'u', angle: 30, offset: sketch.plane.offset }
+                  : { type: v as StandardPlane['type'], offset: sketch.plane.offset },
+              });
+            }}
           >
             {sketch.plane.type === 'face' && (
               <option value="face">
@@ -100,8 +135,12 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
                 {PLANE_LABEL[t]}
               </option>
             ))}
+            <option value="angled">각도 평면 (기준 평면을 기울임)</option>
           </select>
         </div>
+        {sketch.plane.type === 'angled' && (
+          <AngledPlaneFields sketch={sketch} plane={sketch.plane} />
+        )}
         <NumberField
           label="거리"
           unit="mm"
@@ -287,5 +326,34 @@ export function FaceSketchAction({ object, model }: { object: CadObject; model: 
         스케치 만들기
       </button>
     </fieldset>
+  );
+}
+
+/** 각도 평면: 기준 평면, 회전축(그 평면의 u·v), 각도 */
+function AngledPlaneFields({ sketch, plane }: { sketch: Sketch; plane: AngledPlane }) {
+  const submitNow = useSceneStore((s) => s.submitNow);
+  const set = (patch: Partial<AngledPlane>) => submitNow({ type: 'set_sketch_plane', sketch: sketch.id, plane: { ...plane, ...patch } });
+  const [u, v] = planeAxes({ type: plane.base, offset: 0 });
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="angled-base">기준</label>
+        <select id="angled-base" value={plane.base} onChange={(e) => set({ base: e.target.value as StandardPlane['type'] })}>
+          {(Object.keys(PLANE_LABEL) as StandardPlane['type'][]).map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="angled-axis">회전축</label>
+        <select id="angled-axis" value={plane.axis} onChange={(e) => set({ axis: e.target.value as 'u' | 'v' })}>
+          <option value="u">{u} 축 (기준 평면의 가로)</option>
+          <option value="v">{v} 축 (기준 평면의 세로)</option>
+        </select>
+      </div>
+      <NumberField label="각도" unit="°" value={plane.angle} onCommit={(a) => set({ angle: a })} testId="angled-angle" />
+    </>
   );
 }

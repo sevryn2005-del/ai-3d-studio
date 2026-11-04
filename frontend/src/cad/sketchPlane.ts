@@ -11,7 +11,7 @@
  *   월드에 고정되며, 돌출 객체의 로컬 좌표로는 inverse(돌출 객체 월드) ∘ (면 월드) 로 옮긴다.
  */
 import { Matrix4, Vector3 } from 'three';
-import type { CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
+import type { AngledPlane, CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
 import type { Profile } from './sketch';
 import { findSketch, resolveProfile, sketchFeatureRef } from './sketch';
 import { toMatrix } from './transformMath';
@@ -46,8 +46,17 @@ export const FACE_LABEL: Record<FaceName, string> = {
 /** 면 참조 재귀 한도 (순환 참조는 validateGraph 가 따로 거부한다) */
 const MAX_DEPTH = 16;
 
-/** 기준 평면 → 돌출 객체 로컬 */
-export function planeMatrix(plane: StandardPlane): Matrix4 {
+/**
+ * 기준 평면 → 돌출 객체 로컬.
+ * 각도 평면: 기준 평면(offset 0) · R(그 평면의 u 또는 v 축, angle) · T(0, 0, offset) — 백엔드 frames.plane_matrix 와 같음
+ */
+export function planeMatrix(plane: StandardPlane | AngledPlane): Matrix4 {
+  if (plane.type === 'angled') {
+    const [u, v, n] = BASES[plane.base];
+    const rad = (plane.angle * Math.PI) / 180;
+    const rot = plane.axis === 'u' ? new Matrix4().makeRotationX(rad) : new Matrix4().makeRotationY(rad);
+    return new Matrix4().makeBasis(u, v, n).multiply(rot).multiply(new Matrix4().makeTranslation(0, 0, plane.offset));
+  }
   const [u, v, n] = BASES[plane.type];
   return new Matrix4().makeBasis(u, v, n).setPosition(n.clone().multiplyScalar(plane.offset));
 }
@@ -68,7 +77,10 @@ function index(model: ModelDefinition): Map<ObjectId, CadObject> {
 export function objectWorldMatrix(model: ModelDefinition, id: ObjectId): Matrix4 {
   const byId = index(model);
   const parent = new Map<ObjectId, ObjectId>();
-  for (const o of model.objects) if (o.kind === 'boolean') for (const c of [o.boolean.base, ...o.boolean.tools]) parent.set(c, o.id);
+  for (const o of model.objects) {
+    if (o.kind === 'boolean') for (const c of [o.boolean.base, ...o.boolean.tools]) parent.set(c, o.id);
+    if (o.kind === 'pattern') parent.set(o.pattern.source, o.id);
+  }
   let m = new Matrix4();
   for (let cur: ObjectId | undefined = id; cur; cur = parent.get(cur)) {
     const o = byId.get(cur);
@@ -100,7 +112,8 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       return base ? facesOf(model, base, depth + 1) : [];
     }
     case 'pattern': {
-      // 패턴 결과의 면 = 원본의 면 (첫 번째 사본)
+      // 패턴 결과의 면 = 원본의 면 (첫 번째 사본). 크기 조정은 면 위치가 바뀌므로 아직 면 없음
+      if (obj.pattern.type === 'scale') return [];
       const src = model.objects.find((o) => o.id === obj.pattern.source);
       return src ? facesOf(model, src, depth + 1) : [];
     }
@@ -210,6 +223,7 @@ export function planeAxes(plane: SketchPlane): [string, string] {
     case 'YZ':
       return ['Y', 'Z'];
     case 'face':
+    case 'angled':
       return ['u', 'v'];
   }
 }

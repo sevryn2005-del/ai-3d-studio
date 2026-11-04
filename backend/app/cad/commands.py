@@ -13,6 +13,8 @@ tests/test_contract.py 가 검사한다. 한쪽만 바꾸면 테스트가 실패
 
 from __future__ import annotations
 
+import math
+
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, model_validator
@@ -159,8 +161,8 @@ PARAMS_MODELS: dict[str, type[Strict]] = {
 # ---- 스케치 (형식 v2) ----------------------------------------------------------------
 
 Point2 = tuple[Coordinate, Coordinate]
-DimensionKind = Literal["width", "height", "diameter"]
-DimensionId = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}\.(width|height|diameter)$")]
+DimensionKind = Literal["width", "height", "diameter", "length"]
+DimensionId = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}\.(width|height|diameter|length)$")]
 
 
 class RectangleEntity(Strict):
@@ -183,10 +185,31 @@ class PolygonEntity(Strict):
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
 
 
-SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity], Field(discriminator="type")]
+class LineEntity(Strict):
+    """구성선 (형식 v7): 형상 없음, 구속 기준. 끝점 ID.p0·ID.p1, 변 ID.e0"""
+
+    id: ObjectId
+    type: Literal["line"]
+    points: tuple[Point2, Point2]
+
+
+SketchAngle = Annotated[float, _num(-360, 360)]
+
+
+class SlotEntity(Strict):
+    """슬롯 (형식 v7): 치수 ID.length(반원 중심 거리)·ID.width(폭), 방향 angle(°)"""
+
+    id: ObjectId
+    type: Literal["slot"]
+    center: Point2
+    angle: SketchAngle
+
+
+SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity], Field(discriminator="type")]
 
 ConstraintType = Literal[
-    "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent"
+    "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent",
+    "angle",
 ]
 GeomRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}(\.(p|e)\d{1,2}|\.center)?$")]
 
@@ -227,7 +250,17 @@ class FacePlane(Strict):
     offset: Coordinate
 
 
-SketchPlane = Annotated[Union[StandardPlane, FacePlane], Field(discriminator="type")]
+class AngledPlane(Strict):
+    """각도 기준 평면 (형식 v7): base 를 그 평면의 u/v 축 둘레로 angle 만큼 돌리고 새 법선으로 offset"""
+
+    type: Literal["angled"]
+    base: Literal["XY", "XZ", "YZ"]
+    axis: Literal["u", "v"]
+    angle: SketchAngle
+    offset: Coordinate
+
+
+SketchPlane = Annotated[Union[StandardPlane, FacePlane, AngledPlane], Field(discriminator="type")]
 
 
 class Sketch(Strict):
@@ -239,7 +272,13 @@ class Sketch(Strict):
     constraints: Annotated[list[SketchConstraint], Field(max_length=Limits.MAX_SKETCH_CONSTRAINTS)]
 
 
-REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": ()}
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width")}
+
+
+def slot_half_extent(p: dict) -> tuple[float, float]:
+    a = math.radians(p["angle"])
+    r = p["width"] / 2
+    return abs(math.cos(a)) * p["length"] / 2 + r, abs(math.sin(a)) * p["length"] / 2 + r
 
 
 def revolve_profile_error(p: dict) -> str | None:
@@ -248,6 +287,8 @@ def revolve_profile_error(p: dict) -> str | None:
         min_u = min(q[0] for q in p["points"])
     elif p["type"] == "circle":
         min_u = p["center"][0] - p["diameter"] / 2
+    elif p["type"] == "slot":
+        min_u = p["center"][0] - slot_half_extent(p)[0]
     else:
         min_u = p["center"][0] - p["width"] / 2
     if min_u < -1e-9:
@@ -258,7 +299,7 @@ def revolve_profile_error(p: dict) -> str | None:
 def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     """돌출 단면 (프론트엔드 cad/sketch.ts 의 resolveProfile 과 같은 규칙)."""
     e = next((x for x in sketch.entities if x.id == entity_id), None)
-    if e is None:
+    if e is None or e.type == "line":
         return None
     dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
     z = sketch.plane.offset
@@ -270,6 +311,11 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
+                    "plane": sketch.plane}
+        return None
+    if e.type == "slot":
+        if "length" in dims and "width" in dims:
+            return {"type": "slot", "center": e.center, "length": dims["length"], "width": dims["width"], "angle": e.angle, "z": z,
                     "plane": sketch.plane}
         return None
     if "diameter" in dims:
@@ -432,6 +478,19 @@ class CircularPattern(Strict):
     angle: Annotated[float, _num(1, 360)]
 
 
+ScaleFactor = Annotated[float, _num(0.01, 100)]
+
+
+class ScalePattern(Strict):
+    """크기 조정 (형식 v7): 패턴 원점 기준 축별 배율, 원본 하나"""
+
+    type: Literal["scale"]
+    source: ObjectId
+    x: ScaleFactor
+    y: ScaleFactor
+    z: ScaleFactor
+
+
 class MirrorPattern(Strict):
     type: Literal["mirror"]
     source: ObjectId
@@ -439,7 +498,7 @@ class MirrorPattern(Strict):
     offset: Coordinate
 
 
-PatternDef = Annotated[Union[LinearPattern, CircularPattern, MirrorPattern], Field(discriminator="type")]
+PatternDef = Annotated[Union[LinearPattern, CircularPattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
 
 
 class PatternObject(_ObjectBase):
@@ -465,7 +524,7 @@ CadObject = Annotated[
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[6]
+    schemaVersion: Literal[7]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -560,6 +619,30 @@ class AddPolygon(Strict):
     sketch: ObjectId
     id: ObjectId | None = None
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
+
+
+class AddLine(Strict):
+    type: Literal["add_line"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    points: tuple[Point2, Point2]
+
+
+class AddSlot(Strict):
+    type: Literal["add_slot"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    center: Point2 | None = None
+    length: Dimension
+    width: Dimension
+    angle: SketchAngle | None = None
+
+
+class SetEntityAngle(Strict):
+    type: Literal["set_entity_angle"]
+    sketch: ObjectId
+    entity: ObjectId
+    angle: SketchAngle
 
 
 class MovePoint(Strict):
@@ -779,6 +862,9 @@ CadCommand = Annotated[
         DeleteSketchEntity,
         SetSketchPlane,
         AddPolygon,
+        AddLine,
+        AddSlot,
+        SetEntityAngle,
         MovePoint,
         AddConstraint,
         SetConstraint,
@@ -823,6 +909,9 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     DeleteSketchEntity,
     SetSketchPlane,
     AddPolygon,
+    AddLine,
+    AddSlot,
+    SetEntityAngle,
     MovePoint,
     AddConstraint,
     SetConstraint,

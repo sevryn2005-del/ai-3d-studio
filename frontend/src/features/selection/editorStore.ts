@@ -31,9 +31,10 @@ export type Point3 = [number, number, number];
 /**
  * 속성 관리자에서 확인(✓)을 기다리는 피처. 확정 전에는 뷰포트에 미리보기만 (설계 원본 그대로).
  */
+/** cutTarget: 있으면 만든 형상을 그 바디에서 뺀다 (돌출 컷·회전 컷) */
 export type PendingFeature =
-  | { kind: 'extrude'; sketch: ObjectId; profile: ObjectId; distance: number }
-  | { kind: 'revolve'; sketch: ObjectId; profile: ObjectId; angle: number };
+  | { kind: 'extrude'; sketch: ObjectId; profile: ObjectId; distance: number; cutTarget?: ObjectId }
+  | { kind: 'revolve'; sketch: ObjectId; profile: ObjectId; angle: number; cutTarget?: ObjectId };
 
 interface EditorState {
   transformMode: TransformMode;
@@ -57,6 +58,9 @@ interface EditorState {
   measurePoints: Point3[];
   massOpen: boolean;
   screenshotRequest: number;
+  /** 원근(기본) / 직교 투영 */
+  projection: 'perspective' | 'orthographic';
+  toggleProjection: () => void;
 
   setDisplayMode: (m: DisplayMode) => void;
   setSection: (s: SectionView | null) => void;
@@ -110,6 +114,13 @@ export const useEditorStore = create<EditorState>((set) => ({
   measurePoints: [],
   massOpen: false,
   screenshotRequest: 0,
+  projection: loadPref('ai3d.projection', ['perspective', 'orthographic'] as const, 'perspective'),
+  toggleProjection: () =>
+    set((s) => {
+      const projection = s.projection === 'perspective' ? 'orthographic' : 'perspective';
+      savePref('ai3d.projection', projection);
+      return { projection };
+    }),
 
   setDisplayMode: (displayMode) => {
     savePref('ai3d.displayMode', displayMode);

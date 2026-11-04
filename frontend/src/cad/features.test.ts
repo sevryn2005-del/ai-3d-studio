@@ -120,3 +120,42 @@ describe('구멍 가공', () => {
     expect(err(m, { type: 'hole', target: 'b', face: 'end', at: [0, 0], diameter: 6, depth: 8 })).toMatch(/면이 없습니다/);
   });
 });
+
+describe('형식 v7: 구성선·슬롯·각도 구속·각도 평면·크기 조정', () => {
+  const sk = { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } };
+  it('슬롯: 치수 length·width, 방향 변경, 구성선은 단면이 아니다', () => {
+    const m = build(sk, { type: 'add_slot', sketch: 's', id: 'sl', length: 20, width: 8, angle: 30 }, { type: 'set_entity_angle', sketch: 's', entity: 'sl', angle: 45 });
+    expect(m.sketches[0]!.dimensions.map((d) => d.id)).toEqual(['sl.length', 'sl.width']);
+    expect(m.sketches[0]!.entities[0]).toMatchObject({ type: 'slot', angle: 45 });
+    const withLine = build(sk, { type: 'add_line', sketch: 's', id: 'l', points: [[0, 0], [10, 0]] });
+    expect(err(withLine, { type: 'extrude', sketch: 's', profile: 'l', distance: 5 })).toMatch(/치수가 완전하지 않습니다|프로파일/);
+    expect(err(withLine, { type: 'set_entity_angle', sketch: 's', entity: 'l', angle: 10 })).toMatch(/슬롯/);
+    expect(err(build(sk), { type: 'add_line', sketch: 's', points: [[0, 0], [0, 0.001]] })).toMatch(/너무 짧/);
+  });
+  it('각도 구속: 구성선 기준 30°, 0·180° 는 거부', () => {
+    const m = build(
+      sk,
+      { type: 'add_line', sketch: 's', id: 'a', points: [[0, 0], [10, 0]] },
+      { type: 'add_line', sketch: 's', id: 'b', points: [[0, 0], [10, 3]] },
+      { type: 'add_constraint', sketch: 's', constraint: 'fix', refs: ['a.p0'] },
+      { type: 'add_constraint', sketch: 's', constraint: 'fix', refs: ['a.p1'] },
+      { type: 'add_constraint', sketch: 's', id: 'ang', constraint: 'angle', refs: ['a.e0', 'b.e0'], value: 30 },
+    );
+    const b = m.sketches[0]!.entities[1] as { points: number[][] };
+    const deg = (Math.atan2(b.points[1]![1]! - b.points[0]![1]!, b.points[1]![0]! - b.points[0]![0]!) * 180) / Math.PI;
+    expect(deg).toBeCloseTo(30, 4);
+    expect(err(m, { type: 'set_constraint', sketch: 's', constraint: 'ang', value: 180 })).toMatch(/180/);
+    expect(validateGraph(m)).toEqual([]);
+  });
+  it('각도 평면은 회전축 u 와 v 를 구분한다', () => {
+    const m = build({ type: 'create_sketch', id: 's', plane: { type: 'angled', base: 'XY', axis: 'v', angle: 90, offset: 0 } }, { type: 'add_rectangle', sketch: 's', id: 'r', width: 10, height: 10 }, { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 5 });
+    expect(validateGraph(m)).toEqual([]);
+  });
+  it('크기 조정: 원본 하나, 면이 없다, 배율 범위', () => {
+    const m = build(box, { type: 'pattern', id: 'p', pattern: { type: 'scale', source: 'b', x: 2, y: 2, z: 2 } });
+    const p = obj(m, 'p');
+    expect(p.kind === 'pattern' && patternMatrices(p.pattern)).toHaveLength(1);
+    expect(err(m, { type: 'hole', target: 'p', face: 'top', at: [0, 0], diameter: 3, depth: 3 })).toMatch(/면이 없습니다/);
+    expect(err(m, { type: 'set_pattern', target: 'p', pattern: { type: 'scale', source: 'b', x: 0, y: 1, z: 1 } })).toMatch(/잘못된 명령/);
+  });
+});

@@ -3,12 +3,13 @@
  * 확정 = 명령 1건 (실행 취소 1번). 확정 전에는 설계 원본이 바뀌지 않는다.
  */
 import type { ModelDefinition } from '../../cad/commandTypes';
+import { topLevelObjects } from '../../cad/modelGraph';
 import { findSketch, resolveProfile, revolveProfileError } from '../../cad/sketch';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { cancelPending, commitPending } from '../../features/selection/featureFlow';
 import { NumberField } from './NumberField';
 
-const ENTITY_LABEL = { rectangle: '사각형', circle: '원', polygon: '다각형' } as const;
+import { ENTITY_LABEL } from './SketchFields';
 
 export function PropertyManager({ model }: { model: ModelDefinition }) {
   const pending = useEditorStore((s) => s.pending)!;
@@ -19,7 +20,7 @@ export function PropertyManager({ model }: { model: ModelDefinition }) {
     const p = resolveProfile(sketch, e.id);
     return p && (pending.kind === 'extrude' || !revolveProfileError(p));
   });
-  const title = pending.kind === 'extrude' ? '돌출 보스/베이스' : '회전 보스/베이스';
+  const title = pending.cutTarget ? (pending.kind === 'extrude' ? '돌출 컷' : '회전 컷') : pending.kind === 'extrude' ? '돌출 보스/베이스' : '회전 보스/베이스';
 
   return (
     <div className="props property-manager" data-testid="property-manager">
@@ -79,6 +80,25 @@ export function PropertyManager({ model }: { model: ModelDefinition }) {
           <NumberField label="각도" unit="°" value={pending.angle} onCommit={(v) => setPending({ ...pending, angle: v })} testId="pm-angle" />
         </fieldset>
       )}
+      <fieldset>
+        <legend>결과</legend>
+        <div className="field">
+          <label htmlFor="pm-cut">컷 (빼기)</label>
+          <select
+            id="pm-cut"
+            data-testid="pm-cut"
+            value={pending.cutTarget ?? ''}
+            onChange={(e) => setPending({ ...pending, cutTarget: e.target.value || undefined })}
+          >
+            <option value="">새 바디 (보스/베이스)</option>
+            {topLevelObjects(model).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} 에서 빼기
+              </option>
+            ))}
+          </select>
+        </div>
+      </fieldset>
       <p className="muted small">뷰포트의 반투명 미리보기를 확인한 뒤 ✓ 를 누르세요. Enter = 확인, Esc = 취소.</p>
     </div>
   );
