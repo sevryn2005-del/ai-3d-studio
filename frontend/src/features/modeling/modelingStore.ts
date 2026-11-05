@@ -62,6 +62,9 @@ interface ModelingState {
   setSculpt: (p: Partial<SculptSettings>) => void;
   /** 비례 편집 (O): 편집 모드 G/R/S 에서 반지름(mm) 안 점도 매끈하게 따라온다 */
   proportional: { enabled: boolean; radius: number };
+  /** 스컬프트 마스크 (화면 상태, 저장 안 함): 점마다 0~1. 점 수가 바뀌면 무효 */
+  mask: { objectId: string; values: number[] } | null;
+  setMask: (m: { objectId: string; values: number[] } | null) => void;
   setProportional: (p: Partial<{ enabled: boolean; radius: number }>) => void;
 
   setMode: (m: ModelingMode) => void;
@@ -88,6 +91,8 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   sculpt: { brush: 'draw', radiusPx: 50, strength: 0.5, symmetryX: false },
   setSculpt: (p) => set((s) => ({ sculpt: { ...s.sculpt, ...p } })),
   proportional: { enabled: false, radius: 10 },
+  mask: null,
+  setMask: (mask) => set({ mask }),
   setProportional: (p) => set((s) => ({ proportional: { ...s.proportional, ...p } })),
 
   setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null }),

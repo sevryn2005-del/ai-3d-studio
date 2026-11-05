@@ -4,7 +4,7 @@ import { Line } from '@react-three/drei';
 import { Matrix3, Mesh, OrthographicCamera, PerspectiveCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { useSceneStore } from '../../cad/sceneStore';
 import type { PolyMesh, V3 } from '../../cad/polymesh';
-import { BRUSH_LABEL, applyDab, grabStroke, sculptContext, strokeEdit, type SculptContext } from '../../cad/sculpt';
+import { BRUSH_LABEL, applyDab, grabStroke, paintMask, sculptContext, strokeEdit, type SculptContext } from '../../cad/sculpt';
 import { useModelingStore } from '../../features/modeling/modelingStore';
 import { editTarget } from '../../features/modeling/modelingOps';
 
@@ -99,6 +99,15 @@ export function SculptController() {
       if (!s || !t) return;
       const set = useModelingStore.getState().sculpt;
       const brush = e.shiftKey ? 'smooth' : set.brush;
+      const mask = currentMask(t.id, s.base.verts.length);
+      if (brush === 'mask') {
+        // 마스크: 모양은 그대로, 점마다 보호 값만 (Ctrl = 지우기)
+        const moved = Math.hypot(h.local[0] - s.last[0], h.local[1] - s.last[1], h.local[2] - s.last[2]);
+        if (!first && moved < h.radius * 0.15) return;
+        s.last = h.local;
+        useModelingStore.getState().setMask({ objectId: t.id, values: paintMask(s.base, mask, h.local, h.radius, set.strength, e.ctrlKey || e.metaKey, set.symmetryX) });
+        return;
+      }
       if (brush === 'grab') {
         // 잡아끌기: 시작점을 화면과 나란한 평면 위에서 끈다
         ray.setFromCamera(ndcOf(e), camera);
@@ -108,7 +117,7 @@ export function SculptController() {
         const a = m.worldToLocal(s.startWorld.clone());
         const b = m.worldToLocal(p.clone());
         const delta: V3 = [b.x - a.x, b.y - a.y, b.z - a.z];
-        s.current = grabStroke(s.base, s.start.local, s.start.radius, delta, set.strength, set.symmetryX);
+        s.current = grabStroke(s.base, s.start.local, s.start.radius, delta, set.strength, set.symmetryX, mask);
       } else {
         // 획 간격: 반지름의 15% 마다 한 번 찍는다 (마우스 이벤트 속도와 무관하게 고르게)
         const moved = Math.hypot(h.local[0] - s.last[0], h.local[1] - s.last[1], h.local[2] - s.last[2]);
@@ -122,6 +131,7 @@ export function SculptController() {
           strength: set.strength,
           invert: e.ctrlKey || e.metaKey,
           symmetryX: set.symmetryX,
+          mask,
         });
       }
       useModelingStore.getState().setPreview({ objectId: t.id, mesh: s.current, label: `스컬프트: ${BRUSH_LABEL[brush]}`, command: null });
@@ -169,4 +179,10 @@ export function SculptController() {
     return c.clone().addScaledVector(u, Math.cos(a) * cursor.radius).addScaledVector(v, Math.sin(a) * cursor.radius).toArray() as [number, number, number];
   });
   return <Line points={pts} color="#ffffff" lineWidth={1.5} transparent opacity={0.85} depthTest={false} raycast={() => null} name="sculpt-cursor" />;
+}
+
+/** 지금 객체의 마스크 (점 수가 다르면 = 메시가 바뀌었으면 없는 것으로) */
+export function currentMask(objectId: string, n: number): number[] | null {
+  const m = useModelingStore.getState().mask;
+  return m && m.objectId === objectId && m.values.length === n ? m.values : null;
 }

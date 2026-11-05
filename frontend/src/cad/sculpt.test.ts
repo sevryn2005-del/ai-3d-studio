@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { primitiveMesh } from './polymesh';
-import { applyDab, falloff, grabStroke, sculptContext, strokeEdit } from './sculpt';
+import { applyDab, falloff, grabStroke, paintMask, sculptContext, strokeEdit } from './sculpt';
 import { executeCommand } from './commandExecutor';
 import { emptyModel } from './commandTypes';
 
@@ -55,5 +55,22 @@ describe('스컬프트 브러시', () => {
     expect(r.ok).toBe(true);
     if (r.ok && r.model.objects[0]!.kind === 'polymesh') expect(Math.max(...r.model.objects[0]!.polymesh.verts.map((v) => v[2]))).toBeCloseTo(2);
     expect(executeCommand(added.model, { type: 'mesh_edit', target: 'g', edit: { op: 'set_verts', verts: [0, 1], positions: [[0, 0, 0]] } }).ok).toBe(false);
+  });
+});
+
+describe('스컬프트 마스크', () => {
+  it('마스크 칠한 곳은 그리기 브러시에 움직이지 않는다, Ctrl 로 지우기', () => {
+    const m = grid();
+    const ctx = sculptContext(m);
+    const c = m.verts.findIndex((v) => v[0] === 0 && v[1] === 0);
+    const mask = paintMask(m, null, [0, 0, 0], 3, 1);
+    expect(mask[c]).toBe(1);
+    const out = applyDab(m, ctx, { brush: 'draw', center: [0, 0, 0], normal: [0, 0, 1], radius: 5, strength: 1, mask });
+    expect(out.verts[c]![2]).toBe(0); // 가운데는 마스크 = 그대로
+    const edge = m.verts.findIndex((v) => v[0] === 4 && v[1] === 0); // 마스크 밖, 브러시 안
+    expect(out.verts[edge]![2]).toBeGreaterThan(0);
+    const erased = paintMask(m, mask, [0, 0, 0], 3, 1, true);
+    expect(erased[c]).toBe(0);
+    expect(grabStroke(m, [0, 0, 0], 4, [0, 0, 2], 1, false, mask).verts[c]![2]).toBe(0);
   });
 });

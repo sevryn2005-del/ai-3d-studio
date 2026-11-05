@@ -116,6 +116,7 @@ function SceneObjects() {
   const selVerts = useModelingStore((s) => s.selVerts);
   const selectMode = useModelingStore((s) => s.selectMode);
   const preview = useModelingStore((s) => s.preview);
+  const mask = useModelingStore((s) => s.mask);
   return (
     <>
       {roots.map((o) => {
@@ -130,6 +131,7 @@ function SceneObjects() {
               transform={p?.transform}
               selected={o.id === selectedId && mode !== 'sculpt'}
               smoothDisplay={mode === 'sculpt' && o.id === selectedId}
+              mask={mode === 'sculpt' && o.id === selectedId && mask?.objectId === o.id ? mask.values : null}
               editing={editing}
               selVerts={editing ? (p?.afterSel && p.mesh ? p.afterSel : selVerts) : []}
               selectMode={selectMode}

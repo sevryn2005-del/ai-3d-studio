@@ -202,3 +202,13 @@ export function growSelected(shrink = false) {
   if (!t || st.mode !== 'edit' || !st.selVerts.length) return;
   st.setSel(growSelection(t.polymesh, st.selVerts, shrink));
 }
+
+/** Ctrl+I: 마스크 뒤집기 (없으면 전부 가림) */
+export function invertMask() {
+  const t = editTarget();
+  if (!t) return;
+  const st = useModelingStore.getState();
+  const n = t.polymesh.verts.length;
+  const cur = st.mask && st.mask.objectId === t.id && st.mask.values.length === n ? st.mask.values : null;
+  st.setMask({ objectId: t.id, values: Array.from({ length: n }, (_, i) => 1 - (cur?.[i] ?? 0)) });
+}

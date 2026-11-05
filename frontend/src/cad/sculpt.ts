@@ -5,13 +5,14 @@
  */
 import { faceNormal, type PolyMesh, type V3 } from './polymesh';
 
-export type Brush = 'draw' | 'inflate' | 'smooth' | 'grab' | 'flatten';
+export type Brush = 'draw' | 'inflate' | 'smooth' | 'grab' | 'flatten' | 'mask';
 export const BRUSH_LABEL: Record<Brush, string> = {
   draw: '그리기',
   inflate: '부풀리기',
   smooth: '매끈하게',
   grab: '잡아끌기',
   flatten: '평평하게',
+  mask: '마스크',
 };
 
 /** 획을 시작할 때 한 번: 이웃 점, 점 법선 (획 동안 위상은 그대로) */
@@ -47,7 +48,7 @@ export function sculptContext(m: PolyMesh): SculptContext {
 export const falloff = (d: number, R: number) => (d >= R ? 0 : (1 - (d / R) ** 2) ** 2);
 
 export interface Dab {
-  brush: Exclude<Brush, 'grab'>;
+  brush: Exclude<Brush, 'grab' | 'mask'>;
   center: V3;
   normal: V3;
   radius: number;
@@ -57,6 +58,8 @@ export interface Dab {
   invert?: boolean;
   /** X 대칭: 객체 로컬 x = 0 평면 반대쪽에도 같은 찍기 */
   symmetryX?: boolean;
+  /** 마스크 (점마다 0~1): 1 이면 그 점은 움직이지 않는다 */
+  mask?: ArrayLike<number> | null;
 }
 
 function dabOnce(m: PolyMesh, ctx: SculptContext, d: Dab): V3[] {
@@ -64,7 +67,8 @@ function dabOnce(m: PolyMesh, ctx: SculptContext, d: Dab): V3[] {
   const hit: { i: number; w: number }[] = [];
   m.verts.forEach((v, i) => {
     const dd = dist(v, d.center);
-    if (dd < R) hit.push({ i, w: falloff(dd, R) });
+    const free = 1 - (d.mask?.[i] ?? 0);
+    if (dd < R && free > 0) hit.push({ i, w: falloff(dd, R) * free });
   });
   if (!hit.length) return m.verts;
   const verts = [...m.verts];
@@ -112,11 +116,11 @@ export function applyDab(m: PolyMesh, ctx: SculptContext, d: Dab): PolyMesh {
 }
 
 /** 잡아끌기: 획 시작 메시 기준으로, 시작점 둘레 점들을 delta 만큼 (감쇠 곱해) 옮긴다 */
-export function grabStroke(start: PolyMesh, center: V3, radius: number, delta: V3, strength: number, symmetryX = false): PolyMesh {
+export function grabStroke(start: PolyMesh, center: V3, radius: number, delta: V3, strength: number, symmetryX = false, mask?: ArrayLike<number> | null): PolyMesh {
   const verts = [...start.verts];
   const move = (c: V3, dl: V3) =>
     start.verts.forEach((v, i) => {
-      const w = falloff(dist(v, c), radius);
+      const w = falloff(dist(v, c), radius) * (1 - (mask?.[i] ?? 0));
       if (w > 0) verts[i] = add(verts[i]!, mul(dl, w * Math.min(1, strength * 1.5)));
     });
   move(center, delta);
@@ -138,4 +142,18 @@ export function strokeEdit(before: PolyMesh, after: PolyMesh): { verts: number[]
     }
   });
   return verts.length ? { verts, positions } : null;
+}
+
+/** 마스크 칠하기 (M): 반지름 안 점의 마스크를 감쇠만큼 올린다 (Ctrl = 지우기). 새 배열 */
+export function paintMask(m: PolyMesh, mask: ArrayLike<number> | null, center: V3, radius: number, strength: number, erase = false, symmetryX = false): number[] {
+  const out = Array.from({ length: m.verts.length }, (_, i) => mask?.[i] ?? 0);
+  const paint = (c: V3) =>
+    m.verts.forEach((v, i) => {
+      const w = falloff(dist(v, c), radius) * Math.min(1, strength * 1.5);
+      if (w <= 0) return;
+      out[i] = erase ? Math.max(0, out[i]! - w) : Math.min(1, out[i]! + w);
+    });
+  paint(center);
+  if (symmetryX && Math.abs(center[0]) > radius * 0.05) paint([-center[0], center[1], center[2]]);
+  return out;
 }

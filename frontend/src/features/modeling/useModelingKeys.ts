@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useEditorStore } from '../selection/editorStore';
 import { useModelingStore, type ModalKind } from './modelingStore';
 import type { Brush } from '../../cad/sculpt';
+import { invertMask } from './modelingOps';
 import { typeKey } from './modalMath';
 import {
   canStartModal, deleteSelection, growSelected, selectLinkedVerts, setSubsurfLevel, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
@@ -57,9 +58,9 @@ export function useModelingKeys() {
         numpad[e.code]!();
         return;
       }
-      // 스컬프트 모드 (블렌더): X 그리기 · I 부풀리기 · S 매끈하게 · G 잡아끌기 · Shift+T 평평하게 · [ ] 반지름 · Tab 편집 모드
+      // 스컬프트 모드 (블렌더): X 그리기 · I 부풀리기 · S 매끈하게 · G 잡아끌기 · Shift+T 평평하게 · M 마스크(Alt+M 지우기, Ctrl+I 뒤집기) · [ ] 반지름 · Tab 편집 모드
       if (st.mode === 'sculpt' && !mod && !e.altKey) {
-        const brushKey: Record<string, Brush> = { x: 'draw', i: 'inflate', s: 'smooth', g: 'grab' };
+        const brushKey: Record<string, Brush> = { x: 'draw', i: 'inflate', s: 'smooth', g: 'grab', m: 'mask' };
         if (e.shiftKey && key === 't') {
           e.preventDefault();
           return st.setSculpt({ brush: 'flatten' });
@@ -74,6 +75,13 @@ export function useModelingKeys() {
           return st.setSculpt({ radiusPx: Math.round(Math.max(5, Math.min(400, r))) });
         }
         if (e.key === 'Escape') return st.setMode('object');
+      }
+      // 스컬프트 마스크: Alt+M 지우기, Ctrl+I 뒤집기 (블렌더)
+      if (st.mode === 'sculpt' && ((e.altKey && key === 'm') || (mod && key === 'i'))) {
+        e.preventDefault();
+        if (e.altKey) st.setMask(null);
+        else invertMask();
+        return;
       }
       if (e.key === 'Tab') {
         e.preventDefault();

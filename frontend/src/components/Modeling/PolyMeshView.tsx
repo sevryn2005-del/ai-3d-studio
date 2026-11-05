@@ -11,10 +11,13 @@ export const MESH_COLOR = '#b4b4b4';
 export const SELECT_COLOR = '#ffa033';
 export const ACTIVE_COLOR = '#ffd27a';
 
-/** 부드러운 음영: 점을 공유하는 삼각형 지오메트리 (점 법선 = 이웃 면 평균) */
-function smoothGeometry(m: PolyMesh): BufferGeometry {
+/** 부드러운 음영: 점을 공유하는 삼각형 지오메트리 (점 법선 = 이웃 면 평균). mask 가 있으면 가린 점을 어둡게 (점 색) */
+function smoothGeometry(m: PolyMesh, mask?: number[] | null): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(Float32Array.from(m.verts.flat()), 3));
+  if (mask && mask.length === m.verts.length) {
+    g.setAttribute('color', new BufferAttribute(Float32Array.from(mask.flatMap((v) => { const c = 1 - 0.75 * v; return [c, c, c]; })), 3));
+  }
   g.setIndex(triangulate(m));
   g.computeVertexNormals();
   return g;
@@ -67,6 +70,8 @@ interface Props {
   selectMode: SelectMode;
   /** 스컬프트 모드: 부드러운 음영으로 보기 (저장된 음영 설정과 무관) */
   smoothDisplay?: boolean;
+  /** 스컬프트 마스크 (원본 점 기준, 모디파이어가 없을 때만 보인다) */
+  mask?: number[] | null;
   onPick?: (e: ThreeEvent<MouseEvent>) => void;
 }
 
@@ -75,7 +80,7 @@ interface Props {
  * - 오브젝트 모드: 회색 음영, 고른 객체는 주황 선
  * - 편집 모드: 모든 선(검정)·점, 고른 점·선·면은 주황
  */
-export function PolyMeshView({ object, mesh, transform, selected, editing, selVerts, selectMode, onPick, smoothDisplay }: Props) {
+export function PolyMeshView({ object, mesh, transform, selected, editing, selVerts, selectMode, onPick, smoothDisplay, mask }: Props) {
   const smooth = !!object.smooth || !!smoothDisplay;
   const m = mesh ?? object.polymesh;
   const t = transform ?? object.transform;
@@ -83,7 +88,8 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
   // 모디파이어 스택 결과 (형식 v22). 편집 모드에서는 원본이 "케이지"(선·반투명 면)로, 결과가 음영으로 보인다
   const hasMods = !!object.modifiers?.length;
   const result = useMemo(() => (hasMods ? evaluateModifiers(m, object.modifiers) : m), [m, object.modifiers, hasMods]);
-  const shaded = useMemo(() => (smooth ? smoothGeometry(result) : hasMods ? polyGeometry(result) : geo), [result, smooth, hasMods, geo]);
+  const showMask = !hasMods && !!mask;
+  const shaded = useMemo(() => (smooth ? smoothGeometry(result, showMask ? mask : null) : hasMods ? polyGeometry(result) : geo), [result, smooth, hasMods, geo, showMask, mask]);
   const resultEdges = useMemo(() => (hasMods && selected && !editing ? edgeGeometry(result, edges(result)) : null), [hasMods, selected, editing, result]);
   const allEdges = useMemo(() => edges(m), [m]);
   const edgeGeo = useMemo(() => edgeGeometry(m, allEdges), [m, allEdges]);
@@ -116,7 +122,7 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
           onClick={editing ? undefined : onPick}
           raycast={editing ? () => null : undefined}
         >
-          <meshStandardMaterial key={smooth ? 'smooth' : 'flat'} color={object.color ?? MESH_COLOR} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+          <meshStandardMaterial key={`${smooth ? 'smooth' : 'flat'}${showMask ? '-mask' : ''}`} vertexColors={showMask && smooth} color={object.color ?? MESH_COLOR} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
         </mesh>
       )}
       {editing && (

@@ -274,3 +274,43 @@ test('불리언 빼기(큐브 − 구) → 메시로 변환 → 편집 가능, �
   await expect(page.getByTestId('convert-to-mesh')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+test('스컬프트 마스크: Ctrl+I 로 전부 가리면 획이 아무것도 바꾸지 않고, Alt+M 으로 지우면 다시 된다', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-uv_sphere').click();
+  await page.getByTestId('mode-sculpt').click();
+  await page.getByTestId('sculpt-strength').fill('1');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Numpad7');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 0, -1]);
+  const stroke = async () => {
+    const a = await page.evaluate(() => window.__AI3D_DEV__!.project(-4, 0, 20));
+    const b = await page.evaluate(() => window.__AI3D_DEV__!.project(4, 0, 20));
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 10 });
+    await page.mouse.up();
+  };
+  const undoEnabled = () => page.getByRole('button', { name: '실행 취소' }).isEnabled();
+  await page.keyboard.press('Control+i'); // 전부 가림
+  const before = await page.getByRole('button', { name: '실행 취소' }).isEnabled();
+  await stroke();
+  await page.waitForTimeout(300);
+  const [dl1] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const r1 = Math.max(...JSON.parse(readFileSync((await dl1.path())!, 'utf8')).model.objects[0].polymesh.verts.map((v: number[]) => Math.hypot(v[0]!, v[1]!, v[2]!)));
+  expect(r1).toBeLessThanOrEqual(10.000001); // 가린 곳은 그대로 (명령도 없음)
+  expect(await undoEnabled()).toBe(before);
+  await page.keyboard.press('Alt+m'); // 마스크 지우기
+  await stroke();
+  const [dl2] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const r2 = Math.max(...JSON.parse(readFileSync((await dl2.path())!, 'utf8')).model.objects[0].polymesh.verts.map((v: number[]) => Math.hypot(v[0]!, v[1]!, v[2]!)));
+  expect(r2).toBeGreaterThan(10.05);
+});

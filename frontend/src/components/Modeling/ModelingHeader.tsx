@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useModelingStore, type SelectMode } from '../../features/modeling/modelingStore';
 import {
-  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, densify, enterSculpt, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
+  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, densify, enterSculpt, invertMask, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
 } from '../../features/modeling/modelingOps';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { BRUSH_LABEL, type Brush } from '../../cad/sculpt';
@@ -102,6 +102,7 @@ const BRUSHES: { id: Brush; key: string }[] = [
   { id: 'smooth', key: 'S' },
   { id: 'grab', key: 'G' },
   { id: 'flatten', key: 'Shift+T' },
+  { id: 'mask', key: 'M' },
 ];
 
 /** 스컬프트 도구 막대: 브러시 · 반지름(화면 px) · 세기 · X 대칭 · 촘촘하게 */
@@ -131,6 +132,8 @@ function SculptBar() {
       <button aria-pressed={sc.symmetryX} onClick={() => set({ symmetryX: !sc.symmetryX })} title="X 대칭 — 객체 x = 0 평면 반대쪽에도" data-testid="sculpt-symmetry">
         X 대칭
       </button>
+      <button onClick={() => useModelingStore.getState().setMask(null)} title="마스크 지우기 (Alt+M)" data-testid="mask-clear">마스크 지우기</button>
+      <button onClick={invertMask} title="마스크 뒤집기 (Ctrl+I)" data-testid="mask-invert">뒤집기</button>
       <button onClick={densify} title="세분 표면 1단계를 메시에 적용해 점을 늘립니다 (스컬프트가 더 부드럽게)" data-testid="sculpt-densify">
         촘촘하게
       </button>
