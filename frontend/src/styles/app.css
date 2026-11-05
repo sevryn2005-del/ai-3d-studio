@@ -532,3 +532,5 @@ label.check.small { font-size: 12px; }
 .sk-badges span.dimension { background: rgba(30, 40, 52, 0.85); }
 .sk-badges.on-paper span { background: #e3f3e8; color: #186a3b; border: 1px solid #9fd2b1; }
 .sk-badges.on-paper span.dimension { background: #fff; color: #1d2733; border-color: #b9c6d4; }
+.sketch-copy .copy-pick { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-bottom: 4px; }
+.sketch-copy .check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }

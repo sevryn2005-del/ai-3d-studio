@@ -177,3 +177,38 @@ test('꼭짓점 끌기: 사각형 모서리를 끌면 치수를 지키며 옮겨
   await page.getByTestId('sketch-opt-relations').click();
   await expect(page.getByTestId('sketch-badge')).toHaveCount(0);
 });
+
+test('스케치 대칭 복사·직선 패턴 (속성 패널), 실행 취소 1번', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-design').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-start-sketch').click();
+  await page.locator('[data-plane="XY"]').click();
+  await page.getByRole('tab', { name: '스케치' }).click();
+  await page.getByRole('button', { name: /^사각형/ }).click();
+  await page.waitForTimeout(500);
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  const a = await at(10, 0);
+  const b = await at(20, 10);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.press('Escape');
+  const centers = async () => (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities.map((e) => e.center);
+
+  await page.getByTestId('copy-pick-r1').check();
+  await page.getByTestId('copy-run').click(); // 기본: 세로 축 대칭
+  await expect.poll(centers).toEqual([[15, 5], [-15, 5]]);
+
+  await page.getByTestId('copy-mode').selectOption('linear');
+  await page.getByTestId('copy-du').fill('0');
+  await page.getByTestId('copy-du').press('Enter');
+  await page.getByTestId('copy-dv').fill('20');
+  await page.getByTestId('copy-dv').press('Enter');
+  await page.getByTestId('copy-run').click(); // r1 만 (개수 3 = 원본 + 2)
+  await expect.poll(centers).toEqual([[15, 5], [-15, 5], [15, 25], [15, 45]]);
+  await page.keyboard.press('Control+z'); // 패턴 전체가 한 번에
+  await expect.poll(centers).toEqual([[15, 5], [-15, 5]]);
+});

@@ -1,3 +1,4 @@
+import { SketchCopyPanel } from './SketchCopyPanel';
 import { useEffect, useState } from 'react';
 import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
@@ -285,6 +286,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           </button>
         )}
       </div>
+      <SketchCopyPanel sketch={sketch} />
       <ConstraintPanel sketch={sketch} />
       {users.length > 0 && (
         <fieldset>
