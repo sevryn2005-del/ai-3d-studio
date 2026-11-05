@@ -676,9 +676,38 @@ class PolyMeshData(Strict):
     faces: Annotated[list[Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]], Field(max_length=MAX_POLY_FACES)]
 
 
+class SubsurfModifier(Strict):
+    type: Literal["subsurf"]
+    levels: Annotated[int, Field(strict=True, ge=1, le=3)]
+
+
+class MirrorModifier(Strict):
+    type: Literal["mirror"]
+    axis: Literal["x", "y", "z"]
+    merge: bool
+
+
+class ArrayModifier(Strict):
+    type: Literal["array"]
+    count: Annotated[int, Field(strict=True, ge=2, le=50)]
+    offset: Vec3
+
+
+class SolidifyModifier(Strict):
+    type: Literal["solidify"]
+    thickness: Annotated[float, _num(0.01, Limits.MAX_DIMENSION)]
+
+
+Modifier = Annotated[Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier], Field(discriminator="type")]
+MAX_MODIFIERS = 16
+
+
 class PolyMeshObject(_ObjectBase):
     kind: Literal["polymesh"]
     polymesh: PolyMeshData
+    # 형식 v22: 모디파이어 스택(polymesh.py), 부드러운 음영(화면 표시만)
+    modifiers: Annotated[Annotated[list[Modifier], Field(max_length=MAX_MODIFIERS)] | None, Field(exclude_if=lambda v: v is None)] = None
+    smooth: Annotated[bool | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 def sketch_feature_ref(obj) -> ExtrudeRef | None:
@@ -935,7 +964,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[21]
+    schemaVersion: Literal[22]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1351,6 +1380,26 @@ class MeshEditCommand(Strict):
     edit: MeshEdit
 
 
+class SetModifiers(Strict):
+    """모디파이어 스택 바꾸기 (형식 v22)"""
+
+    type: Literal["set_modifiers"]
+    target: ObjectId
+    modifiers: Annotated[list[Modifier], Field(max_length=MAX_MODIFIERS)]
+
+
+class ApplyModifier(Strict):
+    type: Literal["apply_modifier"]
+    target: ObjectId
+    all: bool | None = None
+
+
+class SetShading(Strict):
+    type: Literal["set_shading"]
+    target: ObjectId
+    smooth: bool
+
+
 class ImportMesh(Strict):
     type: Literal["import_mesh"]
     id: ObjectId | None = None
@@ -1600,6 +1649,9 @@ CadCommand = Annotated[
         SetDrawing,
         AddMesh,
         MeshEditCommand,
+        SetModifiers,
+        ApplyModifier,
+        SetShading,
         InsertPart,
         ImportMesh,
         EdgeFeatureCommand,
@@ -1673,6 +1725,9 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetDrawing,
     AddMesh,
     MeshEditCommand,
+    SetModifiers,
+    ApplyModifier,
+    SetShading,
     InsertPart,
     ImportMesh,
     EdgeFeatureCommand,

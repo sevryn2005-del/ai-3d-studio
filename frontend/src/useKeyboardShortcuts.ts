@@ -23,7 +23,9 @@ export function useKeyboardShortcuts() {
         return;
       }
       const VIEWS = ['front', 'back', 'left', 'right', 'top', 'bottom', 'iso', 'normal'] as const;
-      if (modKey && /^[1-8]$/.test(e.key)) {
+      const modeling = useSceneStore.getState().history.present.model.workspace === 'modeling';
+      // 3D 모델링 모드의 Ctrl+0~3 은 세분 표면 단계 (블렌더) — useModelingKeys
+      if (modKey && /^[1-8]$/.test(e.key) && !(modeling && /^[0-3]$/.test(e.key))) {
         e.preventDefault(); // 브라우저 탭 전환 대신
         useEditorStore.getState().requestView(VIEWS[Number(e.key) - 1]!);
         return;

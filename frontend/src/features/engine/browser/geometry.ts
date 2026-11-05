@@ -17,6 +17,7 @@ import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix, sketchLocalMatrix } from
 import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh } from '../../../cad/meshData';
 import { triangulate } from '../../../cad/polymesh';
+import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { ringSolid } from './ringSolid';
 import { Vector3, type Matrix4 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
@@ -69,7 +70,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 21, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 22, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -128,8 +129,9 @@ export function localManifold(
       throw new GeometryError(`'${obj.name}': 정밀 엔진(OCCT)이 필요한 형상입니다`);
     case 'polymesh': {
       // 3D 모델링 모드의 메시: 닫혀 있으면 솔리드로 (불리언·내보내기), 열린 메시는 화면에만
-      const vp = Float32Array.from(obj.polymesh.verts.flat());
-      const tv = Uint32Array.from(triangulate(obj.polymesh));
+      const pm = evaluateModifiers(obj.polymesh, obj.modifiers); // 모디파이어 스택 결과 (형식 v22)
+      const vp = Float32Array.from(pm.verts.flat());
+      const tv = Uint32Array.from(triangulate(pm));
       let solid: Manifold;
       try {
         solid = scope.keep(new Manifold(new wasm.Mesh({ numProp: 3, vertProperties: vp, triVerts: tv })));
@@ -183,7 +185,7 @@ export function localManifold(
         if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
       } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 21, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 22, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {

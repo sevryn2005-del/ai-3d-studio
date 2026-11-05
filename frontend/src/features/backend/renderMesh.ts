@@ -62,7 +62,7 @@ export function geometryKey(
     const path = pk ? openLinePoints(pk, obj.sweep.path) : null;
     return `sweep:${profileKey(sk ? resolveProfile(sk, obj.sweep.profile) : null)}|path:${path ? path.map((q) => q.join(',')).join(';') : 'missing'}|frame:${frameKey(obj.id, obj.sweep.pathSketch, index, sketches)}${sup}`;
   }
-  if (obj.kind === 'polymesh') return `polymesh:${obj.polymesh.verts.length}:${obj.polymesh.faces.length}:${hash(JSON.stringify(obj.polymesh))}${sup}`;
+  if (obj.kind === 'polymesh') return `polymesh:${obj.polymesh.verts.length}:${obj.polymesh.faces.length}:${hash(JSON.stringify([obj.polymesh, obj.modifiers ?? []]))}${sup}`;
   if (obj.kind === 'mesh') return `mesh:${obj.mesh.positions.length}:${hash(obj.mesh.positions)}:${hash(obj.mesh.indices)}${sup}`;
   const params = obj.params as Record<string, number>;
   const sorted = Object.keys(params)
@@ -137,7 +137,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 21, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 22, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

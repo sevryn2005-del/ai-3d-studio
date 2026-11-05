@@ -22,6 +22,7 @@ import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane'
 import { helixError, helixProfilePoints, REGION_UNSUPPORTED, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { triangulate } from '../../../cad/polymesh';
+import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
 import { DISPLAY_TOLERANCE, EXPORT_TOLERANCE, GeometryError, type PlainMesh } from '../browser/geometry';
@@ -72,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 21, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 22, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -399,13 +400,32 @@ function sewMesh(c: Ctx, v: ArrayLike<number>, t: ArrayLike<number>, name: strin
   }
   sew.Perform(progress(c));
   const sewed = c.gc.k(sew.SewedShape());
-  if (sewed.ShapeType() !== ('TopAbs_SHELL' as never)) throw new GeometryError(`'${name}': 가져온 메시가 닫혀 있지 않습니다 (구멍·떨어진 모서리)`);
-  const solid = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeSolid(c.oc.TopoDS.Shell(sewed))).Solid());
-  const fix = c.gc.k(new c.oc.ShapeFix_Solid(solid));
-  fix.Perform(progress(c));
-  const out = c.gc.k(fix.Solid());
-  if (volumeOf(c.oc, out) <= 0) throw new GeometryError(`'${name}': 가져온 메시의 안팎(면 방향)이 뒤집혀 있습니다`);
-  return out;
+  const open = () => new GeometryError(`'${name}': 가져온 메시가 닫혀 있지 않습니다 (구멍·떨어진 모서리)`);
+  const toSolid = (shell: TopoDS_Shape) => {
+    const solid = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeSolid(c.oc.TopoDS.Shell(shell))).Solid());
+    const fix = c.gc.k(new c.oc.ShapeFix_Solid(solid));
+    fix.Perform(progress(c));
+    const out = c.gc.k(fix.Solid());
+    if (volumeOf(c.oc, out) <= 0) throw new GeometryError(`'${name}': 가져온 메시의 안팎(면 방향)이 뒤집혀 있습니다`);
+    return out;
+  };
+  if (sewed.ShapeType() === ('TopAbs_SHELL' as never)) return toSolid(sewed);
+  // 떨어진 조각 여러 개 (미러·배열 모디파이어, 형식 v22): 조각마다 솔리드 → 묶음. 껍질에 속하지 않은 면이 있으면 열린 메시
+  if (sewed.ShapeType() !== ('TopAbs_COMPOUND' as never)) throw open();
+  const count = (s: TopoDS_Shape, kind: string) => {
+    const ex = c.gc.k(new c.oc.TopExp_Explorer(s, kind as never, 'TopAbs_SHAPE' as never));
+    const out: TopoDS_Shape[] = [];
+    for (; ex.More(); ex.Next()) out.push(c.gc.k(ex.Current()));
+    return out;
+  };
+  const shells = count(sewed, 'TopAbs_SHELL');
+  const shellFaces = shells.reduce((n, sh) => n + count(sh, 'TopAbs_FACE').length, 0);
+  if (!shells.length || shellFaces !== count(sewed, 'TopAbs_FACE').length) throw open();
+  const builder = c.gc.k(new c.oc.TopoDS_Builder());
+  const comp = c.gc.k(new c.oc.TopoDS_Compound());
+  builder.MakeCompound(comp);
+  for (const sh of shells) builder.Add(comp, toSolid(sh));
+  return comp;
 }
 
 // ── 모서리·면 선택 (서버 app/cad/precise.py 와 같은 규칙) ──────────────────────────────
@@ -831,8 +851,10 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       const m = decodeMesh(obj.mesh);
       return sewMesh(c, m.positions, m.indices, obj.name);
     }
-    case 'polymesh':
-      return sewMesh(c, obj.polymesh.verts.flat(), triangulate(obj.polymesh), obj.name);
+    case 'polymesh': {
+      const pm = evaluateModifiers(obj.polymesh, obj.modifiers); // 모디파이어 스택 결과 (형식 v22)
+      return sewMesh(c, pm.verts.flat(), triangulate(pm), obj.name);
+    }
     case 'step':
       return readStep(c.oc, obj.step.data, obj.name);
     case 'fillet': {

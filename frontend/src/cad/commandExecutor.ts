@@ -56,6 +56,7 @@ import {
   subdivideFaces,
   transformVerts,
 } from './polymesh';
+import { MAX_EVALUATED_FACES, estimateFaces, evaluateModifiers } from './polymeshModifiers';
 import { helixError, helixProfilePoints } from './sections';
 import { profileOf, resolveProfile } from './sketch';
 import { polygonError } from './solver';
@@ -498,6 +499,31 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (r.verts.some((v) => v.some((c) => !Number.isFinite(c) || Math.abs(c) > LIMITS.maxCoordinate))) return fail('점 좌표가 허용 범위를 벗어납니다');
       const updated = { ...target, polymesh: r } as CadObject;
       return done(model, { ...model, objects: model.objects.map((o) => (o.id === target.id ? updated : o)) }, cmd, target.id);
+    }
+    case 'set_modifiers':
+    case 'apply_modifier':
+    case 'set_shading': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'polymesh') return fail(`'${target.name}'은(는) 메시가 아니라 모디파이어를 쓸 수 없습니다`);
+      let updated: CadObject;
+      if (cmd.type === 'set_shading') updated = { ...target, smooth: cmd.smooth || undefined };
+      else if (cmd.type === 'set_modifiers') {
+        if (estimateFaces(target.polymesh, cmd.modifiers) > MAX_EVALUATED_FACES)
+          return fail(`모디파이어 결과가 너무 큽니다 (면 ${MAX_EVALUATED_FACES.toLocaleString()}개 초과) — 세분 단계나 배열 수를 줄이세요`);
+        updated = { ...target, modifiers: cmd.modifiers.length ? cmd.modifiers : undefined };
+      } else {
+        const mods = target.modifiers ?? [];
+        if (!mods.length) return fail(`'${target.name}'에 적용할 모디파이어가 없습니다`);
+        const n = cmd.all ? mods.length : 1;
+        const baked = evaluateModifiers(target.polymesh, mods.slice(0, n));
+        if (baked.verts.length > MAX_POLY_VERTS || baked.faces.length > MAX_POLY_FACES) return fail('적용하면 메시가 너무 큽니다 (점·면 최대 5만 개)');
+        const rest = mods.slice(n);
+        updated = { ...target, polymesh: baked, modifiers: rest.length ? rest : undefined };
+      }
+      // 빈 선택 항목은 저장하지 않는다
+      const clean = Object.fromEntries(Object.entries(updated).filter(([, v]) => v !== undefined)) as CadObject;
+      return done(model, { ...model, objects: model.objects.map((o) => (o.id === target.id ? clean : o)) }, cmd, target.id);
     }
   }
 }

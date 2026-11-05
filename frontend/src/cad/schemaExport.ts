@@ -8,6 +8,8 @@
  * 주의: .refine() 같은 교차 필드 규칙(예: 원뿔 반지름 중 하나는 0 초과)은
  * JSON Schema 로 표현되지 않는다. 이런 규칙은 description 에 남기고 서버 검증에서 다시 확인한다.
  */
+import { polyVolume, primitiveMesh } from './polymesh';
+import { evaluateModifiers } from './polymeshModifiers';
 import { z } from 'zod';
 import { CadCommandSchema, LIMITS, ModelDefinitionSchema, SetParamsParamsSchema, emptyModel } from './commandTypes';
 import { encodeMesh } from './meshData';
@@ -680,6 +682,27 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'mesh_edit', target: 'm', edit: { op: 'loop_cut', edge: [0, 4], factor: 0.5 } },
     ],
     bbox: [[-10, -10, 0], [10, 10, 30]],
+  },
+  // 형식 v22 모디파이어: 세분 표면 부피는 프론트 규칙으로 계산한 값 — 서버 polymesh.py 가 같은 점을 만들어야 같은 부피
+  'polymesh-subsurf': {
+    volume: polyVolume(evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'subsurf', levels: 2 }])),
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'subsurf', levels: 2 }] },
+    ],
+  },
+  'polymesh-mirror-array-solidify': {
+    // 큐브를 x+15 로 옮겨 미러 → 큐브 2개 (16000), 평면 20×20 두께 2 를 3개 배열 → 2400
+    volume: 16000 + 2400,
+    roots: 2,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      { type: 'mesh_edit', target: 'm', edit: { op: 'transform', verts: [0, 1, 2, 3, 4, 5, 6, 7], matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 15, 0, 0, 1] } },
+      { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'mirror', axis: 'x', merge: true }] },
+      { type: 'add_mesh', id: 'p', primitive: 'plane', params: { size: 20 }, position: [0, 60, 0] },
+      { type: 'set_modifiers', target: 'p', modifiers: [{ type: 'solidify', thickness: 2 }, { type: 'array', count: 3, offset: [30, 0, 0] }] },
+    ],
   },
   'polymesh-cut-box': {
     volume: 16000 - 500,

@@ -513,3 +513,14 @@ label.check.small { font-size: 12px; }
 .typed-input.on-paper span { color: #5b6878; }
 .typed-input.on-paper span b { background: #eef2f7; color: #1d2733; }
 .typed-input.on-paper span.active b { background: #1f5fd6; color: #fff; }
+.mprops .modifiers h3 { white-space: nowrap; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.mprops .modifiers h3 select { font: inherit; font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+.mprops .modifier { border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; margin: 4px 0; background: rgba(255, 255, 255, 0.03); }
+.mprops .modifier-head { display: flex; align-items: center; gap: 3px; margin-bottom: 2px; }
+.mprops .modifier-head .spacer { flex: 1; }
+.mprops .modifier-head button { padding: 1px 6px; font-size: 11px; }
+.mprops .seg-inline { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.mprops .seg-inline button { padding: 2px 8px; font-size: 12px; }
+.mprops .seg-inline button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mprops .seg-inline .check { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; margin-left: 6px; }
+.mprops .apply-all { width: 100%; margin: 4px 0; }

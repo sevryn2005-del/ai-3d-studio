@@ -65,7 +65,7 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   await expect(page.getByTestId('mode-object')).toHaveAttribute('aria-pressed', 'true');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(21);
+  expect(saved.formatVersion).toBe(22);
   expect(saved.model.workspace).toBe('modeling');
   const obj = saved.model.objects[0];
   expect(obj.kind).toBe('polymesh');
@@ -80,5 +80,45 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   const buf = readFileSync((await stl.path())!);
   expect(buf.length).toBeGreaterThan(84);
   await page.screenshot({ path: info.outputPath('modeling.png') });
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('모디파이어: Ctrl+2 세분 표면 → 미러 추가 → 부드러운 음영 → 맨 위 적용 → 저장', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.getByTestId('guide-add-cube').click();
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  const vp = page.locator('.modeling-viewport canvas');
+  const box = (await vp.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  // Ctrl+2: 세분 표면 2단계 (원본 메시는 그대로, 결과만 바뀜)
+  await page.keyboard.press('Control+2');
+  await expect(page.getByTestId('modifier-0')).toContainText('세분 표면');
+  await expect(page.getByTestId('mod-0-levels')).toHaveValue('2');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  // 미러 추가 (아래에 쌓인다), 부드러운 음영
+  await page.getByTestId('modifier-add').selectOption('mirror');
+  await expect(page.getByTestId('modifier-1')).toContainText('미러');
+  await page.getByTestId('shade-smooth').click();
+  await expect(page.getByTestId('shade-smooth')).toHaveAttribute('aria-pressed', 'true');
+  // 맨 위(세분 표면) 적용 → 원본이 96면, 미러만 남음
+  await page.getByTestId('modifier-apply').click();
+  await expect(page.getByTestId('mesh-stats')).toContainText('면96');
+  await expect(page.getByTestId('modifier-0')).toContainText('미러');
+  await expect(page.getByTestId('modifier-1')).toHaveCount(0);
+  // 실행 취소 1번 = 적용만 되돌림
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  await expect(page.getByTestId('modifier-1')).toContainText('미러');
+
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
+  expect(saved.formatVersion).toBe(22);
+  expect(saved.model.objects[0]).toMatchObject({ smooth: true, modifiers: [{ type: 'subsurf', levels: 2 }, { type: 'mirror', axis: 'x', merge: true }] });
   await expect(page.getByRole('alert')).toHaveCount(0);
 });

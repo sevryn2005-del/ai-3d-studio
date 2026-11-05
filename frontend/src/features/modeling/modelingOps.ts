@@ -147,3 +147,16 @@ export function canStartModal(kind: 'grab' | 'rotate' | 'scale' | 'extrude' | 'i
   }
   return st.selVerts.length > 0;
 }
+
+/** Ctrl+1~3: 세분 표면 단계 (없으면 추가), Ctrl+0: 세분 표면 빼기 (블렌더와 같음) */
+export function setSubsurfLevel(level: number) {
+  const o = activeObject();
+  if (!o || o.kind !== 'polymesh') return notify('세분 표면은 메시 객체에만 — 메시를 먼저 고르세요');
+  const mods = o.modifiers ?? [];
+  const i = mods.findIndex((m) => m.type === 'subsurf');
+  let next = [...mods];
+  if (level === 0) next = mods.filter((m) => m.type !== 'subsurf');
+  else if (i >= 0) next[i] = { type: 'subsurf', levels: level };
+  else next = [...mods, { type: 'subsurf', levels: level }];
+  useSceneStore.getState().submitNow({ type: 'set_modifiers', target: o.id, modifiers: next });
+}

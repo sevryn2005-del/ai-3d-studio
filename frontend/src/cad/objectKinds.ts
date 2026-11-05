@@ -223,7 +223,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
     case 'mesh':
       return `삼각형 ${Math.round((obj.mesh.indices.length * 3) / 4 / 12).toLocaleString()}개`;
     case 'polymesh':
-      return `점 ${obj.polymesh.verts.length.toLocaleString()} · 면 ${obj.polymesh.faces.length.toLocaleString()}`;
+      return `점 ${obj.polymesh.verts.length.toLocaleString()} · 면 ${obj.polymesh.faces.length.toLocaleString()}${obj.modifiers?.length ? ` · 모디파이어 ${obj.modifiers.length}` : ''}`;
     case 'pattern': {
       const p = obj.pattern;
       if (p.type === 'mirror') return `${p.plane} 평면`;

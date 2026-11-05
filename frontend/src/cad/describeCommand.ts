@@ -4,6 +4,7 @@ import type { CadCommand, ModelDefinition } from './commandTypes';
 import { OPERATION_INFO } from './objectKinds';
 import { MATE_LABEL } from './mates';
 import { formatMm } from './units';
+import { MODIFIER_LABEL } from './polymeshModifiers';
 
 const PARAM_LABEL: Record<string, string> = {
   width: '너비', depth: '깊이', height: '높이', radius: '반지름', radiusBottom: '아래 반지름', radiusTop: '위 반지름',
@@ -159,6 +160,12 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메시 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
     case 'add_mesh':
       return `메시 추가: ${MESH_LABEL[cmd.primitive]}`;
+    case 'set_modifiers':
+      return `${name(cmd.target)} 모디파이어: ${cmd.modifiers.map((m) => MODIFIER_LABEL[m.type]).join(' → ') || '없음'}`;
+    case 'apply_modifier':
+      return `${name(cmd.target)} 모디파이어 ${cmd.all ? '모두' : '맨 위'} 적용`;
+    case 'set_shading':
+      return `${name(cmd.target)} ${cmd.smooth ? '부드러운' : '각진'} 음영`;
     case 'mesh_edit':
       return `${name(cmd.target)} 메시 편집: ${MESH_EDIT_LABEL[cmd.edit.op]}`;
     case 'offset_entity':

@@ -6,6 +6,7 @@ import { boundaryEdgeCount, centroid, edges, selectedFaces } from '../../cad/pol
 import { NumberField } from '../PropertyPanel/NumberField';
 import { useModelingStore } from '../../features/modeling/modelingStore';
 import { ADD_MESH_ITEMS, addMesh } from '../../features/modeling/modelingOps';
+import { MODIFIER_LABEL } from '../../cad/polymeshModifiers';
 
 /** 아웃라이너 (블렌더 오른쪽 위): 객체 목록 · 보이기 토글 · 이름 바꾸기(더블클릭) */
 export function Outliner() {
@@ -97,7 +98,12 @@ function ObjectFields({ obj }: { obj: CadObject }) {
       {(['X', 'Y', 'Z'] as const).map((a, i) => (
         <NumberField key={a} label={a} value={t.rotation[i]!} unit="°" onCommit={(v) => setRot(i, v)} testId={`rot-${a.toLowerCase()}`} />
       ))}
-      {obj.kind === 'polymesh' && <MeshStats obj={obj} />}
+      {obj.kind === 'polymesh' && (
+        <>
+          <MeshStats obj={obj} />
+          <ModifierStack obj={obj} />
+        </>
+      )}
     </>
   );
 }
@@ -152,6 +158,7 @@ function EditStats({ obj, sel }: { obj: CadObject & { kind: 'polymesh' }; sel: n
         <p className="empty">클릭으로 점·선·면을 고르세요 (Shift = 더하기, A = 전체)</p>
       )}
       <MeshStats obj={obj} />
+      <ModifierStack obj={obj} />
     </>
   );
 }
@@ -204,6 +211,118 @@ export function ModelingEmptyGuide() {
             + {i.label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+type Mod = NonNullable<(CadObject & { kind: 'polymesh' })['modifiers']>[number];
+const NEW_MODIFIER: Record<Mod['type'], Mod> = {
+  subsurf: { type: 'subsurf', levels: 1 },
+  mirror: { type: 'mirror', axis: 'x', merge: true },
+  array: { type: 'array', count: 3, offset: [30, 0, 0] },
+  solidify: { type: 'solidify', thickness: 2 },
+};
+
+/** 모디파이어 스택 (블렌더 속성 편집기의 렌치 탭): 위에서부터 적용. 추가·값·순서·삭제·적용, 부드러운 음영 */
+export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }) {
+  const mods = obj.modifiers ?? [];
+  const { submitNow } = useSceneStore.getState();
+  const set = (next: Mod[]) => submitNow({ type: 'set_modifiers', target: obj.id, modifiers: next });
+  const patch = (i: number, m: Mod) => set(mods.map((x, k) => (k === i ? m : x)));
+  const move = (i: number, d: -1 | 1) => {
+    const next = [...mods];
+    [next[i], next[i + d]] = [next[i + d]!, next[i]!];
+    set(next);
+  };
+  return (
+    <div className="modifiers" data-testid="modifier-stack">
+      <h3>
+        모디파이어
+        <select
+          aria-label="모디파이어 추가"
+          data-testid="modifier-add"
+          value=""
+          onChange={(e) => e.target.value && set([...mods, NEW_MODIFIER[e.target.value as Mod['type']]])}
+        >
+          <option value="">+ 추가</option>
+          {(Object.keys(NEW_MODIFIER) as Mod['type'][]).map((t) => (
+            <option key={t} value={t}>
+              {MODIFIER_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </h3>
+      {mods.map((m, i) => (
+        <div className="modifier" key={i} data-testid={`modifier-${i}`}>
+          <div className="modifier-head">
+            <b>{MODIFIER_LABEL[m.type]}</b>
+            <span className="spacer" />
+            <button disabled={i === 0} onClick={() => move(i, -1)} title="위로">↑</button>
+            <button disabled={i === mods.length - 1} onClick={() => move(i, 1)} title="아래로">↓</button>
+            {i === 0 && (
+              <button onClick={() => submitNow({ type: 'apply_modifier', target: obj.id })} title="메시에 굳히기 (맨 위만)" data-testid="modifier-apply">
+                적용
+              </button>
+            )}
+            <button onClick={() => set(mods.filter((_, k) => k !== i))} title="삭제" data-testid={`modifier-remove-${i}`}>✕</button>
+          </div>
+          {m.type === 'subsurf' && (
+            <NumberField label="단계" value={m.levels} unit="개" onCommit={(v) => patch(i, { ...m, levels: Math.max(1, Math.min(3, Math.round(v))) })} testId={`mod-${i}-levels`} />
+          )}
+          {m.type === 'mirror' && (
+            <div className="field">
+              <label>축</label>
+              <div className="seg-inline">
+                {(['x', 'y', 'z'] as const).map((a) => (
+                  <button key={a} aria-pressed={m.axis === a} onClick={() => patch(i, { ...m, axis: a })}>
+                    {a.toUpperCase()}
+                  </button>
+                ))}
+                <label className="check">
+                  <input type="checkbox" checked={m.merge} onChange={(e) => patch(i, { ...m, merge: e.target.checked })} /> 합치기
+                </label>
+              </div>
+            </div>
+          )}
+          {m.type === 'array' && (
+            <>
+              <NumberField label="개수" value={m.count} unit="개" onCommit={(v) => patch(i, { ...m, count: Math.max(2, Math.min(50, Math.round(v))) })} testId={`mod-${i}-count`} />
+              {(['X', 'Y', 'Z'] as const).map((a, k) => (
+                <NumberField
+                  key={a}
+                  label={`간격 ${a}`}
+                  value={m.offset[k]!}
+                  unit="mm"
+                  onCommit={(v) => {
+                    const o = [...m.offset] as [number, number, number];
+                    o[k] = v;
+                    patch(i, { ...m, offset: o });
+                  }}
+                />
+              ))}
+            </>
+          )}
+          {m.type === 'solidify' && (
+            <NumberField label="두께" value={m.thickness} unit="mm" onCommit={(v) => patch(i, { ...m, thickness: Math.max(0.01, v) })} testId={`mod-${i}-thickness`} />
+          )}
+        </div>
+      ))}
+      {mods.length > 1 && (
+        <button className="apply-all" onClick={() => submitNow({ type: 'apply_modifier', target: obj.id, all: true })}>
+          모두 적용
+        </button>
+      )}
+      <div className="field">
+        <label>음영</label>
+        <div className="seg-inline">
+          <button aria-pressed={!obj.smooth} onClick={() => obj.smooth && submitNow({ type: 'set_shading', target: obj.id, smooth: false })} data-testid="shade-flat">
+            각지게
+          </button>
+          <button aria-pressed={!!obj.smooth} onClick={() => !obj.smooth && submitNow({ type: 'set_shading', target: obj.id, smooth: true })} data-testid="shade-smooth">
+            부드럽게
+          </button>
+        </div>
       </div>
     </div>
   );

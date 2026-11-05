@@ -482,6 +482,15 @@ export const PolyMeshDataSchema = z.strictObject({
 });
 export type PolyMeshData = z.infer<typeof PolyMeshDataSchema>;
 
+/** 메시 모디파이어 (형식 v22, 블렌더 모디파이어 스택) — cad/polymeshModifiers.ts. 위에서부터 차례로 적용 */
+export const ModifierSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('subsurf'), levels: z.number().int().min(1).max(3) }),
+  z.strictObject({ type: z.literal('mirror'), axis: z.enum(['x', 'y', 'z']), merge: z.boolean() }),
+  z.strictObject({ type: z.literal('array'), count: z.number().int().min(2).max(50), offset: Vec3Schema }),
+  z.strictObject({ type: z.literal('solidify'), thickness: z.number().min(0.01).max(LIMITS.maxDimension) }),
+]);
+export const MAX_MODIFIERS = 16;
+
 export const CadObjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     ...objectBase,
@@ -548,7 +557,14 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('mesh'),
     mesh: z.strictObject({ positions: MeshBase64Schema, indices: MeshBase64Schema }),
   }),
-  z.strictObject({ ...objectBase, kind: z.literal('polymesh'), polymesh: PolyMeshDataSchema }),
+  z.strictObject({
+    ...objectBase,
+    kind: z.literal('polymesh'),
+    polymesh: PolyMeshDataSchema,
+    /** 형식 v22: 모디파이어 스택, 부드러운 음영(화면 표시만) */
+    modifiers: z.array(ModifierSchema).max(MAX_MODIFIERS).optional(),
+    smooth: z.boolean().optional(),
+  }),
   /**
    * 모서리 처리 (형식 v9, 정밀 엔진 — 서버 CadQuery·브라우저 OCCT): 원본(source, 자식) 형상의 모서리를 규칙(edges)으로 골라
    * 필렛(둥글게, size = 반지름) 또는 모따기(size = 깎는 거리). 어떤 형상(불리언·돌출·회전 결과 포함)에도 쓸 수 있다
@@ -661,7 +677,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 21;
+export const MODEL_SCHEMA_VERSION = 22;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -1078,6 +1094,16 @@ export const MeshEditSchema = z.discriminatedUnion('op', [
 ]);
 export type MeshEdit = z.infer<typeof MeshEditSchema>;
 export const MeshEditCommandSchema = z.strictObject({ type: z.literal('mesh_edit'), target: ObjectIdSchema, edit: MeshEditSchema });
+/** 모디파이어 스택 바꾸기 (추가·삭제·순서·값 모두 — 스택 전체를 보낸다) */
+export const SetModifiersCommandSchema = z.strictObject({
+  type: z.literal('set_modifiers'),
+  target: ObjectIdSchema,
+  modifiers: z.array(ModifierSchema).max(MAX_MODIFIERS),
+});
+/** 모디파이어 적용: 맨 위 하나(또는 all = 전부)를 메시에 굳힌다 */
+export const ApplyModifierCommandSchema = z.strictObject({ type: z.literal('apply_modifier'), target: ObjectIdSchema, all: z.boolean().optional() });
+/** 부드러운 / 각진 음영 (블렌더 Shade Smooth / Flat) */
+export const SetShadingCommandSchema = z.strictObject({ type: z.literal('set_shading'), target: ObjectIdSchema, smooth: z.boolean() });
 
 /** 모서리 처리 만들기 (정밀 엔진): target(최상위)을 원본으로 감싼다 */
 export const EdgeFeatureCommandSchema = z.strictObject({
@@ -1291,6 +1317,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetDrawingCommandSchema,
   AddMeshCommandSchema,
   MeshEditCommandSchema,
+  SetModifiersCommandSchema,
+  ApplyModifierCommandSchema,
+  SetShadingCommandSchema,
   InsertPartCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,

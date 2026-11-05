@@ -2710,6 +2710,183 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "set_modifiers"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "modifiers": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "subsurf"
+                  },
+                  "levels": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "type",
+                  "levels"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "mirror"
+                  },
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "x",
+                      "y",
+                      "z"
+                    ]
+                  },
+                  "merge": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "axis",
+                  "merge"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "array"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 50
+                  },
+                  "offset": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "type",
+                  "count",
+                  "offset"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "solidify"
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "maximum": 1000
+                  }
+                },
+                "required": [
+                  "type",
+                  "thickness"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "modifiers"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "apply_modifier"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "all": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_shading"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "smooth": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "smooth"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "insert_part"
         },
         "name": {
@@ -5530,6 +5707,124 @@
                           "faces"
                         ],
                         "additionalProperties": false
+                      },
+                      "modifiers": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "subsurf"
+                                },
+                                "levels": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 3
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "levels"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "mirror"
+                                },
+                                "axis": {
+                                  "type": "string",
+                                  "enum": [
+                                    "x",
+                                    "y",
+                                    "z"
+                                  ]
+                                },
+                                "merge": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "axis",
+                                "merge"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "array"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "minimum": 2,
+                                  "maximum": 50
+                                },
+                                "offset": {
+                                  "type": "array",
+                                  "prefixItems": [
+                                    {
+                                      "type": "number",
+                                      "minimum": -10000,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "number",
+                                      "minimum": -10000,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "number",
+                                      "minimum": -10000,
+                                      "maximum": 10000
+                                    }
+                                  ],
+                                  "items": false,
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "count",
+                                "offset"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "solidify"
+                                },
+                                "thickness": {
+                                  "type": "number",
+                                  "minimum": 0.01,
+                                  "maximum": 1000
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "thickness"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "smooth": {
+                        "type": "boolean"
                       }
                     },
                     "required": [

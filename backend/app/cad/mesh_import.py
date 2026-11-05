@@ -7,10 +7,15 @@ OCCT 는 삼각형마다 면을 만들어 꿰매므로 느리다 → 서버 엔�
 from __future__ import annotations
 
 import cadquery as cq
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon, BRepBuilderAPI_MakeSolid, BRepBuilderAPI_Sewing
+from OCP.BRepBuilderAPI import (
+    BRepBuilderAPI_MakeFace,
+    BRepBuilderAPI_MakePolygon,
+    BRepBuilderAPI_MakeSolid,
+    BRepBuilderAPI_Sewing,
+)
 from OCP.gp import gp_Pnt
 from OCP.ShapeFix import ShapeFix_Solid
-from OCP.TopAbs import TopAbs_SHELL
+from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_SHELL
 from OCP.TopoDS import TopoDS
 
 from app.cad.mesh_data import decode, mesh_error  # noqa: F401  (mesh_error 재노출)
@@ -23,8 +28,11 @@ def mesh_solid(positions: str, indices: str, name: str) -> cq.Shape:
     return sew_triangles(v, t, name)
 
 
-def polymesh_solid(verts, faces, name: str) -> cq.Shape:
-    """편집 메시 (형식 v20): 다각형 면을 부채꼴로 삼각형 나눔 (프론트 cad/polymesh.ts triangulate 와 같은 규칙)"""
+def polymesh_solid(verts, faces, name: str, modifiers=None) -> cq.Shape:
+    """편집 메시 (형식 v20): 모디파이어(v22)를 적용한 뒤 다각형 면을 부채꼴로 삼각형 나눔 (프론트 triangulate 와 같은 규칙)"""
+    from app.cad.polymesh import evaluate
+
+    verts, faces = evaluate(verts, faces, modifiers)
     t = [(f[0], f[i], f[i + 1]) for f in faces for i in range(1, len(f) - 1)]
     return sew_triangles([tuple(p) for p in verts], t, name)
 
@@ -44,12 +52,24 @@ def sew_triangles(v, t, name: str) -> cq.Shape:
                 sew.Add(face.Face())
     sew.Perform()
     sewed = sew.SewedShape()
-    if sewed.ShapeType() != TopAbs_SHELL:
-        raise GeometryError(f"'{name}': 가져온 메시가 닫혀 있지 않습니다 (구멍·떨어진 모서리)")
-    solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(sewed)).Solid()
-    fix = ShapeFix_Solid(solid)
-    fix.Perform()
-    shape = cq.Shape.cast(fix.Solid())
-    if shape.Volume() <= 0:
-        raise GeometryError(f"'{name}': 가져온 메시의 안팎(면 방향)이 뒤집혀 있습니다")
-    return shape
+
+    def to_solid(shell) -> cq.Shape:
+        solid = BRepBuilderAPI_MakeSolid(TopoDS.Shell_s(shell)).Solid()
+        fix = ShapeFix_Solid(solid)
+        fix.Perform()
+        shape = cq.Shape.cast(fix.Solid())
+        if shape.Volume() <= 0:
+            raise GeometryError(f"'{name}': 가져온 메시의 안팎(면 방향)이 뒤집혀 있습니다")
+        return shape
+
+    open_error = GeometryError(f"'{name}': 가져온 메시가 닫혀 있지 않습니다 (구멍·떨어진 모서리)")
+    if sewed.ShapeType() == TopAbs_SHELL:
+        return to_solid(sewed)
+    # 떨어진 조각 여러 개 (미러·배열 모디파이어, 형식 v22): 조각마다 솔리드 → 묶음 (occtGeometry.ts sewMesh 와 같음)
+    if sewed.ShapeType() != TopAbs_COMPOUND:
+        raise open_error
+    whole = cq.Shape.cast(sewed)
+    shells = [cq.Shape.cast(s.wrapped) for s in whole.Shells()]
+    if not shells or sum(len(sh.Faces()) for sh in shells) != len(whole.Faces()):
+        raise open_error
+    return cq.Compound.makeCompound([to_solid(sh.wrapped) for sh in shells])

@@ -318,6 +318,9 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if id_used(c["id"]):
                     errors.append(f"commands[{i}].id: id '{c['id']}' is already used")
                 kinds[c["id"]] = "polymesh"
+        elif t in ("set_modifiers", "apply_modifier", "set_shading"):
+            if exists(i, c["target"], "target") and kinds[c["target"]] != "polymesh":
+                errors.append(f"commands[{i}].target: modifiers and shading only work on meshes from add_mesh; '{c['target']}' is a {kinds[c['target']]}")
         elif t == "mesh_edit":
             # 점·면 번호로 고르는 편집은 사용자가 화면에서 한다 (AI 는 번호를 볼 수 없다)
             errors.append(f"commands[{i}]: mesh_edit is done by the user in edit mode, not by AI")

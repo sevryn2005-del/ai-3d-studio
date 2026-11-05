@@ -4,11 +4,21 @@ import type { ThreeEvent } from '@react-three/fiber';
 import type { CadObject, Transform } from '../../cad/commandTypes';
 import { edges, selectedFaces, triangulate, type PolyMesh } from '../../cad/polymesh';
 import type { SelectMode } from '../../features/modeling/modelingStore';
+import { evaluateModifiers } from '../../cad/polymeshModifiers';
 
 const DEG = Math.PI / 180;
 export const MESH_COLOR = '#b4b4b4';
 export const SELECT_COLOR = '#ffa033';
 export const ACTIVE_COLOR = '#ffd27a';
+
+/** 부드러운 음영: 점을 공유하는 삼각형 지오메트리 (점 법선 = 이웃 면 평균) */
+function smoothGeometry(m: PolyMesh): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(Float32Array.from(m.verts.flat()), 3));
+  g.setIndex(triangulate(m));
+  g.computeVertexNormals();
+  return g;
+}
 
 /** 평면 음영(면마다 법선) 삼각형 지오메트리 + 삼각형 → 원래 면 번호 (편집 모드 면 고르기) */
 export function polyGeometry(m: PolyMesh): BufferGeometry {
@@ -67,6 +77,11 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
   const m = mesh ?? object.polymesh;
   const t = transform ?? object.transform;
   const geo = useMemo(() => polyGeometry(m), [m]);
+  // 모디파이어 스택 결과 (형식 v22). 편집 모드에서는 원본이 "케이지"(선·반투명 면)로, 결과가 음영으로 보인다
+  const hasMods = !!object.modifiers?.length;
+  const result = useMemo(() => (hasMods ? evaluateModifiers(m, object.modifiers) : m), [m, object.modifiers, hasMods]);
+  const shaded = useMemo(() => (object.smooth ? smoothGeometry(result) : hasMods ? polyGeometry(result) : geo), [result, object.smooth, hasMods, geo]);
+  const resultEdges = useMemo(() => (hasMods && selected && !editing ? edgeGeometry(result, edges(result)) : null), [hasMods, selected, editing, result]);
   const allEdges = useMemo(() => edges(m), [m]);
   const edgeGeo = useMemo(() => edgeGeometry(m, allEdges), [m, allEdges]);
   const sel = useMemo(() => new Set(selVerts), [selVerts]);
@@ -89,15 +104,33 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
       rotation={[t.rotation[0] * DEG, t.rotation[1] * DEG, t.rotation[2] * DEG, 'XYZ']}
       userData={{ cadObject: object.id }}
     >
-      <mesh
-        geometry={geo}
-        name={editing ? 'polymesh-edit' : `polymesh-${object.id}`}
-        userData={{ objectId: object.id }}
-        onClick={onPick}
-      >
-        <meshStandardMaterial color={object.color ?? MESH_COLOR} flatShading side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
-      </mesh>
-      {(editing || selected) && (
+      {/* 음영 결과 (모디파이어·부드러운 음영 반영). 편집 모드에서 모디파이어가 있으면 고르기는 아래 케이지가 받는다 */}
+      {(!editing || hasMods || object.smooth) && (
+        <mesh
+          geometry={shaded}
+          name={editing ? 'polymesh-result' : `polymesh-${object.id}`}
+          userData={{ objectId: object.id }}
+          onClick={editing ? undefined : onPick}
+          raycast={editing ? () => null : undefined}
+        >
+          <meshStandardMaterial key={object.smooth ? 'smooth' : 'flat'} color={object.color ?? MESH_COLOR} flatShading={!object.smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+        </mesh>
+      )}
+      {editing && (
+        <mesh geometry={geo} name="polymesh-edit" userData={{ objectId: object.id }} onClick={onPick}>
+          {hasMods || object.smooth ? (
+            <meshBasicMaterial color="#9fb4d0" transparent opacity={hasMods ? 0.12 : 0.01} depthWrite={false} side={2} />
+          ) : (
+            <meshStandardMaterial color={object.color ?? MESH_COLOR} flatShading side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+          )}
+        </mesh>
+      )}
+      {resultEdges && (
+        <lineSegments geometry={resultEdges} raycast={() => null}>
+          <lineBasicMaterial color={SELECT_COLOR} transparent opacity={0.35} />
+        </lineSegments>
+      )}
+      {(editing || (selected && !hasMods)) && (
         <lineSegments geometry={edgeGeo} raycast={() => null}>
           <lineBasicMaterial color={editing ? '#111111' : SELECT_COLOR} />
         </lineSegments>

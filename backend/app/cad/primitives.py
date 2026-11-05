@@ -430,7 +430,7 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
     if isinstance(obj, MeshObject):
         return mesh_solid(obj.mesh.positions, obj.mesh.indices, obj.name)
     if isinstance(obj, PolyMeshObject):
-        return polymesh_solid(obj.polymesh.verts, obj.polymesh.faces, obj.name)
+        return polymesh_solid(obj.polymesh.verts, obj.polymesh.faces, obj.name, obj.modifiers)
     if isinstance(obj, (ExtrudeObject, RevolveObject)):
         return extrude_solid(obj, index, sketches)
 

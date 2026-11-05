@@ -22,7 +22,7 @@ def obj(oid, kind, params=None, position=(0, 0, 0), rotation=(0, 0, 0), boolean=
 
 
 def model(*objects):
-    return ModelDefinition.model_validate({"schemaVersion": 21, "units": "mm", "sketches": [], "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 22, "units": "mm", "sketches": [], "objects": list(objects)})
 
 
 def world_solid(m: ModelDefinition, oid: str) -> cq.Shape:
