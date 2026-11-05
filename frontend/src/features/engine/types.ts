@@ -41,6 +41,17 @@ export interface CadEngine {
   readonly exportFormats: readonly ExportFormat[];
   evaluate(model: ModelDefinition, signal?: AbortSignal): Promise<EngineEvaluation>;
   exportFile(format: ExportFormat, model: ModelDefinition, signal?: AbortSignal): Promise<Blob>;
+  /** 간섭 검사 (형식 v11): 서로 파고드는 최상위 객체 쌍과 겹친 부피(mm³). 계산 실패는 EngineError */
+  interference(model: ModelDefinition, signal?: AbortSignal): Promise<InterferencePair[]>;
 }
+
+export interface InterferencePair {
+  a: string;
+  b: string;
+  volume: number;
+}
+
+/** 이보다 작은 겹침 부피(mm³)는 맞닿음(수치 오차)으로 본다 — 서버 jobs.INTERFERENCE_MIN_VOLUME 과 같음 */
+export const INTERFERENCE_MIN_VOLUME = 1e-3;
 
 export class EngineError extends Error {}

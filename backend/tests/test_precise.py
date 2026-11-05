@@ -14,7 +14,7 @@ from app.cad.primitives import GeometryError, build_solid
 
 
 def model(*objects) -> ModelDefinition:
-    return ModelDefinition.model_validate({"schemaVersion": 10, "units": "mm", "sketches": [], "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 11, "units": "mm", "sketches": [], "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}

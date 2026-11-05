@@ -298,7 +298,7 @@ export function degreesOfFreedom(sketch: Sketch): number {
  * 구속이 모자란(자유도가 남은) 스케치에서 현재 좌표에서 가장 적게 움직이는 해 쪽으로 간다 → 사용자가 그린 모양을 최대한 유지.
  * λ 는 비용이 줄면 작게, 늘면 크게 (레벤버그-마쿼트 방식).
  */
-function minimalMoveSolve(R: (x: number[]) => number[], x0: number[]): { x: number[]; r: number[] } {
+export function minimalMoveSolve(R: (x: number[]) => number[], x0: number[]): { x: number[]; r: number[] } {
   let x = x0;
   let r = R(x);
   let cost = sumSq(r);
@@ -336,7 +336,7 @@ function minimalMoveSolve(R: (x: number[]) => number[], x0: number[]): { x: numb
 const maxAbs = (v: number[]) => v.reduce((m, a) => Math.max(m, Math.abs(a)), 0);
 const sumSq = (v: number[]) => v.reduce((s, a) => s + a * a, 0);
 
-function jacobian(R: (x: number[]) => number[], x: number[], m: number): number[][] {
+export function jacobian(R: (x: number[]) => number[], x: number[], m: number): number[][] {
   const J = Array.from({ length: m }, () => new Array<number>(x.length).fill(0));
   for (let j = 0; j < x.length; j++) {
     const h = 1e-6 * Math.max(1, Math.abs(x[j]!));
@@ -375,7 +375,7 @@ function solveLinear(A: number[][], b: number[]): number[] | null {
 }
 
 /** 행렬 계수 (가우스 소거, 상대 허용 오차) */
-function rank(J: number[][]): number {
+export function rank(J: number[][]): number {
   const M = J.map((row) => row.slice());
   const rows = M.length;
   const cols = M[0]?.length ?? 0;

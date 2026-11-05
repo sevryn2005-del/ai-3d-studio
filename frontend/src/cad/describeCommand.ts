@@ -2,6 +2,7 @@
 import { CONSTRAINT_LABEL } from './solver';
 import type { CadCommand, ModelDefinition } from './commandTypes';
 import { OPERATION_INFO } from './objectKinds';
+import { MATE_LABEL } from './mates';
 import { formatMm } from './units';
 
 const PARAM_LABEL: Record<string, string> = {
@@ -119,6 +120,14 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `로프트 (${cmd.sections.map((s) => sketchName(s.sketch)).join(' → ')})`;
     case 'sweep':
       return `스윕 (${sketchName(cmd.sketch)} ${cmd.profile} → ${sketchName(cmd.pathSketch)} ${cmd.path} 경로)`;
+    case 'add_mate':
+      return `메이트 ${MATE_LABEL[cmd.mate]}: ${cmd.refs.join(' ↔ ')}${cmd.value !== undefined ? ` (${formatMm(cmd.value)}${cmd.mate === 'angle' ? '°' : 'mm'})` : ''}`;
+    case 'set_mate':
+      return `메이트 ${cmd.mate} 변경${cmd.value !== undefined ? ` → ${formatMm(cmd.value)}` : ''}${cmd.flip !== undefined ? ' (방향 뒤집기)' : ''}`;
+    case 'delete_mate':
+      return `메이트 ${cmd.mate} 삭제`;
+    case 'insert_part':
+      return `부품 삽입 "${cmd.name}" (객체 ${cmd.part.objects.length}개)`;
     case 'set_thin':
       return `${name(cmd.target)} 두께 → ${formatMm(cmd.thin)}mm`;
     case 'add_path':

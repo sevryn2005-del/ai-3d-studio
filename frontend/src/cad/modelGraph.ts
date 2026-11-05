@@ -9,6 +9,7 @@ import { edgeFeatureError } from './edgeFeature';
 import { patternError, shellError } from './features';
 import { refTarget, sketchErrors, sketchRefs, revolveProfileError } from './sketch';
 import { meshError } from './meshData';
+import { MATE_TOLERANCE, mateError, mateResiduals } from './mates';
 
 export function childIds(obj: CadObject): ObjectId[] {
   if (obj.kind === 'boolean') return [obj.boolean.base, ...obj.boolean.tools];
@@ -162,6 +163,15 @@ export function validateGraph(model: ModelDefinition): string[] {
       }
     }
   }
+  // 조립 메이트 (형식 v11): 형식 + 저장된 변환이 메이트를 만족하는지 (해석기가 푼 결과만 저장된다)
+  const mateIds = new Set<string>();
+  for (const m of model.mates ?? []) {
+    if (mateIds.has(m.id)) errors.push(`메이트 ID 가 중복되었습니다: ${m.id}`);
+    mateIds.add(m.id);
+    const err = mateError(model, m);
+    if (err) errors.push(`메이트 ${m.id}: ${err}`);
+  }
+  for (const [id, res] of mateResiduals(model)) if (res > MATE_TOLERANCE) errors.push(`메이트 ${id} 을(를) 만족하지 않습니다 (오차 ${res.toExponential(1)})`);
   return errors;
 }
 

@@ -713,11 +713,27 @@ CadObject = Annotated[
 ]
 
 
+MateType = Literal["coincident", "distance", "parallel", "perpendicular", "angle", "concentric", "fix"]
+MateRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}(\.(top|bottom|\+X|-X|\+Y|-Y|start|end|\+u|-u|\+v|-v|axis))?$")]
+MAX_MATES = 200
+
+
+class Mate(Strict):
+    """조립 메이트 (형식 v11) — mates.py"""
+
+    id: ObjectId
+    type: MateType
+    refs: Annotated[list[MateRef], Field(min_length=1, max_length=2)]
+    value: Annotated[Coordinate | None, Field(exclude_if=lambda v: v is None)] = None
+    flip: Annotated[StrictBool | None, Field(exclude_if=lambda v: v is None)] = None
+
+
 class ModelDefinition(Strict):
-    schemaVersion: Literal[10]
+    schemaVersion: Literal[11]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
+    mates: Annotated[list[Mate] | None, Field(max_length=MAX_MATES, exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------
@@ -842,6 +858,39 @@ class SetThin(Strict):
     type: Literal["set_thin"]
     target: ObjectId
     thin: Dimension
+
+
+class AddMate(Strict):
+    type: Literal["add_mate"]
+    id: ObjectId | None = None
+    mate: MateType
+    refs: Annotated[list[MateRef], Field(min_length=1, max_length=2)]
+    value: Coordinate | None = None
+    flip: StrictBool | None = None
+
+
+class SetMate(Strict):
+    type: Literal["set_mate"]
+    mate: ObjectId
+    value: Coordinate | None = None
+    flip: StrictBool | None = None
+
+
+class DeleteMate(Strict):
+    type: Literal["delete_mate"]
+    mate: ObjectId
+
+
+class PartData(Strict):
+    sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
+    objects: Annotated[list[CadObject], Field(min_length=1, max_length=Limits.MAX_OBJECTS)]
+
+
+class InsertPart(Strict):
+    type: Literal["insert_part"]
+    name: Name
+    part: PartData
+    position: Vec3 | None = None
 
 
 class AddLine(Strict):
@@ -1180,6 +1229,10 @@ CadCommand = Annotated[
         Loft,
         SweepCommand,
         SetThin,
+        AddMate,
+        SetMate,
+        DeleteMate,
+        InsertPart,
         ImportMesh,
         EdgeFeatureCommand,
         SetEdgeFeature,
@@ -1240,6 +1293,10 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     Loft,
     SweepCommand,
     SetThin,
+    AddMate,
+    SetMate,
+    DeleteMate,
+    InsertPart,
     ImportMesh,
     EdgeFeatureCommand,
     SetEdgeFeature,

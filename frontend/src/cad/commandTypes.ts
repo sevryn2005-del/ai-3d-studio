@@ -529,15 +529,66 @@ export type BooleanObject = CadObjectOf<'boolean'>;
 export type ExtrudeObject = CadObjectOf<'extrude'>;
 export type PatternObject = CadObjectOf<'pattern'>;
 
-export const MODEL_SCHEMA_VERSION = 10;
+/**
+ * 조립 메이트 (형식 v11): 최상위 객체(부품)끼리의 위치 관계. 참조 = "객체ID.면이름" | "객체ID.axis" | (fix) "객체ID".
+ * 저장된 변환이 푼 결과다 (규칙: cad/mates.ts, 서버 app/cad/mates.py 가 만족 여부를 검사)
+ */
+export const MateTypeSchema = z.enum(['coincident', 'distance', 'parallel', 'perpendicular', 'angle', 'concentric', 'fix']);
+export const MateRefSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,63}(\.(top|bottom|\+X|-X|\+Y|-Y|start|end|\+u|-u|\+v|-v|axis))?$/, '메이트 참조는 "객체ID.면" 또는 "객체ID.axis" 입니다');
+export const MateSchema = z.strictObject({
+  id: ObjectIdSchema,
+  type: MateTypeSchema,
+  refs: z.array(MateRefSchema).min(1).max(2),
+  value: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate).optional(),
+  flip: z.boolean().optional(),
+});
+export type Mate = z.infer<typeof MateSchema>;
+export const MAX_MATES = 200;
+
+export const MODEL_SCHEMA_VERSION = 11;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
   units: z.literal('mm'),
   sketches: z.array(SketchSchema).max(LIMITS.maxSketches),
   objects: z.array(CadObjectSchema).max(LIMITS.maxObjects, `객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`),
+  mates: z.array(MateSchema).max(MAX_MATES).optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
+
+/** 메이트 추가 (형식 v11): 추가하면 부품 위치를 다시 푼다 */
+export const AddMateCommandSchema = z.strictObject({
+  type: z.literal('add_mate'),
+  id: ObjectIdSchema.optional(),
+  mate: MateTypeSchema,
+  refs: z.array(MateRefSchema).min(1).max(2),
+  value: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate).optional(),
+  flip: z.boolean().optional(),
+});
+/** 메이트 값·방향 바꾸기 */
+export const SetMateCommandSchema = z.strictObject({
+  type: z.literal('set_mate'),
+  mate: ObjectIdSchema,
+  value: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate).optional(),
+  flip: z.boolean().optional(),
+});
+export const DeleteMateCommandSchema = z.strictObject({ type: z.literal('delete_mate'), mate: ObjectIdSchema });
+
+/**
+ * 부품 삽입 (조립품): 다른 프로젝트(.ai3d)의 설계 원본을 복사해 넣는다. ID 는 겹치지 않게 다시 붙이고,
+ * 최상위 객체가 여럿이면 하나의 합치기로 묶어 부품 하나가 되게 한다
+ */
+export const InsertPartCommandSchema = z.strictObject({
+  type: z.literal('insert_part'),
+  name: NameSchema,
+  part: z.strictObject({
+    sketches: z.array(SketchSchema).max(LIMITS.maxSketches),
+    objects: z.array(CadObjectSchema).min(1).max(LIMITS.maxObjects),
+  }),
+  position: Vec3Schema.optional(),
+});
 
 // ---- CAD 명령 ------------------------------------------------------------
 const createBase = {
@@ -1033,6 +1084,10 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   LoftCommandSchema,
   SweepCommandSchema,
   SetThinCommandSchema,
+  AddMateCommandSchema,
+  SetMateCommandSchema,
+  DeleteMateCommandSchema,
+  InsertPartCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,
   SetEdgeFeatureCommandSchema,

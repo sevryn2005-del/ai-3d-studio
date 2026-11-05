@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 10
+      "const": 11
     },
     "units": {
       "type": "string",
@@ -2798,6 +2798,54 @@
             "additionalProperties": false
           }
         ]
+      }
+    },
+    "mates": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "coincident",
+              "distance",
+              "parallel",
+              "perpendicular",
+              "angle",
+              "concentric",
+              "fix"
+            ]
+          },
+          "refs": {
+            "minItems": 1,
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(\\.(top|bottom|\\+X|-X|\\+Y|-Y|start|end|\\+u|-u|\\+v|-v|axis))?$"
+            }
+          },
+          "value": {
+            "type": "number",
+            "minimum": -10000,
+            "maximum": 10000
+          },
+          "flip": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "refs"
+        ],
+        "additionalProperties": false
       }
     }
   },

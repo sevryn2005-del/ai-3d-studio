@@ -575,6 +575,25 @@ export function buildSurveyFixture() {
   );
 }
 
+/**
+ * 조립품 (형식 v11): 받침 위에 뚜껑(일치), 기둥 축이 받침 구멍 축과 동심 + 거리, 각도 메이트.
+ * 프론트엔드 실행기가 푼 결과를 서버 test_mates.py 가 같은 잔차 규칙으로 검사한다
+ */
+export const ASSEMBLY_COMMANDS: unknown[] = [
+  { type: 'create_box', id: 'base', width: 60, depth: 40, height: 10 },
+  { type: 'create_box', id: 'lid', width: 30, depth: 20, height: 4, position: [80, 10, 3] },
+  { type: 'set_transform', target: 'lid', rotation: [12, -7, 30] },
+  { type: 'create_cylinder', id: 'pin', radius: 3, height: 25, position: [-40, 50, 6] },
+  { type: 'set_transform', target: 'pin', rotation: [30, 0, 0] },
+  { type: 'create_cylinder', id: 'post', radius: 8, height: 6, position: [20, 0, 10] },
+  { type: 'add_mate', id: 'm_lid', mate: 'coincident', refs: ['base.top', 'lid.bottom'] },
+  { type: 'add_mate', id: 'm_lid_side', mate: 'parallel', refs: ['base.+X', 'lid.+X'] },
+  { type: 'add_mate', id: 'm_post', mate: 'coincident', refs: ['base.top', 'post.bottom'] },
+  { type: 'add_mate', id: 'm_axis', mate: 'concentric', refs: ['post.axis', 'pin.axis'] },
+  { type: 'add_mate', id: 'm_gap', mate: 'distance', refs: ['post.top', 'pin.bottom'], value: 1.5 },
+  { type: 'add_mate', id: 'm_tilt', mate: 'angle', refs: ['base.+Y', 'lid.+X'], value: 90 },
+];
+
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */
 export function generateSchemas(samples: FixtureSamples): Record<string, string> {
   return {
@@ -586,6 +605,7 @@ export function generateSchemas(samples: FixtureSamples): Record<string, string>
     'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
     'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
     'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(samples), null, 2) + '\n',
+    'examples/model-assembly.json': JSON.stringify(buildSketchPlateFixture(ASSEMBLY_COMMANDS), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

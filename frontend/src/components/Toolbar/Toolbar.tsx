@@ -6,7 +6,7 @@ import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
 import {
-  importMeshFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+  importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
@@ -50,6 +50,8 @@ export function Toolbar() {
   const massOpen = useEditorStore((s) => s.massOpen);
   const projection = useEditorStore((s) => s.projection);
   const editor = useEditorStore.getState();
+  const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
+  const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
   const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
@@ -149,6 +151,14 @@ export function Toolbar() {
             <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
           </>
         )}
+        {tab === 'assembly' && (
+          <>
+            <Cmd icon="insert" label="부품 삽입" title="다른 프로젝트(.ai3d)를 부품으로 넣기 (복사본)" onClick={() => void insertPartFile()} testId="cmd-insert-part" />
+            <Cmd icon="mate" label="메이트" title="부품끼리 면 일치·거리·평행·동심·각도·고정 (둘째로 고른 부품이 움직임)" onClick={() => assembly('mate')} testId="cmd-mate" pressed={assemblyPanel === 'mate'} />
+            <Cmd icon="interference" label="간섭 검사" title="부품끼리 서로 파고든 부피 계산" onClick={() => assembly('interference')} testId="cmd-interference" pressed={assemblyPanel === 'interference'} />
+            <Cmd icon="bom" label="부품표" title="부품 목록·수량 (같은 형상은 묶어 셈), CSV 저장" onClick={() => assembly('bom')} testId="cmd-bom" pressed={assemblyPanel === 'bom'} />
+          </>
+        )}
         {tab === 'view' && (
           <>
             {VIEWS.map((v) => (
@@ -180,10 +190,11 @@ const DISPLAY_MODES = [
   { id: 'xray', label: '투명', icon: 'xray', title: '반투명 (안쪽 구조 보기, 블렌더 X-ray)' },
 ] as const;
 
-type Tab = 'feature' | 'sketch' | 'view';
+type Tab = 'feature' | 'sketch' | 'assembly' | 'view';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'feature', label: '피처' },
   { id: 'sketch', label: '스케치' },
+  { id: 'assembly', label: '조립품' },
   { id: 'view', label: '보기' },
 ];
 const VIEWS = [

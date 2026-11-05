@@ -21,9 +21,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 8: + 헬릭스(helix)·로프트(loft)·가져온 메시(mesh). v7 내용은 그대로 유효
  * - 9: + 모서리 필렛·모따기(fillet)·구배(draft)·가져온 STEP(step). v8 내용은 그대로 유효
  * - 10: + 경로(path)·꼭짓점 처리(corners)·스윕(sweep)·얇은 돌출(extrude.thin). v9 내용은 그대로 유효
- * 읽기는 1~10 모두, 쓰기는 항상 최신(10). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 11: + 조립 메이트(model.mates). v10 내용은 그대로 유효
+ * 읽기는 1~11 모두, 쓰기는 항상 최신(11). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 10;
+export const PROJECT_FORMAT_VERSION = 11;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -142,8 +143,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 10) {
     // v9 → v10: 새 요소·객체 종류만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 9 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 9 ? { ...model, schemaVersion: 10 } : model;
     file = { ...file, formatVersion: 10, model: migrated };
+  }
+  if ((file.formatVersion as number) < 11) {
+    // v10 → v11: 메이트(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 10 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 11, model: migrated };
   }
   return file;
 }

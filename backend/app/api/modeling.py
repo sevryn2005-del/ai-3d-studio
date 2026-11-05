@@ -129,3 +129,26 @@ def evaluate_model(
         meshes=result["meshes"],
         computeMs=result["computeMs"],
     )
+
+
+INTERFERENCE_TIMEOUT_S = 60.0
+
+
+@router.post("/model/interference")
+def model_interference(
+    pool: Annotated[WorkerPool, Depends(get_cad_pool)],
+    payload: Any = Body(...),
+) -> dict[str, Any]:
+    """간섭 검사 (조립품, 형식 v11): 서로 파고드는 최상위 객체 쌍과 겹친 부피(mm³)."""
+    try:
+        model = ModelDefinition.model_validate(payload)
+    except ValidationError as e:
+        return {"ok": False, "issues": [i.model_dump() for i in issues_from_validation_error(e)], "pairs": []}
+    issues = [i for i in check_model(model) if i.severity == "error"]
+    if issues:
+        return {"ok": False, "issues": [i.model_dump() for i in issues], "pairs": []}
+    try:
+        pairs = pool.run("interference", {"model": model.model_dump(mode="json")}, timeout=INTERFERENCE_TIMEOUT_S)
+    except CadEngineError as e:
+        return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()], "pairs": []}
+    return {"ok": True, "issues": [], "pairs": pairs}

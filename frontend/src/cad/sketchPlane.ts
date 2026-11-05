@@ -119,12 +119,16 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       const src = model.objects.find((o) => o.id === obj.pattern.source);
       return src ? facesOf(model, src, depth + 1) : [];
     }
+    case 'fillet': {
+      // 모서리 처리 뒤에도 평면은 같은 자리 (면이 조금 줄어들 뿐) → 원본의 면
+      const src = model.objects.find((o) => o.id === obj.fillet.source);
+      return src ? facesOf(model, src, depth + 1) : [];
+    }
     case 'hole':
     case 'helix':
     case 'loft':
     case 'sweep':
     case 'mesh':
-    case 'fillet':
     case 'draft':
     case 'step':
       return [];
@@ -187,12 +191,16 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
       const f = src ? faceLocalMatrix(model, src, face, depth + 1) : null;
       return src && f ? toMatrix(src.transform).multiply(f) : null;
     }
+    case 'fillet': {
+      const src = model.objects.find((o) => o.id === obj.fillet.source);
+      const f = src ? faceLocalMatrix(model, src, face, depth + 1) : null;
+      return src && f ? toMatrix(src.transform).multiply(f) : null;
+    }
     case 'hole':
     case 'helix':
     case 'loft':
     case 'sweep':
     case 'mesh':
-    case 'fillet':
     case 'draft':
     case 'step':
       return null;

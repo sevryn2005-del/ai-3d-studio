@@ -10,7 +10,9 @@ import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import { ModelDefinitionSchema, type CadObject, type ModelDefinition } from '../../../cad/commandTypes';
 import { byId } from '../../../cad/modelGraph';
 import { objectNeedsPrecise } from '../../../cad/features';
-import { computedRoots, evaluateMeshes, GeometryError, modelIssues, worldMeshes } from './geometry';
+import { computedRoots, evaluateMeshes, GeometryError, modelIssues, Scope, worldManifold, worldMeshes } from './geometry';
+import { byId as indexOf, sketchIndex } from '../../../cad/modelGraph';
+import { INTERFERENCE_MIN_VOLUME } from '../types';
 import { to3mf, toBinaryStl, toGlb } from './exporters';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
@@ -68,6 +70,45 @@ async function exportMeshes(w: ManifoldToplevel, model: ModelDefinition) {
   return roots.map((o) => byObj.get(o.id)!);
 }
 
+/**
+ * 간섭 검사: 최상위 객체를 월드 좌표 솔리드로 만들어 바운딩 박스가 겹치는 쌍만 교차 부피를 잰다.
+ * 정밀 피처가 든 객체는 OCCT 출력 메시를 manifold 솔리드로 바꿔 쓴다 (서버는 CadQuery 교차)
+ */
+async function interferencePairs(w: ManifoldToplevel, model: ModelDefinition) {
+  const { roots, precise: slow } = split(model);
+  const scope = new Scope();
+  const slowIds = new Set(slow.map((o) => o.id));
+  try {
+    const index = indexOf(model);
+    const sketches = sketchIndex(model);
+    let occt: Awaited<ReturnType<typeof precise>> | null = null;
+    const solids = [];
+    for (const o of roots) {
+      if (slowIds.has(o.id)) {
+        occt ??= await precise();
+        const m = occt.geo.occtWorldMesh(occt.oc, model, o);
+        try {
+          solids.push({ o, s: scope.keep(new w.Manifold(new w.Mesh({ numProp: 3, vertProperties: m.positions, triVerts: m.indices }))) });
+        } catch {
+          throw new GeometryError(`'${o.name}': 간섭 검사용 메시를 만들 수 없습니다`);
+        }
+      } else solids.push({ o, s: worldManifold(w, o, index, 0.05, scope, sketches) });
+    }
+    const boxes = solids.map(({ s }) => s.boundingBox());
+    const pairs: { a: string; b: string; volume: number }[] = [];
+    for (let i = 0; i < solids.length; i++)
+      for (let j = i + 1; j < solids.length; j++) {
+        const [a, b] = [boxes[i]!, boxes[j]!];
+        if ([0, 1, 2].some((k) => a.max[k]! <= b.min[k]! || b.max[k]! <= a.min[k]!)) continue;
+        const vol = scope.keep(solids[i]!.s.intersect(solids[j]!.s)).volume();
+        if (vol > INTERFERENCE_MIN_VOLUME) pairs.push({ a: solids[i]!.o.id, b: solids[j]!.o.id, volume: Math.round(vol * 1e4) / 1e4 });
+      }
+    return pairs;
+  } finally {
+    scope.dispose();
+  }
+}
+
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const req = e.data;
   const reply = (msg: WorkerResponse, transfer: Transferable[] = []) => self.postMessage(msg, transfer);
@@ -104,6 +145,10 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     }
 
     if (graph.length) throw new GeometryError(graph[0]!);
+    if (req.type === 'interference') {
+      reply({ id: req.id, ok: true, type: 'interference', pairs: await interferencePairs(w, model) });
+      return;
+    }
     let bytes: Uint8Array;
     if (req.format === 'step') {
       const { geo, oc } = await precise();

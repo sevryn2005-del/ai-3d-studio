@@ -21,6 +21,9 @@ import {
   type CadCommand,
   type CadObject,
   type CreateCommand,
+  type Mate,
+  type Sketch,
+  MAX_MATES,
   type ModelDefinition,
   type ObjectId,
   type PrimitiveKind,
@@ -30,7 +33,8 @@ import {
   LIMITS,
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
-import { byId, depthOf, parentMap, subtreeIds, wrapperSource } from './modelGraph';
+import { byId, depthOf, parentMap, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
+import { mateError, pruneMates, solveMates } from './mates';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
@@ -57,7 +61,18 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
     return { ok: false, error: `잘못된 명령${where}: ${issue?.message ?? '알 수 없는 오류'}` };
   }
   const cmd = parsed.data;
+  const r = executeOne(model, cmd);
+  if (!r.ok || !r.model.mates?.length || MATE_COMMANDS.has(cmd.type) || r.model === model) return r;
+  // 조립 메이트 (형식 v11): 모델이 바뀌면 부품 위치를 다시 푼다. 사용자가 옮긴 부품은 그 자리에 두고 나머지가 따라온다
+  const pinned = new Set<ObjectId>(cmd.type === 'translate' || cmd.type === 'set_transform' ? [cmd.target] : []);
+  const solved = solveMates(pruneMates(r.model), pinned);
+  if (!solved.ok) return fail(`메이트 때문에 할 수 없습니다: ${solved.error}`);
+  return { ...r, model: solved.model };
+}
 
+const MATE_COMMANDS = new Set<CadCommand['type']>(['add_mate', 'set_mate', 'delete_mate']);
+
+function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
   if (isSketchCommand(cmd)) return executeSketchCommand(model, cmd);
 
   switch (cmd.type) {
@@ -332,6 +347,53 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
       return done(model, replaceObject(model, { ...target, fillet: f }), cmd, target.id);
     }
 
+    case 'add_mate': {
+      const mates = model.mates ?? [];
+      if (mates.length >= MAX_MATES) return fail(`메이트는 최대 ${MAX_MATES}개까지 가능합니다`);
+      let id = cmd.id;
+      if (!id) {
+        let n = 1;
+        while (mates.some((m) => m.id === `mate${n}`)) n++;
+        id = `mate${n}`;
+      }
+      if (mates.some((m) => m.id === id)) return fail(`이미 있는 메이트 ID입니다: ${id}`);
+      const mate: Mate = { id, type: cmd.mate, refs: cmd.refs, ...(cmd.value !== undefined ? { value: cmd.value } : {}), ...(cmd.flip ? { flip: true } : {}) };
+      const err = mateError(model, mate);
+      if (err) return fail(err);
+      // 솔리드웍스처럼 둘째로 고른 부품이 움직인다: 나머지 부품을 붙잡고 먼저 풀고, 안 되면 모두 풀어 본다
+      const next = { ...model, mates: [...mates, mate] };
+      const mover = mate.refs[mate.refs.length - 1]!.split('.')[0]!;
+      const others = new Set(next.mates.flatMap((m) => m.refs.map((r) => r.split('.')[0]!)).filter((id) => id !== mover));
+      const first = solveMates(next, others);
+      const solved = first.ok ? first : solveMates(next);
+      return solved.ok ? done(model, solved.model, cmd, null) : fail(solved.error);
+    }
+
+    case 'set_mate': {
+      const mates = model.mates ?? [];
+      const m = mates.find((x) => x.id === cmd.mate);
+      if (!m) return fail(`존재하지 않는 메이트입니다: ${cmd.mate}`);
+      const next: Mate = { ...m, ...(cmd.value !== undefined ? { value: cmd.value } : {}) };
+      if (cmd.flip !== undefined) {
+        if (cmd.flip) next.flip = true;
+        else delete next.flip;
+      }
+      const solved = solveMates({ ...model, mates: mates.map((x) => (x.id === m.id ? next : x)) });
+      return solved.ok ? done(model, solved.model, cmd, null) : fail(solved.error);
+    }
+
+    case 'delete_mate': {
+      const mates = model.mates ?? [];
+      if (!mates.some((m) => m.id === cmd.mate)) return fail(`존재하지 않는 메이트입니다: ${cmd.mate}`);
+      const rest = mates.filter((m) => m.id !== cmd.mate);
+      const { mates: _m, ...base } = model;
+      void _m;
+      return done(model, rest.length ? { ...base, mates: rest } : base, cmd, null);
+    }
+
+    case 'insert_part':
+      return insertPart(model, cmd);
+
     case 'set_thin': {
       const target = findObject(model, cmd.target);
       if (!target) return missing(cmd.target);
@@ -604,6 +666,53 @@ function fail(error: string): ExecuteResult {
 
 function missing(id: string): ExecuteResult {
   return fail(`존재하지 않는 객체입니다: ${id}`);
+}
+
+/** 부품 삽입: ID 를 겹치지 않게 다시 붙여 합친다 (참조 키만 바꾼다 — 스케치 요소·구속 ID 는 스케치 안의 이름이라 그대로) */
+function insertPart(model: ModelDefinition, cmd: Extract<CadCommand, { type: 'insert_part' }>): ExecuteResult {
+  const part = cmd.part;
+  if (model.objects.length + part.objects.length + 1 > LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+  if (model.sketches.length + part.sketches.length > LIMITS.maxSketches) return fail(`스케치는 최대 ${LIMITS.maxSketches}개까지 가능합니다`);
+  const taken = new Set([...model.objects.map((o) => o.id), ...model.sketches.map((k) => k.id)]);
+  const partIds = [...part.objects.map((o) => o.id), ...part.sketches.map((k) => k.id)];
+  // 겹치는 ID 가 하나라도 있으면 모든 ID 에 같은 꼬리표 _pN 을 붙인다 (N = 겹치지 않는 가장 작은 수)
+  const rename = (id: string, n: number) => (n === 0 ? id : `${id.slice(0, 58)}_p${n}`);
+  let n = 0;
+  while (partIds.some((id) => taken.has(rename(id, n)))) n++;
+  const map = new Map(partIds.map((id) => [id, rename(id, n)]));
+  const REF_KEYS = new Set(['base', 'source', 'sketch', 'pathSketch', 'object']);
+  const remap = (v: unknown, key = ''): unknown => {
+    if (typeof v === 'string') return REF_KEYS.has(key) || key === 'tools' ? (map.get(v) ?? v) : v;
+    if (Array.isArray(v)) return v.map((x) => remap(x, key));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([kk, x]) => [kk, remap(x, kk)]));
+    return v;
+  };
+  const objects = part.objects.map((o) => ({ ...(remap(o) as CadObject), id: map.get(o.id)! }));
+  const sketches = part.sketches.map((sk) => ({ ...sk, id: map.get(sk.id)!, plane: remap(sk.plane) as Sketch['plane'] }));
+  const sub: ModelDefinition = { schemaVersion: model.schemaVersion, units: 'mm', sketches, objects };
+  const roots = topLevelObjects(sub);
+  const pos = cmd.position ?? [0, 0, 0];
+  let added = objects;
+  let rootId: ObjectId;
+  if (roots.length === 1) {
+    const r = roots[0]!;
+    rootId = r.id;
+    added = objects.map((o) => (o.id === r.id ? { ...o, name: cmd.name, transform: { ...o.transform, position: addVec(o.transform.position, pos) } } : o));
+  } else {
+    rootId = nextId({ ...model, objects: [...model.objects, ...objects] }, 'part');
+    const group: CadObject = {
+      id: rootId,
+      name: cmd.name,
+      kind: 'boolean',
+      boolean: { operation: 'union', base: roots[0]!.id, tools: roots.slice(1).map((o) => o.id) },
+      transform: { position: pos, rotation: [0, 0, 0] },
+    };
+    added = [...objects, group];
+  }
+  const next: ModelDefinition = { ...model, sketches: [...model.sketches, ...sketches], objects: [...model.objects, ...added] };
+  const errors = validateGraph(next);
+  if (errors.length) return fail(`부품을 넣을 수 없습니다: ${errors[0]}`);
+  return done(model, next, cmd, rootId);
 }
 
 function done(

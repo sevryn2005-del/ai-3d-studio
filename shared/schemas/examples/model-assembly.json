@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 11,
+  "units": "mm",
+  "sketches": [],
+  "objects": [
+    {
+      "id": "base",
+      "name": "박스 1",
+      "params": {
+        "width": 60,
+        "depth": 40,
+        "height": 10
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "kind": "box"
+    },
+    {
+      "id": "lid",
+      "name": "박스 2",
+      "params": {
+        "width": 30,
+        "depth": 20,
+        "height": 4
+      },
+      "transform": {
+        "position": [
+          80,
+          10,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "kind": "box"
+    },
+    {
+      "id": "pin",
+      "name": "원통 1",
+      "params": {
+        "radius": 3,
+        "height": 25
+      },
+      "transform": {
+        "position": [
+          20,
+          0,
+          17.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "kind": "cylinder"
+    },
+    {
+      "id": "post",
+      "name": "원통 2",
+      "params": {
+        "radius": 8,
+        "height": 6
+      },
+      "transform": {
+        "position": [
+          20,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      },
+      "kind": "cylinder"
+    }
+  ],
+  "mates": [
+    {
+      "id": "m_lid",
+      "type": "coincident",
+      "refs": [
+        "base.top",
+        "lid.bottom"
+      ]
+    },
+    {
+      "id": "m_lid_side",
+      "type": "parallel",
+      "refs": [
+        "base.+X",
+        "lid.+X"
+      ]
+    },
+    {
+      "id": "m_post",
+      "type": "coincident",
+      "refs": [
+        "base.top",
+        "post.bottom"
+      ]
+    },
+    {
+      "id": "m_axis",
+      "type": "concentric",
+      "refs": [
+        "post.axis",
+        "pin.axis"
+      ]
+    },
+    {
+      "id": "m_gap",
+      "type": "distance",
+      "refs": [
+        "post.top",
+        "pin.bottom"
+      ],
+      "value": 1.5
+    },
+    {
+      "id": "m_tilt",
+      "type": "angle",
+      "refs": [
+        "base.+Y",
+        "lid.+X"
+      ],
+      "value": 90
+    }
+  ]
+}

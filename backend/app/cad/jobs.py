@@ -80,7 +80,39 @@ def export_file(payload: dict[str, Any]) -> bytes:
     return export_shapes(fmt, objects)
 
 
+# 간섭: 이보다 작은 겹침 부피(mm³)는 맞닿음(수치 오차)으로 본다 — 브라우저 엔진 worker.ts 와 같음
+INTERFERENCE_MIN_VOLUME = 1e-3
+
+
+def interference(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """{model} → 서로 파고드는 최상위 객체 쌍과 겹친 부피 (솔리드웍스 간섭 검사). 바운딩 박스로 먼저 거른다."""
+    model = ModelDefinition.model_validate(payload["model"])
+    index = {o.id: o for o in model.objects}
+    sketches = {sk.id: sk for sk in model.sketches}
+    solids = []
+    for oid in active_top_level_ids(model):
+        obj = index[oid]
+        try:
+            solids.append((obj, apply_transform(build_solid(obj, index, sketches), obj.transform)))
+        except GeometryError:
+            raise
+        except Exception as e:
+            raise GeometryError(f"'{obj.name}' 형상을 만들 수 없습니다") from e
+    boxes = [s.BoundingBox() for _, s in solids]
+    out = []
+    for i in range(len(solids)):
+        for j in range(i + 1, len(solids)):
+            a, b = boxes[i], boxes[j]
+            if a.xmax <= b.xmin or b.xmax <= a.xmin or a.ymax <= b.ymin or b.ymax <= a.ymin or a.zmax <= b.zmin or b.zmax <= a.zmin:
+                continue
+            vol = solids[i][1].intersect(solids[j][1]).Volume()
+            if vol > INTERFERENCE_MIN_VOLUME:
+                out.append({"a": solids[i][0].id, "b": solids[j][0].id, "volume": round(vol, 4)})
+    return out
+
+
 JOBS: dict[str, Callable[[Any], Any]] = {
+    "interference": interference,
     "evaluate": evaluate,
     "evaluate_objects": evaluate_objects,
     "export": export_file,

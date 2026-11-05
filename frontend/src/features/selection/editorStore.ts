@@ -60,6 +60,9 @@ interface EditorState {
   screenshotRequest: number;
   loftOpen: boolean;
   sweepOpen: boolean;
+  /** 조립품 탭 패널 (메이트·간섭 검사·부품표) */
+  assemblyPanel: 'mate' | 'interference' | 'bom' | null;
+  setAssemblyPanel: (p: 'mate' | 'interference' | 'bom' | null) => void;
   setSweepOpen: (open: boolean) => void;
   setLoftOpen: (on: boolean) => void;
   /** 원근(기본) / 직교 투영 */
@@ -120,6 +123,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   screenshotRequest: 0,
   loftOpen: false,
   sweepOpen: false,
+  assemblyPanel: null,
+  setAssemblyPanel: (assemblyPanel) => set({ assemblyPanel }),
   setSweepOpen: (sweepOpen) => set({ sweepOpen }),
   setLoftOpen: (loftOpen) => set({ loftOpen }),
   projection: loadPref('ai3d.projection', ['perspective', 'orthographic'] as const, 'perspective'),

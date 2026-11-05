@@ -32,6 +32,10 @@ from app.cad.commands import (
     Transform,
     PatternObject,
     profile_of,
+    FilletObject,
+    DraftObject,
+    HelixObject,
+    HoleObject,
 )
 
 MAX_DEPTH = 16  # 면 참조 재귀 한도 (순환은 validation.check_model 이 따로 거부)
@@ -128,6 +132,9 @@ def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str
                 return []
             src = next((o for o in model.objects if o.id == obj.pattern.source), None)
             return faces_of(model, src, depth + 1) if src else []
+        case FilletObject():  # 모서리 처리 뒤에도 평면은 같은 자리 → 원본의 면 (sketchPlane.ts 와 같음)
+            src = next((o for o in model.objects if o.id == obj.fillet.source), None)
+            return faces_of(model, src, depth + 1) if src else []
     return []
 
 
@@ -175,6 +182,46 @@ def face_local_matrix(model: ModelDefinition, obj: CadObject, face: str, depth: 
             src = next((o for o in model.objects if o.id == obj.pattern.source), None)
             f = face_local_matrix(model, src, face, depth + 1) if src else None
             return transform_matrix(src.transform) @ f if src is not None and f is not None else None
+        case FilletObject():
+            src = next((o for o in model.objects if o.id == obj.fillet.source), None)
+            f = face_local_matrix(model, src, face, depth + 1) if src else None
+            return transform_matrix(src.transform) @ f if src is not None and f is not None else None
+    return None
+
+
+def axis_local(model: ModelDefinition, obj: CadObject, depth: int = 0) -> tuple[np.ndarray, np.ndarray] | None:
+    """객체 로컬 축 (원점, 방향) — frontend mates.ts axisLocal 과 같은 규칙"""
+    if depth > MAX_DEPTH:
+        return None
+
+    def via(cid: str):
+        child = next((o for o in model.objects if o.id == cid), None)
+        f = axis_local(model, child, depth + 1) if child is not None else None
+        if child is None or f is None:
+            return None
+        m = transform_matrix(child.transform)
+        return (m @ np.append(f[0], 1.0))[:3], m[:3, :3] @ f[1]
+
+    match obj:
+        case CylinderObject() | ConeObject() | HoleObject():
+            return np.zeros(3), np.array([0.0, 0.0, 1.0])
+        case ExtrudeObject():
+            p = _profile(model, obj)
+            m = extrude_local_matrix(model, obj, depth + 1)
+            if p is None or m is None or p["type"] not in ("circle", "slot"):
+                return None
+            return (m @ np.array([p["center"][0], p["center"][1], 0.0, 1.0]))[:3], m[:3, :3] @ np.array([0.0, 0.0, 1.0])
+        case RevolveObject() | HelixObject():
+            m = extrude_local_matrix(model, obj, depth + 1)
+            return (m[:3, 3].copy(), m[:3, :3] @ np.array([0.0, 1.0, 0.0])) if m is not None else None
+        case BooleanObject():
+            return via(obj.boolean.base)
+        case PatternObject():
+            return None if obj.pattern.type == "scale" else via(obj.pattern.source)
+        case FilletObject():
+            return via(obj.fillet.source)
+        case DraftObject():
+            return via(obj.draft.source)
     return None
 
 

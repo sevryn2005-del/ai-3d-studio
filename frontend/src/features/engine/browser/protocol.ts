@@ -5,7 +5,8 @@ import type { ExportFormat } from '../types';
 
 export type WorkerRequest =
   | { id: number; type: 'evaluate'; model: ModelDefinition }
-  | { id: number; type: 'export'; model: ModelDefinition; format: ExportFormat };
+  | { id: number; type: 'export'; model: ModelDefinition; format: ExportFormat }
+  | { id: number; type: 'interference'; model: ModelDefinition };
 
 export interface WorkerEvaluation {
   ok: boolean;
@@ -18,4 +19,5 @@ export interface WorkerEvaluation {
 export type WorkerResponse =
   | { id: number; ok: true; type: 'evaluate'; result: WorkerEvaluation }
   | { id: number; ok: true; type: 'export'; bytes: Uint8Array }
+  | { id: number; ok: true; type: 'interference'; pairs: { a: string; b: string; volume: number }[] }
   | { id: number; ok: false; error: string };

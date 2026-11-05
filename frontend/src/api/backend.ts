@@ -41,6 +41,15 @@ export const getHealth = (signal?: AbortSignal) => apiGet('/health', HealthSchem
 export const evaluateModel = (model: ModelDefinition, signal?: AbortSignal) =>
   apiPost('/model/evaluate', model, ModelEvaluationSchema, signal);
 
+export const InterferenceSchema = z.object({
+  ok: z.boolean(),
+  issues: z.array(IssueSchema),
+  pairs: z.array(z.object({ a: z.string(), b: z.string(), volume: z.number() })),
+});
+/** 간섭 검사 (조립품): 서로 파고드는 최상위 객체 쌍 */
+export const interferenceModel = (model: ModelDefinition, signal?: AbortSignal) =>
+  apiPost('/model/interference', model, InterferenceSchema, signal, 70_000);
+
 import type { ExportFormat } from '../features/engine/types';
 
 /** 모든 최상위 객체를 월드 좌표로 배치한 파일. 로컬 CAD 서버에서 생성된다. */

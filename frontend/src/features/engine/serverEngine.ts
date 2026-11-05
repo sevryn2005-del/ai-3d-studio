@@ -1,5 +1,6 @@
 /** 서버 CAD 엔진: 기존 FastAPI + CadQuery 백엔드를 그대로 사용한다. */
-import { evaluateModel, exportModel } from '../../api/backend';
+import { evaluateModel, exportModel, interferenceModel } from '../../api/backend';
+import { EngineError } from './types';
 import { decodeRenderMeshArrays } from '../backend/renderMesh';
 import type { CadEngine } from './types';
 
@@ -22,5 +23,11 @@ export const serverEngine: CadEngine = {
 
   exportFile(format, model, signal) {
     return exportModel(format, model, signal);
+  },
+
+  async interference(model, signal) {
+    const r = await interferenceModel(model, signal);
+    if (!r.ok) throw new EngineError(r.issues[0]?.message ?? '간섭 검사를 할 수 없습니다');
+    return r.pairs;
   },
 };

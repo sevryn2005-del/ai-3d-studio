@@ -147,6 +147,12 @@ def check_model(model: ModelDefinition) -> list[Issue]:
             elif isinstance(obj, (RevolveObject, HelixObject)) and (err := revolve_profile_error(prof)):
                 issues.append(Issue(path=f"objects.{i}.{field}.profile", message=f"{obj.id}: {err}"))
 
+    # 조립 메이트 (형식 v11): 형식 + 저장된 변환이 메이트를 만족하는지 (mates.py)
+    from app.cad.mates import mate_errors
+
+    for mid, msg in mate_errors(model):
+        issues.append(Issue(path=f"mates.{mid}", message=msg))
+
     # 면 평면: 붙은 객체·면 이름·순환 (프론트엔드 modelGraph.validateGraph 와 같은 규칙)
     by_id = {o.id: o for o in model.objects}
     for i, sk in enumerate(model.sketches):

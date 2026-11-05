@@ -13,6 +13,7 @@ import { localSize } from '../../cad/objectKinds';
 import { helixError, helixProfilePoints } from '../../cad/sections';
 import { parseObj, parseStl, prepareImport, toBase64 } from '../../cad/meshData';
 import { pickFileWithInput } from '../projects/projectStorage';
+import { nameFromFileName, parseProject } from '../projects/projectFile';
 import { useProjectStore } from '../projects/projectStore';
 import { useEditorStore, type PendingFeature } from './editorStore';
 
@@ -319,6 +320,40 @@ export function quickRib() {
     return;
   }
   scene.submitNow({ type: 'extrude', sketch: sketch.id, profile: line.id, distance: 10, thin: 2 });
+}
+
+/**
+ * 부품 삽입 (조립품): 다른 프로젝트(.ai3d)를 열어 설계 원본을 복사해 넣는다. 지금 있는 부품들 오른쪽(+X)에 놓는다.
+ * 원본 파일과는 연결되지 않는다 (복사본) — 같은 형상을 여러 번 넣으면 부품표에서 수량으로 묶인다
+ */
+export async function insertPartFile() {
+  let file: File;
+  try {
+    file = await pickFileWithInput('.ai3d,.json,application/json');
+  } catch {
+    return;
+  }
+  const scene = useSceneStore.getState();
+  const parsed = parseProject(await file.text());
+  if (!parsed.ok) {
+    scene.reportError(`부품 삽입 실패: ${parsed.error}`);
+    return;
+  }
+  const part = parsed.project.model;
+  if (!part.objects.length) {
+    scene.reportError('부품 삽입 실패: 그 프로젝트에 객체가 없습니다');
+    return;
+  }
+  const model = selectModel(scene);
+  const tops = topLevelObjects(model);
+  const right = tops.length ? Math.max(...tops.map((o) => o.transform.position[0] + Math.abs(localSize(o, model)[0]) / 2)) + 30 : 0;
+  const res = scene.submitNow({
+    type: 'insert_part',
+    name: (parsed.project.name || nameFromFileName(file.name)).slice(0, 100),
+    part: { sketches: part.sketches, objects: part.objects },
+    position: [Math.round(right), 0, 0],
+  });
+  if (res.status === 'applied') useEditorStore.getState().requestFit();
 }
 
 /** STL·OBJ 가져오기 → 원점 규칙(바닥면 중심)에 맞춰 메시 객체 */

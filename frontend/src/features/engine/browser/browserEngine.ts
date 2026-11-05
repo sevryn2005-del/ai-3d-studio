@@ -90,5 +90,12 @@ export function createBrowserEngine(
       if (r.type !== 'export') throw new EngineError('잘못된 응답입니다');
       return new Blob([r.bytes as Uint8Array<ArrayBuffer>], { type: MEDIA_TYPES[format] });
     },
+
+    async interference(model: ModelDefinition, signal?: AbortSignal) {
+      const r = await request({ type: 'interference', model }, signal);
+      if (!r.ok) throw new EngineError(r.error);
+      if (r.type !== 'interference') throw new EngineError('잘못된 응답입니다');
+      return r.pairs;
+    },
   };
 }

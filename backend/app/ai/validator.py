@@ -49,6 +49,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
 
     # 현재 모델 상태를 따라가며 참조 검사
     kinds: dict[str, str] = {o.id: o.kind for o in model.objects}
+    mate_ids: set[str] = {m.id for m in model.mates or []}
     # 스케치 id → 요소 id → 요소 유형 (객체와 스케치는 ID 이름공간을 공유한다)
     sketches: dict[str, dict[str, str]] = {sk.id: {e.id: e.type for e in sk.entities} for sk in model.sketches}
     # 구속 해석기: 다각형 꼭짓점 수, 구속 id → 값이 있는지 (참조 형식은 app/cad/constraints.ARITY)
@@ -239,6 +240,35 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         elif t == "set_thin":
             if exists(i, c["target"], "target") and kinds[c["target"]] != "extrude":
                 errors.append(f"commands[{i}].target: '{c['target']}' is not a rib (extrude with thin)")
+        elif t == "add_mate":
+            need = 1 if c["mate"] == "fix" else 2
+            if len(c["refs"]) != need:
+                errors.append(f"commands[{i}].refs: {c['mate']} mate needs {need} reference(s)")
+            for k, ref in enumerate(c["refs"]):
+                oid, _, part = ref.partition(".")
+                if not exists(i, oid, f"refs[{k}]"):
+                    continue
+                if oid in parent:
+                    errors.append(f"commands[{i}].refs[{k}]: '{oid}' is inside '{parent[oid]}'; mate the top-level part '{parent[oid]}'")
+                elif part and part != "axis" and part not in (faces := allowed_faces(oid)):
+                    errors.append(f"commands[{i}].refs[{k}]: '{oid}' has no face '{part}' (faces: {', '.join(faces) or 'none'}; cylinders also have 'axis')")
+            mid = c.get("id")
+            if mid is not None:
+                if mid in mate_ids:
+                    errors.append(f"commands[{i}].id: mate id '{mid}' is already used")
+                mate_ids.add(mid)
+            else:
+                n = 1
+                while f"mate{n}" in mate_ids:
+                    n += 1
+                mate_ids.add(f"mate{n}")
+        elif t in ("set_mate", "delete_mate"):
+            if c["mate"] not in mate_ids:
+                errors.append(f"commands[{i}].mate: no mate '{c['mate']}' (existing: {', '.join(sorted(mate_ids)) or 'none'})")
+            elif t == "delete_mate":
+                mate_ids.discard(c["mate"])
+        elif t == "insert_part":
+            errors.append(f"commands[{i}]: insert_part is only for project files the user opens, not for AI")
         elif t == "import_mesh":
             errors.append(f"commands[{i}]: import_mesh is only for files the user opens, not for AI")
         elif t in ("add_line", "add_slot"):
