@@ -1,4 +1,10 @@
 import { useMemo, useState } from 'react';
+import { byId, sketchIndex } from '../../cad/modelGraph';
+import { geometryKey } from '../../features/backend/renderMesh';
+import { useBackendStore } from '../../features/backend/backendStore';
+import { meshFromTriangles } from '../../cad/meshConvert';
+import { MAX_POLY_FACES, MAX_POLY_VERTS } from '../../cad/commandTypes';
+import { notify } from '../../features/projects/projectActions';
 import type { CadObject, Vec3 } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { topLevelObjects } from '../../cad/modelGraph';
@@ -98,12 +104,15 @@ function ObjectFields({ obj }: { obj: CadObject }) {
       {(['X', 'Y', 'Z'] as const).map((a, i) => (
         <NumberField key={a} label={a} value={t.rotation[i]!} unit="°" onCommit={(v) => setRot(i, v)} testId={`rot-${a.toLowerCase()}`} />
       ))}
-      {obj.kind === 'polymesh' && (
+      {obj.kind === 'polymesh' ? (
         <>
           <MeshStats obj={obj} />
           <ModifierStack obj={obj} />
         </>
+      ) : (
+        <ConvertToMesh obj={obj} />
       )}
+      <BooleanPanel obj={obj} />
     </>
   );
 }
@@ -326,6 +335,55 @@ export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 다른 객체와 합치기·빼기·교차 (설계 모드 불리언과 같은 명령 — 피연산자는 남아 나중에 고칠 수 있다) */
+function BooleanPanel({ obj }: { obj: CadObject }) {
+  const model = useSceneStore(selectModel);
+  const others = useMemo(() => topLevelObjects(model).filter((o) => o.id !== obj.id), [model, obj.id]);
+  const [other, setOther] = useState('');
+  const tool = others.find((o) => o.id === other)?.id ?? others[0]?.id ?? '';
+  if (!others.length) return null;
+  const run = (type: 'union' | 'cut' | 'intersect') => useSceneStore.getState().submitNow({ type, base: obj.id, tools: [tool] });
+  return (
+    <div className="boolean-panel" data-testid="boolean-panel">
+      <h3>불리언</h3>
+      <select value={tool} onChange={(e) => setOther(e.target.value)} aria-label="다른 객체" data-testid="boolean-tool">
+        {others.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+      <div className="seg-inline">
+        <button onClick={() => run('union')} title="두 객체를 하나로 합치기" data-testid="bool-union">합치기</button>
+        <button onClick={() => run('cut')} title="이 객체에서 다른 객체 모양만큼 빼기" data-testid="bool-cut">빼기</button>
+        <button onClick={() => run('intersect')} title="겹치는 부분만 남기기" data-testid="bool-intersect">교차</button>
+      </div>
+    </div>
+  );
+}
+
+/** 설계 부품·불리언 결과 → 편집 메시 (엔진이 계산한 모양 그대로) */
+function ConvertToMesh({ obj }: { obj: CadObject }) {
+  const model = useSceneStore(selectModel);
+  const key = useMemo(() => geometryKey(obj, byId(model), sketchIndex(model)), [obj, model]);
+  const geometry = useBackendStore((s) => s.geometries[key]);
+  const convert = () => {
+    if (!geometry) return notify('형상을 계산하는 중입니다 — 잠시 뒤 다시 누르세요');
+    const pos = geometry.getAttribute('position');
+    const idx = geometry.getIndex();
+    const polymesh = meshFromTriangles(pos.array, idx?.array);
+    if (polymesh.verts.length > MAX_POLY_VERTS || polymesh.faces.length > MAX_POLY_FACES) return notify('메시가 너무 큽니다 (점·면 최대 5만 개)');
+    useSceneStore.getState().submitNow({ type: 'convert_to_mesh', target: obj.id, polymesh });
+  };
+  return (
+    <div className="convert-mesh">
+      <button onClick={convert} disabled={!geometry} title="엔진이 계산한 모양을 점·선·면으로 고칠 수 있는 메시로 바꿉니다 (치수 편집은 사라짐)" data-testid="convert-to-mesh">
+        메시로 변환 (편집 가능하게)
+      </button>
     </div>
   );
 }

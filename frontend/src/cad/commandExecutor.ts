@@ -483,7 +483,7 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       const label = MESH_PRIMITIVE_LABEL[cmd.primitive];
       const obj: CadObject = {
         id,
-        name: cmd.name ?? `${label} ${model.objects.filter((o) => o.kind === 'polymesh').length + 1}`,
+        name: cmd.name ?? `${label} ${model.objects.filter((o) => o.kind === 'polymesh' && o.name.startsWith(`${label} `)).length + 1}`,
         kind: 'polymesh',
         polymesh,
         transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
@@ -502,6 +502,28 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (r.verts.some((v) => v.some((c) => !Number.isFinite(c) || Math.abs(c) > LIMITS.maxCoordinate))) return fail('점 좌표가 허용 범위를 벗어납니다');
       const updated = { ...target, polymesh: r } as CadObject;
       return done(model, { ...model, objects: model.objects.map((o) => (o.id === target.id ? updated : o)) }, cmd, target.id);
+    }
+    case 'convert_to_mesh': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (parentMap(model).has(target.id)) return fail(`'${target.name}'은(는) 다른 불리언·패턴에 포함되어 있습니다 — 맨 위 객체를 변환하세요`);
+      if (target.kind === 'polymesh') return fail(`'${target.name}'은(는) 이미 메시입니다`);
+      const err = polyMeshError(cmd.polymesh);
+      if (err) return fail(`메시로 변환할 수 없습니다: ${err}`);
+      const gone = new Set(subtreeIds(model, target.id));
+      if ((model.mates ?? []).some((m) => m.refs.some((r) => gone.has(typeof r === 'string' ? r.split('.')[0]! : r.object))))
+        return fail(`'${target.name}'에 메이트가 걸려 있어 메시로 바꿀 수 없습니다 (메이트를 먼저 지우세요)`);
+      const obj: CadObject = {
+        id: target.id,
+        name: target.name,
+        kind: 'polymesh',
+        polymesh: cmd.polymesh,
+        transform: target.transform,
+        ...(target.color ? { color: target.color } : {}),
+        ...(target.hidden ? { hidden: true } : {}),
+      };
+      const objects = model.objects.filter((o) => o.id === target.id || !gone.has(o.id)).map((o) => (o.id === target.id ? obj : o));
+      return done(model, { ...model, objects }, cmd, target.id);
     }
     case 'set_modifiers':
     case 'apply_modifier':

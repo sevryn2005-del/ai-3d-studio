@@ -1410,6 +1410,14 @@ class ApplyModifier(Strict):
     all: bool | None = None
 
 
+class ConvertToMesh(Strict):
+    """메시로 변환 (최상위 객체를 엔진 결과 모양의 편집 메시로)"""
+
+    type: Literal["convert_to_mesh"]
+    target: ObjectId
+    polymesh: PolyMeshData
+
+
 class SetShading(Strict):
     type: Literal["set_shading"]
     target: ObjectId
@@ -1668,6 +1676,7 @@ CadCommand = Annotated[
         SetModifiers,
         ApplyModifier,
         SetShading,
+        ConvertToMesh,
         InsertPart,
         ImportMesh,
         EdgeFeatureCommand,
@@ -1744,6 +1753,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetModifiers,
     ApplyModifier,
     SetShading,
+    ConvertToMesh,
     InsertPart,
     ImportMesh,
     EdgeFeatureCommand,

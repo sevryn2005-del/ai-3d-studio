@@ -244,3 +244,33 @@ test('비례 편집: 격자 가운데 점 하나 G Z 5 → 주변 점이 부드�
   expect(z(4, 0)).toBeLessThan(z(2, 0));
   expect(z(10, 10)).toBe(0); // 반지름 밖은 그대로
 });
+
+test('불리언 빼기(큐브 − 구) → 메시로 변환 → 편집 가능, 실행 취소', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-cube').click();
+  await page.getByTestId('add-menu-button').click();
+  await page.getByRole('menuitem', { name: 'UV 구' }).click();
+  // 구를 큐브 위 모서리 쪽으로 (겹치게)
+  for (const [id, v] of [['loc-x', '8'], ['loc-y', '8'], ['loc-z', '18']] as const) {
+    await page.getByTestId(id).fill(v);
+    await page.getByTestId(id).press('Enter');
+  }
+  // 큐브를 고르고 빼기
+  await page.getByTestId('outliner').getByRole('button', { name: '큐브 1' }).click();
+  await expect(page.getByTestId('boolean-tool')).toContainText('UV 구'); // 다른 객체는 구 하나
+  await page.getByTestId('bool-cut').click();
+  await expect(page.getByTestId('outliner').locator('li')).toHaveCount(1);
+  // 엔진 계산이 끝나면 메시로 변환
+  await expect(page.getByTestId('convert-to-mesh')).toBeEnabled({ timeout: 30_000 });
+  await page.getByTestId('convert-to-mesh').click();
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
+  const faces = Number((await page.getByTestId('mesh-stats').locator('dd').nth(2).textContent())!.replace(/,/g, ''));
+  expect(faces).toBeGreaterThan(30); // 큐브 6면 + 파인 구면
+  await expect(page.getByTestId('modifier-stack')).toBeVisible(); // 이제 메시 — 모디파이어·편집 가능
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('convert-to-mesh')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

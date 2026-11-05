@@ -160,6 +160,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메시 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
     case 'add_mesh':
       return `메시 추가: ${MESH_LABEL[cmd.primitive]}`;
+    case 'convert_to_mesh':
+      return `${name(cmd.target)} → 편집 메시 (점 ${cmd.polymesh.verts.length.toLocaleString()} · 면 ${cmd.polymesh.faces.length.toLocaleString()})`;
     case 'set_modifiers':
       return `${name(cmd.target)} 모디파이어: ${cmd.modifiers.map((m) => MODIFIER_LABEL[m.type]).join(' → ') || '없음'}`;
     case 'apply_modifier':

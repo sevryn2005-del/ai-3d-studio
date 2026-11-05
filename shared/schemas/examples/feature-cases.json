@@ -3911,7 +3911,7 @@
         },
         {
           "id": "p",
-          "name": "평면 2",
+          "name": "평면 1",
           "kind": "polymesh",
           "polymesh": {
             "verts": [

@@ -1110,6 +1110,11 @@ export const SetModifiersCommandSchema = z.strictObject({
 });
 /** 모디파이어 적용: 맨 위 하나(또는 all = 전부)를 메시에 굳힌다 */
 export const ApplyModifierCommandSchema = z.strictObject({ type: z.literal('apply_modifier'), target: ObjectIdSchema, all: z.boolean().optional() });
+/**
+ * 메시로 변환 (3D 모델링 모드): 최상위 객체(설계 부품·불리언 결과)를 엔진이 계산한 모양 그대로 편집 메시로 바꾼다.
+ * 같은 ID·이름·위치, 하위 객체는 지운다. polymesh 는 화면이 엔진 결과에서 만든다 (cad/meshConvert.ts)
+ */
+export const ConvertToMeshCommandSchema = z.strictObject({ type: z.literal('convert_to_mesh'), target: ObjectIdSchema, polymesh: PolyMeshDataSchema });
 /** 부드러운 / 각진 음영 (블렌더 Shade Smooth / Flat) */
 export const SetShadingCommandSchema = z.strictObject({ type: z.literal('set_shading'), target: ObjectIdSchema, smooth: z.boolean() });
 
@@ -1328,6 +1333,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetModifiersCommandSchema,
   ApplyModifierCommandSchema,
   SetShadingCommandSchema,
+  ConvertToMeshCommandSchema,
   InsertPartCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,

@@ -67,6 +67,7 @@ describe('shared/schemas 동기화', () => {
       'set_modifiers',
       'apply_modifier',
       'set_shading',
+      'convert_to_mesh',
       'insert_part',
       'import_mesh',
       'edge_feature',
