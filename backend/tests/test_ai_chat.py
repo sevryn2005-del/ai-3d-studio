@@ -15,7 +15,7 @@ def model_with(*objs) -> ModelDefinition:
         {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
     ]
-    return ModelDefinition.model_validate({"schemaVersion": 19, "units": "mm", "sketches": [], "objects": base + list(objs)})
+    return ModelDefinition.model_validate({"schemaVersion": 20, "units": "mm", "sketches": [], "objects": base + list(objs)})
 
 
 def chat(client, text_in="높이를 50mm로 바꿔줘", selected="box_1", history=(), model=None):
@@ -129,6 +129,17 @@ class TestValidator:
             {"type": "union", "base": "b", "tools": ["a"]},
         ], model_with())
         assert any("already inside boolean 'c'" in e for e in errors)
+
+    def test_add_mesh_allowed_mesh_edit_rejected(self):
+        cmds, errors = validate_commands([
+            {"type": "add_mesh", "id": "blob", "primitive": "uv_sphere", "params": {"radius": 10}},
+            {"type": "translate", "target": "blob", "offset": [0, 0, 10]},
+        ], model_with())
+        assert errors == [] and len(cmds) == 2
+        _, errors = validate_commands([
+            {"type": "mesh_edit", "target": "box_1", "edit": {"op": "subdivide", "faces": [0]}},
+        ], model_with())
+        assert errors == ["commands[0]: mesh_edit is done by the user in edit mode, not by AI"]
 
     def test_duplicate_id_and_deleted_reference(self):
         _, errors = validate_commands([

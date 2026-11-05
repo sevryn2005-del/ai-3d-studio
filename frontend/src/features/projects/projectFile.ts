@@ -30,9 +30,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 17: + 도면 사용자 치수(model.drawing.dims). v16 내용은 그대로 유효
  * - 18: + 타원(sketch ellipse). v17 내용은 그대로 유효
  * - 19: + 작업 모드(model.workspace: 설계·3D 모델링). v18 내용은 그대로 유효 (모드 없음 = 예전 통합 화면)
- * 읽기는 1~19 모두, 쓰기는 항상 최신(19). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 20: + 폴리메시 객체(3D 모델링 모드, kind 'polymesh'). v19 내용은 그대로 유효
+ * 읽기는 1~20 모두, 쓰기는 항상 최신(20). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 19;
+export const PROJECT_FORMAT_VERSION = 20;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -205,8 +206,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 19) {
     // v18 → v19: 작업 모드(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 18 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 18 ? { ...model, schemaVersion: 19 } : model;
     file = { ...file, formatVersion: 19, model: migrated };
+  }
+  if ((file.formatVersion as number) < 20) {
+    // v19 → v20: 객체 종류(polymesh)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 19 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 20, model: migrated };
   }
   return file;
 }

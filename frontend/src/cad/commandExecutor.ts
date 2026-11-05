@@ -31,6 +31,9 @@ import {
   type Transform,
   type Vec3,
   LIMITS,
+  MAX_POLY_FACES,
+  MAX_POLY_VERTS,
+  type MeshEdit,
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
 import { byId, depthOf, parentMap, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
@@ -39,6 +42,20 @@ import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } f
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
 import { meshError } from './meshData';
+import {
+  type MeshPrimitive,
+  type PolyMesh,
+  deleteElements,
+  extrudeFaces,
+  fillFace,
+  insetFaces,
+  loopCut,
+  mergeVerts,
+  polyMeshError,
+  primitiveMesh,
+  subdivideFaces,
+  transformVerts,
+} from './polymesh';
 import { helixError, helixProfilePoints } from './sections';
 import { profileOf, resolveProfile } from './sketch';
 import { polygonError } from './solver';
@@ -453,6 +470,76 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       };
       return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
     }
+    case 'add_mesh': {
+      if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
+      const id = cmd.id ?? nextId(model, 'mesh');
+      if (idTaken(model, id)) return fail(`이미 존재하는 ID입니다: ${id}`);
+      const polymesh = primitiveMesh(cmd.primitive, cmd.params ?? {});
+      if (polymesh.verts.length > MAX_POLY_VERTS || polymesh.faces.length > MAX_POLY_FACES) return fail('메시가 너무 큽니다 (점·면 최대 5만 개)');
+      const label = MESH_PRIMITIVE_LABEL[cmd.primitive];
+      const obj: CadObject = {
+        id,
+        name: cmd.name ?? `${label} ${model.objects.filter((o) => o.kind === 'polymesh').length + 1}`,
+        kind: 'polymesh',
+        polymesh,
+        transform: { position: cmd.position ?? [0, 0, 0], rotation: [0, 0, 0] },
+      };
+      return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
+    }
+    case 'mesh_edit': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (target.kind !== 'polymesh') return fail(`'${target.name}'은(는) 메시가 아니라 편집 모드로 고칠 수 없습니다`);
+      const r = applyMeshEdit(target.polymesh, cmd.edit);
+      if (typeof r === 'string') return fail(r);
+      if (r.verts.length > MAX_POLY_VERTS || r.faces.length > MAX_POLY_FACES) return fail('메시가 너무 큽니다 (점·면 최대 5만 개)');
+      const err = polyMeshError(r);
+      if (err) return fail(`메시 편집 실패: ${err}`);
+      if (r.verts.some((v) => v.some((c) => !Number.isFinite(c) || Math.abs(c) > LIMITS.maxCoordinate))) return fail('점 좌표가 허용 범위를 벗어납니다');
+      const updated = { ...target, polymesh: r } as CadObject;
+      return done(model, { ...model, objects: model.objects.map((o) => (o.id === target.id ? updated : o)) }, cmd, target.id);
+    }
+  }
+}
+
+const MESH_PRIMITIVE_LABEL: Record<MeshPrimitive, string> = {
+  cube: '큐브', plane: '평면', uv_sphere: 'UV 구', cylinder: '원기둥', cone: '원뿔', torus: '도넛', grid: '격자',
+};
+
+/** 편집 모드 연산 하나를 적용 (실패하면 이유 문자열) */
+function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
+  const nv = m.verts.length;
+  const nf = m.faces.length;
+  const badV = (ids: readonly number[]) => ids.some((i) => i >= nv);
+  const badF = (ids: readonly number[]) => ids.some((i) => i >= nf);
+  switch (e.op) {
+    case 'transform':
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      return transformVerts(m, e.verts, e.matrix);
+    case 'extrude':
+      if (badF(e.faces)) return '없는 면을 가리킵니다';
+      return extrudeFaces(m, e.faces, e.offset).mesh;
+    case 'inset':
+      if (badF(e.faces)) return '없는 면을 가리킵니다';
+      return insetFaces(m, e.faces, e.thickness).mesh;
+    case 'delete':
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      return deleteElements(m, e.verts, e.mode);
+    case 'loop_cut': {
+      if (badV(e.edge)) return '없는 점을 가리킵니다';
+      const r = loopCut(m, e.edge[0], e.edge[1], e.factor);
+      return r.sel.length === 0 ? '그 선을 지나는 사각형 띠가 없습니다' : r.mesh;
+    }
+    case 'subdivide':
+      if (badF(e.faces)) return '없는 면을 가리킵니다';
+      return subdivideFaces(m, e.faces);
+    case 'merge':
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      return mergeVerts(m, e.verts);
+    case 'fill':
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      if (new Set(e.verts).size !== e.verts.length) return '같은 점을 두 번 골랐습니다';
+      return fillFace(m, e.verts);
   }
 }
 

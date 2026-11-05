@@ -32,17 +32,17 @@ export function HomeScreen() {
             <li>필렛·구멍·패턴, 조립품, 도면</li>
           </ol>
         </button>
-        <button className="home-card" disabled title="다음 단계에서 열립니다" data-testid="home-modeling">
+        <button className="home-card" onClick={() => startNew('modeling')} data-testid="home-modeling">
           <span className="home-icon" aria-hidden>
             <CmdIcon name="shadedEdges" />
           </span>
           <strong>3D 모델링</strong>
-          <span className="home-sub">자유 형상 · 블렌더 방식 — 준비 중 (다음 단계)</span>
+          <span className="home-sub">자유 형상 · 블렌더 방식</span>
           <ol className="home-steps">
             <li>Shift+A 로 메시 추가 (큐브·구·원통 …)</li>
             <li>Tab 으로 편집 모드: 점·선·면 선택</li>
             <li>G·R·S 이동·회전·크기, E 돌출, I 인셋</li>
-            <li>모디파이어로 매끈하게·대칭·반복</li>
+            <li>Ctrl+R 루프 컷, X 삭제, M 병합, F 면 채우기</li>
           </ol>
         </button>
       </div>

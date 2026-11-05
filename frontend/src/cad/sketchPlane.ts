@@ -137,6 +137,7 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
     case 'loft':
     case 'sweep':
     case 'mesh':
+    case 'polymesh':
     case 'draft':
     case 'step':
       return [];
@@ -209,6 +210,7 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
     case 'loft':
     case 'sweep':
     case 'mesh':
+    case 'polymesh':
     case 'draft':
     case 'step':
       return null;

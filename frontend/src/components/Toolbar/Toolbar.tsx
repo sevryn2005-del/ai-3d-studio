@@ -4,6 +4,7 @@ import { selectCanRedo, selectCanUndo, useSceneStore } from '../../cad/sceneStor
 import { useEffect, useState } from 'react';
 import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
+import { ModelingHeader } from '../Modeling/ModelingHeader';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { startMeasurePick, startSketchOnFace } from '../Viewport/PickFlows';
 import { useDrawingStore } from '../Drawing/DrawingPanel';
@@ -98,6 +99,10 @@ export function Toolbar() {
         </button>
       </div>
 
+      {workspace === 'modeling' ? (
+        <ModelingHeader />
+      ) : (
+        <>
       {/* 2줄: 명령 탭 (솔리드웍스식 CommandManager) */}
       <div className="command-tabs" role="tablist" aria-label="명령 탭">
         {TABS.map((t) => (
@@ -204,6 +209,8 @@ export function Toolbar() {
           </>
         )}
       </div>
+        </>
+      )}
     </header>
   );
 }

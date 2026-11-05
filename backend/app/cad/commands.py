@@ -664,6 +664,23 @@ class MeshObject(_ObjectBase):
     mesh: MeshData
 
 
+MAX_POLY_VERTS = 50_000
+MAX_POLY_FACES = 50_000
+PolyIndex = Annotated[int, Field(strict=True, ge=0)]
+
+
+class PolyMeshData(Strict):
+    """편집 가능한 다각형 메시 (형식 v20, 3D 모델링 모드): 점(mm, 객체 로컬) + 면(점 번호, 반시계 = 바깥)"""
+
+    verts: Annotated[list[Vec3], Field(max_length=MAX_POLY_VERTS)]
+    faces: Annotated[list[Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]], Field(max_length=MAX_POLY_FACES)]
+
+
+class PolyMeshObject(_ObjectBase):
+    kind: Literal["polymesh"]
+    polymesh: PolyMeshData
+
+
 def sketch_feature_ref(obj) -> ExtrudeRef | None:
     """스케치 하나를 참조하는 피처(돌출·회전·헬릭스)의 참조."""
     if isinstance(obj, ExtrudeObject):
@@ -835,12 +852,12 @@ class StepObject(_ObjectBase):
 PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
     BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject,
+    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject,
 )
 
 CadObject = Annotated[
     Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject],
+          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject],
     Field(discriminator="kind"),
 ]
 
@@ -918,7 +935,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[19]
+    schemaVersion: Literal[20]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1246,6 +1263,94 @@ class Loft(Strict):
     sections: Annotated[list[ExtrudeRef], Field(min_length=2, max_length=Limits.MAX_LOFT_SECTIONS)]
 
 
+MeshPrimitive = Literal["cube", "plane", "uv_sphere", "cylinder", "cone", "torus", "grid"]
+
+
+class AddMeshParams(Strict):
+    size: Dimension | None = None
+    radius: Dimension | None = None
+    depth: Dimension | None = None
+    minorRadius: Dimension | None = None
+    segments: Annotated[int, Field(strict=True, ge=3, le=256)] | None = None
+    rings: Annotated[int, Field(strict=True, ge=3, le=128)] | None = None
+    subdivisions: Annotated[int, Field(strict=True, ge=1, le=100)] | None = None
+
+
+class AddMesh(Strict):
+    """메시 추가 (형식 v20, 블렌더 Shift+A)"""
+
+    type: Literal["add_mesh"]
+    id: ObjectId | None = None
+    name: Name | None = None
+    primitive: MeshPrimitive
+    params: AddMeshParams | None = None
+    position: Vec3 | None = None
+
+
+_VertIds = Annotated[list[PolyIndex], Field(max_length=MAX_POLY_VERTS)]
+_FaceIds = Annotated[list[PolyIndex], Field(min_length=1, max_length=MAX_POLY_FACES)]
+_Finite = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+
+
+class MeshEditTransform(Strict):
+    op: Literal["transform"]
+    verts: Annotated[list[PolyIndex], Field(min_length=1, max_length=MAX_POLY_VERTS)]
+    matrix: Annotated[list[_Finite], Field(min_length=16, max_length=16)]
+
+
+class MeshEditExtrude(Strict):
+    op: Literal["extrude"]
+    faces: _FaceIds
+    offset: Vec3
+
+
+class MeshEditInset(Strict):
+    op: Literal["inset"]
+    faces: _FaceIds
+    thickness: Annotated[float, _num(0.0001, Limits.MAX_DIMENSION)]
+
+
+class MeshEditDelete(Strict):
+    op: Literal["delete"]
+    verts: Annotated[list[PolyIndex], Field(min_length=1, max_length=MAX_POLY_VERTS)]
+    mode: Literal["verts", "edges", "faces"]
+
+
+class MeshEditLoopCut(Strict):
+    op: Literal["loop_cut"]
+    edge: tuple[PolyIndex, PolyIndex]
+    factor: Annotated[float, _num(0.01, 0.99)]
+
+
+class MeshEditSubdivide(Strict):
+    op: Literal["subdivide"]
+    faces: _FaceIds
+
+
+class MeshEditMerge(Strict):
+    op: Literal["merge"]
+    verts: Annotated[list[PolyIndex], Field(min_length=2, max_length=MAX_POLY_VERTS)]
+
+
+class MeshEditFill(Strict):
+    op: Literal["fill"]
+    verts: Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]
+
+
+MeshEdit = Annotated[
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill],
+    Field(discriminator="op"),
+]
+
+
+class MeshEditCommand(Strict):
+    """메시 편집 (형식 v20, 블렌더 편집 모드 연산 하나)"""
+
+    type: Literal["mesh_edit"]
+    target: ObjectId
+    edit: MeshEdit
+
+
 class ImportMesh(Strict):
     type: Literal["import_mesh"]
     id: ObjectId | None = None
@@ -1493,6 +1598,8 @@ CadCommand = Annotated[
         SetMate,
         DeleteMate,
         SetDrawing,
+        AddMesh,
+        MeshEditCommand,
         InsertPart,
         ImportMesh,
         EdgeFeatureCommand,
@@ -1564,6 +1671,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetMate,
     DeleteMate,
     SetDrawing,
+    AddMesh,
+    MeshEditCommand,
     InsertPart,
     ImportMesh,
     EdgeFeatureCommand,

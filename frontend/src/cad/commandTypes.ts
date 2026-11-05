@@ -163,7 +163,7 @@ export const PARAMS_SCHEMAS = {
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
-export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh' | 'fillet' | 'draft' | 'step' | 'sweep';
+export type ObjectKind = PrimitiveKind | 'boolean' | 'pattern' | 'loft' | 'mesh' | 'fillet' | 'draft' | 'step' | 'sweep' | 'polymesh';
 export const PRIMITIVE_KINDS = Object.keys(PARAMS_SCHEMAS) as PrimitiveKind[];
 export type BoxParams = z.infer<typeof BoxParamsSchema>;
 export type CylinderParams = z.infer<typeof CylinderParamsSchema>;
@@ -468,6 +468,19 @@ export const EdgeFeatureSchema = z.strictObject({
 });
 export type EdgeFeature = z.infer<typeof EdgeFeatureSchema>;
 
+/**
+ * 폴리메시 (형식 v20, 3D 모델링 모드): 점(객체 로컬 mm) + 다각형 면(점 번호, 바깥에서 볼 때 반시계). 열린 메시도 된다.
+ * CAD 엔진은 계산하지 않고 화면·내보내기가 그대로 쓴다. 편집은 mesh_edit 명령 (cad/polymesh.ts)
+ */
+export const MAX_POLY_VERTS = 50_000;
+export const MAX_POLY_FACES = 50_000;
+const polyCoord = z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate);
+export const PolyMeshDataSchema = z.strictObject({
+  verts: z.array(z.tuple([polyCoord, polyCoord, polyCoord])).max(MAX_POLY_VERTS),
+  faces: z.array(z.array(z.number().int().min(0)).min(3).max(256)).max(MAX_POLY_FACES),
+});
+export type PolyMeshData = z.infer<typeof PolyMeshDataSchema>;
+
 export const CadObjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     ...objectBase,
@@ -534,6 +547,7 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('mesh'),
     mesh: z.strictObject({ positions: MeshBase64Schema, indices: MeshBase64Schema }),
   }),
+  z.strictObject({ ...objectBase, kind: z.literal('polymesh'), polymesh: PolyMeshDataSchema }),
   /**
    * 모서리 처리 (형식 v9, 정밀 엔진 — 서버 CadQuery·브라우저 OCCT): 원본(source, 자식) 형상의 모서리를 규칙(edges)으로 골라
    * 필렛(둥글게, size = 반지름) 또는 모따기(size = 깎는 거리). 어떤 형상(불리언·돌출·회전 결과 포함)에도 쓸 수 있다
@@ -646,7 +660,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 19;
+export const MODEL_SCHEMA_VERSION = 20;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -1019,6 +1033,51 @@ export const ImportMeshCommandSchema = z.strictObject({
   position: Vec3Schema.optional(),
 });
 
+/** 메시 추가 (형식 v20, 블렌더 Shift+A): 기본 도형 폴리메시. 크기는 mm, 원점 = 도형 가운데 */
+export const MeshPrimitiveSchema = z.enum(['cube', 'plane', 'uv_sphere', 'cylinder', 'cone', 'torus', 'grid']);
+export const AddMeshCommandSchema = z.strictObject({
+  type: z.literal('add_mesh'),
+  id: ObjectIdSchema.optional(),
+  name: NameSchema.optional(),
+  primitive: MeshPrimitiveSchema,
+  params: z
+    .strictObject({
+      size: dimension.optional(),
+      radius: dimension.optional(),
+      depth: dimension.optional(),
+      minorRadius: dimension.optional(),
+      segments: z.number().int().min(3).max(256).optional(),
+      rings: z.number().int().min(3).max(128).optional(),
+      subdivisions: z.number().int().min(1).max(100).optional(),
+    })
+    .optional(),
+  position: Vec3Schema.optional(),
+});
+
+const vertIds = z.array(z.number().int().min(0)).max(MAX_POLY_VERTS);
+const faceIds = z.array(z.number().int().min(0)).max(MAX_POLY_FACES);
+/** 메시 편집 한 번 (블렌더 편집 모드 연산) — cad/polymesh.ts */
+export const MeshEditSchema = z.discriminatedUnion('op', [
+  /** G/R/S: 고른 점에 4×4 행렬 (열 우선, 객체 로컬) */
+  z.strictObject({ op: z.literal('transform'), verts: vertIds.min(1), matrix: z.array(z.number()).length(16) }),
+  /** E: 면 돌출 (영역) */
+  z.strictObject({ op: z.literal('extrude'), faces: faceIds.min(1), offset: Vec3Schema }),
+  /** I: 인셋 (면마다) */
+  z.strictObject({ op: z.literal('inset'), faces: faceIds.min(1), thickness: z.number().min(0.0001).max(LIMITS.maxDimension) }),
+  /** X: 삭제 — 점 / 선(고른 점 둘을 잇는 선) / 면(점이 모두 고른 면) */
+  z.strictObject({ op: z.literal('delete'), verts: vertIds.min(1), mode: z.enum(['verts', 'edges', 'faces']) }),
+  /** Ctrl+R: 선 (a, b) 를 지나는 사각형 띠를 factor 지점에서 자른다 */
+  z.strictObject({ op: z.literal('loop_cut'), edge: z.tuple([z.number().int().min(0), z.number().int().min(0)]), factor: z.number().min(0.01).max(0.99) }),
+  /** 세분 (면마다 가운데 점) */
+  z.strictObject({ op: z.literal('subdivide'), faces: faceIds.min(1) }),
+  /** M: 가운데로 병합 */
+  z.strictObject({ op: z.literal('merge'), verts: vertIds.min(2) }),
+  /** F: 고른 점들로 면 */
+  z.strictObject({ op: z.literal('fill'), verts: vertIds.min(3).max(256) }),
+]);
+export type MeshEdit = z.infer<typeof MeshEditSchema>;
+export const MeshEditCommandSchema = z.strictObject({ type: z.literal('mesh_edit'), target: ObjectIdSchema, edit: MeshEditSchema });
+
 /** 모서리 처리 만들기 (정밀 엔진): target(최상위)을 원본으로 감싼다 */
 export const EdgeFeatureCommandSchema = z.strictObject({
   type: z.literal('edge_feature'),
@@ -1229,6 +1288,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetMateCommandSchema,
   DeleteMateCommandSchema,
   SetDrawingCommandSchema,
+  AddMeshCommandSchema,
+  MeshEditCommandSchema,
   InsertPartCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,

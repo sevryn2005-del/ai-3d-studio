@@ -57,6 +57,7 @@ from app.cad.commands import (
     HoleObject,
     LoftObject,
     MeshObject,
+    PolyMeshObject,
     PatternObject,
     RevolveObject,
     Sketch,
@@ -73,7 +74,7 @@ from app.cad.commands import (
 from app.cad.curves import corner_segments, sweep_error
 from app.cad.features import is_suppressed, pattern_matrices
 from app.cad.frames import extrude_local_matrix, sketch_local_matrix
-from app.cad.mesh_import import mesh_solid
+from app.cad.mesh_import import mesh_solid, polymesh_solid
 from app.cad.precise import draft, edge_feature, read_step
 from app.cad.sections import bounds as section_bounds
 from app.cad.sections import (
@@ -141,7 +142,7 @@ def local_solid(obj: CadObject) -> cq.Shape:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
             return cq.Solid.makeCone(p.radiusBottom, p.radiusTop, p.height)
         case BooleanObject() | ExtrudeObject() | RevolveObject() | PatternObject() | HelixObject() | LoftObject() | MeshObject() \
-                | FilletObject() | DraftObject() | StepObject() | SweepObject():
+                | FilletObject() | DraftObject() | StepObject() | SweepObject() | PolyMeshObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
 
@@ -428,6 +429,8 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
         return sweep_solid(obj, index, sketches)
     if isinstance(obj, MeshObject):
         return mesh_solid(obj.mesh.positions, obj.mesh.indices, obj.name)
+    if isinstance(obj, PolyMeshObject):
+        return polymesh_solid(obj.polymesh.verts, obj.polymesh.faces, obj.name)
     if isinstance(obj, (ExtrudeObject, RevolveObject)):
         return extrude_solid(obj, index, sketches)
 

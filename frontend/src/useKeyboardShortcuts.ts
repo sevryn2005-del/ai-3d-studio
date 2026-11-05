@@ -51,6 +51,9 @@ export function useKeyboardShortcuts() {
       } else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
         e.preventDefault();
         s.redo();
+      } else if (s.history.present.model.workspace === 'modeling') {
+        // 3D 모델링 모드: 나머지 키는 블렌더식 useModelingKeys 가 처리
+        return;
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selectedId) {
         e.preventDefault();
         const isSketch = s.history.present.model.sketches.some((k) => k.id === s.selectedId);

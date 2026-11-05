@@ -51,7 +51,7 @@ def _evaluate(model: ModelDefinition, ids: list[str]) -> dict[str, Any]:
         except Exception as e:  # OCCT 예외 → 사용자 메시지
             raise GeometryError(f"'{obj.name}' 형상을 만들 수 없습니다") from e
         # 가져온 메시는 삼각형 면을 꿰맨 형상이라 OCCT 검사가 엄격하게 실패할 수 있다 (불리언·출력은 정상) → 부피로만 확인
-        if obj.kind == "mesh" and solid.Volume() > 0:
+        if obj.kind in ("mesh", "polymesh") and solid.Volume() > 0:
             pass
         elif not solid.isValid():
             raise GeometryError(f"'{obj.name}' 형상이 올바르지 않습니다")

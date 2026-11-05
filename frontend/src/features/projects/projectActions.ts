@@ -11,7 +11,7 @@ import { isDirtyNow, UNTITLED, useProjectStore } from './projectStore';
 
 const DISCARD_PROMPT = '저장하지 않은 변경 사항이 있습니다. 계속하면 사라집니다. 계속할까요?';
 
-function notify(message: string) {
+export function notify(message: string) {
   useProjectStore.getState().set({ notice: message });
   setTimeout(() => {
     if (useProjectStore.getState().notice === message) useProjectStore.getState().set({ notice: null });

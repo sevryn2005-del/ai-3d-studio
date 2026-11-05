@@ -10,6 +10,8 @@ import { useBackendSync } from './features/backend/useBackendSync';
 import { useProjectLifecycle } from './features/projects/useProjectLifecycle';
 import { useAppScreen } from './features/projects/appScreen';
 import { HomeScreen } from './components/Home/HomeScreen';
+import { ModelingWorkspace } from './components/Modeling/ModelingWorkspace';
+import { useSceneStore } from './cad/sceneStore';
 
 export function App() {
   const screen = useAppScreen((s) => s.screen);
@@ -28,6 +30,16 @@ function Editor() {
   useKeyboardShortcuts();
   useBackendSync();
   useProjectLifecycle();
+  const workspace = useSceneStore((s) => s.history.present.model.workspace);
+  if (workspace === 'modeling')
+    return (
+      <div className="app modeling">
+        <Toolbar />
+        <ModelingWorkspace />
+        <StatusBar />
+        <ConfirmDialog />
+      </div>
+    );
   return (
     <div className="app">
       <Toolbar />

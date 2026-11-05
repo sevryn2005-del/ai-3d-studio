@@ -29,7 +29,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 19, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 20, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -117,6 +117,8 @@ export function PreviewBody({
   }
   // 로프트·메시·헬릭스: 엔진 메시가 올 때까지 미리보기 없음 (브라우저·서버 엔진 모두 빠름)
   if (object.kind === 'loft' || object.kind === 'mesh' || object.kind === 'helix' || object.kind === 'step' || object.kind === 'sweep') return null;
+  // 폴리메시(3D 모델링 모드)는 모델 데이터를 그대로 그린다 (components/Modeling/PolyMeshView)
+  if (object.kind === 'polymesh') return null;
   if (object.kind === 'fillet' || object.kind === 'draft') {
     // 계산 전 미리보기: 원본 그대로
     const src = index.get(object.kind === 'fillet' ? object.fillet.source : object.draft.source);

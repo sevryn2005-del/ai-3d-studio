@@ -310,6 +310,14 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             errors.append(f"commands[{i}]: insert_part is only for project files the user opens, not for AI")
         elif t == "import_mesh":
             errors.append(f"commands[{i}]: import_mesh is only for files the user opens, not for AI")
+        elif t == "add_mesh":
+            if c.get("id") is not None:
+                if id_used(c["id"]):
+                    errors.append(f"commands[{i}].id: id '{c['id']}' is already used")
+                kinds[c["id"]] = "polymesh"
+        elif t == "mesh_edit":
+            # 점·면 번호로 고르는 편집은 사용자가 화면에서 한다 (AI 는 번호를 볼 수 없다)
+            errors.append(f"commands[{i}]: mesh_edit is done by the user in edit mode, not by AI")
         elif t in ("add_line", "add_slot", "add_ellipse"):
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]

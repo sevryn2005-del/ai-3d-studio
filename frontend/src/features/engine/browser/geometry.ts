@@ -16,6 +16,7 @@ import { roundedPoints, sweepError, sweepRings, toleranceStep } from '../../../c
 import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
 import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh } from '../../../cad/meshData';
+import { triangulate } from '../../../cad/polymesh';
 import { ringSolid } from './ringSolid';
 import { Vector3, type Matrix4 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
@@ -68,7 +69,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 19, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 20, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -125,6 +126,19 @@ export function localManifold(
     case 'step':
       // 브라우저에서는 워커가 이런 모델을 OCCT 엔진(occtGeometry.ts)으로 계산한다
       throw new GeometryError(`'${obj.name}': 정밀 엔진(OCCT)이 필요한 형상입니다`);
+    case 'polymesh': {
+      // 3D 모델링 모드의 메시: 닫혀 있으면 솔리드로 (불리언·내보내기), 열린 메시는 화면에만
+      const vp = Float32Array.from(obj.polymesh.verts.flat());
+      const tv = Uint32Array.from(triangulate(obj.polymesh));
+      let solid: Manifold;
+      try {
+        solid = scope.keep(new Manifold(new wasm.Mesh({ numProp: 3, vertProperties: vp, triVerts: tv })));
+      } catch {
+        throw new GeometryError(`'${obj.name}': 열린 메시는 솔리드 계산(불리언·STL 내보내기)에 쓸 수 없습니다 (구멍을 면으로 채우세요)`);
+      }
+      if (solid.status() !== 'NoError' || solid.isEmpty()) throw new GeometryError(`'${obj.name}': 열린 메시는 솔리드 계산에 쓸 수 없습니다 (구멍을 면으로 채우세요)`);
+      return solid;
+    }
     case 'mesh': {
       const m = decodeMesh(obj.mesh);
       let solid: Manifold;
@@ -169,7 +183,7 @@ export function localManifold(
         if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
       } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 19, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 20, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {

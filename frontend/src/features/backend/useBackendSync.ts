@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getHealth } from '../../api/backend';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { useBackendStore } from './backendStore';
 import { buildGeometry, geometryKey } from './renderMesh';
 import type { ModelDefinition } from '../../cad/commandTypes';
-import { byId, sketchIndex } from '../../cad/modelGraph';
+import { byId, parentMap, sketchIndex } from '../../cad/modelGraph';
 import type { CadEngine, EngineEvaluation } from '../engine/types';
 import { getActiveEngine, useActiveEngineId } from '../engine/engines';
 import { appConfig } from '../../api/config';
@@ -20,7 +20,9 @@ export const EVALUATE_DEBOUNCE_MS = 400;
  */
 export function useBackendSync() {
   const engineId = useActiveEngineId();
-  const model = useSceneStore(selectModel);
+  const full = useSceneStore(selectModel);
+  // 편집 메시(따로 있는 polymesh)는 화면이 모델 데이터를 바로 그린다 → 메시만 고친 편집은 엔진 계산을 다시 하지 않는다
+  const model = useStableEngineModel(full);
 
   // 연결 상태 확인 (브라우저 전용 모드 = 백엔드 없는 정적 웹: 서버에 요청하지 않는다)
   useEffect(() => {
@@ -100,4 +102,29 @@ function storeMeshes(sent: ModelDefinition, result: EngineEvaluation) {
   const current = useSceneStore.getState().history.present.model;
   const index = byId(current);
   useBackendStore.getState().addGeometries(entries, new Set(current.objects.map((o) => geometryKey(o, index, sketchIndex(current)))));
+}
+
+/**
+ * 엔진에 보낼 모델: 불리언·패턴 등에 쓰이지 않은 최상위 편집 메시(polymesh)를 뺀다 (화면은 PolyMeshView 가 그림).
+ * 메시가 아닌 부분이 그대로면 이전 객체를 그대로 돌려줘 계산을 다시 하지 않는다. 내보내기는 전체 모델을 쓴다.
+ */
+export function engineModel(model: ModelDefinition): ModelDefinition {
+  const used = new Set((model.mates ?? []).flatMap((m) => m.refs.map((r) => (typeof r === 'string' ? r.split('.')[0]! : r.object))));
+  const parents = parentMap(model);
+  const loose = new Set(model.objects.filter((o) => o.kind === 'polymesh' && !parents.has(o.id) && !used.has(o.id)).map((o) => o.id));
+  if (!loose.size) return model;
+  return { ...model, objects: model.objects.filter((o) => !loose.has(o.id)) };
+}
+
+function sameEngineInput(a: ModelDefinition, b: ModelDefinition): boolean {
+  if (a === b) return true;
+  if (a.objects.length !== b.objects.length || a.sketches !== b.sketches || a.mates !== b.mates) return false;
+  return a.objects.every((o, i) => o === b.objects[i]);
+}
+
+function useStableEngineModel(model: ModelDefinition): ModelDefinition {
+  const ref = useRef<ModelDefinition | null>(null);
+  const next = engineModel(model);
+  if (!ref.current || !sameEngineInput(ref.current, next)) ref.current = next;
+  return ref.current;
 }

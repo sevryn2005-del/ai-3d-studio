@@ -21,6 +21,7 @@ import { cornerSegments, sweepError, type Segment } from '../../../cad/curves';
 import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
 import { helixError, helixProfilePoints, REGION_UNSUPPORTED, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
+import { triangulate } from '../../../cad/polymesh';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
 import { DISPLAY_TOLERANCE, EXPORT_TOLERANCE, GeometryError, type PlainMesh } from '../browser/geometry';
@@ -71,7 +72,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 19, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 20, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -830,6 +831,8 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       const m = decodeMesh(obj.mesh);
       return sewMesh(c, m.positions, m.indices, obj.name);
     }
+    case 'polymesh':
+      return sewMesh(c, obj.polymesh.verts.flat(), triangulate(obj.polymesh), obj.name);
     case 'step':
       return readStep(c.oc, obj.step.data, obj.name);
     case 'fillet': {

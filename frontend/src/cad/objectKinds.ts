@@ -67,6 +67,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
   loft: { label: '로프트', params: [] },
   sweep: { label: '스윕', params: [] },
   mesh: { label: '가져온 메시', params: [] },
+  polymesh: { label: '메시', params: [] },
   fillet: { label: '모서리 처리', params: [] },
   draft: { label: '구배', params: [] },
   step: { label: 'STEP', params: [] },
@@ -154,6 +155,11 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
     case 'mesh':
     case 'step':
       return [0, 0, 0]; // 크기는 엔진 메시로 (질량 특성·출력 검사)
+    case 'polymesh': {
+      const vs = obj.polymesh.verts;
+      if (!vs.length) return [0, 0, 0];
+      return [0, 1, 2].map((k) => Math.max(...vs.map((v) => v[k]!)) - Math.min(...vs.map((v) => v[k]!))) as [number, number, number];
+    }
   }
 }
 
@@ -216,6 +222,8 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       return `STEP ${Math.round((obj.step.data.length * 3) / 4 / 1024).toLocaleString()}KB`;
     case 'mesh':
       return `삼각형 ${Math.round((obj.mesh.indices.length * 3) / 4 / 12).toLocaleString()}개`;
+    case 'polymesh':
+      return `점 ${obj.polymesh.verts.length.toLocaleString()} · 면 ${obj.polymesh.faces.length.toLocaleString()}`;
     case 'pattern': {
       const p = obj.pattern;
       if (p.type === 'mirror') return `${p.plane} 평면`;

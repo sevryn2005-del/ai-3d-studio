@@ -655,6 +655,26 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 4 },
     ],
   },
+  // 형식 v20 편집 메시 (3D 모델링 모드): 닫힌 메시는 세 엔진이 솔리드로 계산 (불리언·내보내기)
+  'polymesh-cube-extrude': {
+    volume: 20 * 20 * 30,
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      { type: 'mesh_edit', target: 'm', edit: { op: 'extrude', faces: [1], offset: [0, 0, 10] } },
+      { type: 'mesh_edit', target: 'm', edit: { op: 'loop_cut', edge: [0, 4], factor: 0.5 } },
+    ],
+    bbox: [[-10, -10, 0], [10, 10, 30]],
+  },
+  'polymesh-cut-box': {
+    volume: 16000 - 500,
+    roots: 1,
+    commands: [
+      box('b', 40, 40, 10),
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 10 }, position: [0, 0, 10] },
+      { type: 'cut', id: 'c', base: 'b', tools: ['m'] },
+    ],
+  },
   'suppressed-tool-and-root': {
     volume: 16000,
     roots: 1,

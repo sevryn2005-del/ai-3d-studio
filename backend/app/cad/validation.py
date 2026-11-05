@@ -19,6 +19,7 @@ from app.cad.commands import (
     sketch_refs,
     HelixObject,
     MeshObject,
+    PolyMeshObject,
     FacePlane,
     Limits,
     ModelDefinition,
@@ -29,7 +30,7 @@ from app.cad.commands import (
     profile_of,
 )
 from app.cad.constraints import constraint_errors
-from app.cad.mesh_data import mesh_error
+from app.cad.mesh_data import mesh_error, polymesh_error
 from app.cad.features import is_suppressed, pattern_error, shell_error
 from app.cad.frames import dependency_cycle, faces_of
 
@@ -133,6 +134,8 @@ def check_model(model: ModelDefinition) -> list[Issue]:
     for i, obj in enumerate(model.objects):
         if isinstance(obj, MeshObject) and (err := mesh_error(obj.mesh.positions, obj.mesh.indices, Limits.MAX_MESH_TRIANGLES)):
             issues.append(Issue(path=f"objects.{i}.mesh", message=f"{obj.id}: {err}"))
+        if isinstance(obj, PolyMeshObject) and (err := polymesh_error(obj.polymesh.verts, obj.polymesh.faces)):
+            issues.append(Issue(path=f"objects.{i}.polymesh", message=f"{obj.id}: {err}"))
         for ref in sketch_refs(obj):
             field = obj.kind  # "extrude" | "revolve" | "helix" | "loft"
             sk = sketches.get(ref.sketch)

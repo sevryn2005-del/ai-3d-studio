@@ -422,3 +422,57 @@ label.check.small { font-size: 12px; }
 /* 설계 모드 빈 부품 안내 */
 .start-guide { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 4; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; max-width: 420px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3); }
 .start-guide ol { margin: 6px 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+
+/* ── 3D 모델링 모드 (블렌더 흐름): 회색 작업 화면, 오른쪽 아웃라이너·속성 ── */
+.app.modeling {
+  --bg: #1d1d1d;
+  --panel: #303030;
+  --panel-2: #3d3d3d;
+  --border: #474747;
+  --text: #e6e6e6;
+  --muted: #a0a0a0;
+  --accent: #4772b3;
+  --accent-soft: rgba(71, 114, 179, 0.35);
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+.modeling-header { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.modeling-header .seg { display: inline-flex; }
+.modeling-header .seg button { border-radius: 0; margin-left: -1px; }
+.modeling-header .seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.modeling-header .seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.modeling-header button { padding: 3px 9px; }
+.modeling-header button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.modeling-header .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.modeling-header .spacer { flex: 1; }
+.menu-wrap { position: relative; }
+.mmenu { position: absolute; z-index: 20; display: flex; flex-direction: column; min-width: 140px; padding: 4px; background: #262626; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }
+.menu-wrap .mmenu { top: 100%; left: 0; margin-top: 2px; }
+.mmenu button { text-align: left; background: transparent; border-color: transparent; padding: 4px 10px; }
+.mmenu button:hover { background: var(--accent); color: #fff; }
+.mmenu .menu-title { padding: 2px 10px 4px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+.modeling-workspace { grid-template-columns: 1fr minmax(240px, 280px); }
+.modeling-workspace.with-chat { grid-template-columns: 1fr minmax(240px, 280px) minmax(260px, 22%); }
+.modeling-viewport { background: #3a3a3a; }
+.modeling-side { display: grid; grid-template-rows: minmax(120px, 38%) 1fr; min-height: 0; border-left: 1px solid var(--border); background: var(--panel); }
+.outliner, .mprops { overflow: auto; padding: 6px 8px; min-height: 0; }
+.outliner { border-bottom: 1px solid var(--border); }
+.outliner h2, .mprops h2 { font-size: 12px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+.mprops h3 { font-size: 12px; margin: 10px 0 4px; color: var(--muted); font-weight: 600; }
+.outliner ul { list-style: none; margin: 0; padding: 0; }
+.outliner li { display: flex; align-items: center; gap: 4px; border-radius: 4px; padding: 1px 2px; }
+.outliner li.selected { background: var(--accent-soft); }
+.outliner .kind { width: 14px; color: #e8a33d; font-size: 10px; text-align: center; }
+.outliner .name { flex: 1; text-align: left; background: transparent; border: none; padding: 2px 4px; }
+.outliner .eye { background: transparent; border: none; padding: 0 4px; color: var(--muted); }
+.outliner input { flex: 1; }
+.outliner .empty, .mprops .empty { color: var(--muted); font-size: 12px; }
+.mprops .stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 12px; }
+.mprops .stats dt { color: var(--muted); }
+.mprops .stats dd { margin: 0; }
+.mprops .sel-count { font-size: 12px; margin: 0 0 4px; }
+.add-menu { transform: translate(-10px, -10px); }
+.modeling-hint { right: 12px; }
+.modeling-guide p { font-size: 13px; margin: 6px 0 10px; }
+.modeling-guide .guide-buttons { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -10,6 +10,11 @@ const PARAM_LABEL: Record<string, string> = {
   diameter: '지름', cboreDiameter: '카운터보어 지름', cboreDepth: '카운터보어 깊이', csinkDiameter: '카운터싱크 지름',
 };
 
+const MESH_LABEL: Record<string, string> = { cube: '큐브', plane: '평면', uv_sphere: 'UV 구', cylinder: '원기둥', cone: '원뿔', torus: '도넛', grid: '격자' };
+const MESH_EDIT_LABEL: Record<string, string> = {
+  transform: '이동·회전·크기', extrude: '돌출', inset: '인셋', delete: '삭제', loop_cut: '루프 컷', subdivide: '세분', merge: '병합', fill: '면 채우기',
+};
+
 const vec = (v: readonly number[]) => `(${v.map(formatMm).join(', ')})`;
 
 export function describeCommand(cmd: CadCommand, model: ModelDefinition): string {
@@ -152,6 +157,10 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
         : `${sketchName(cmd.sketch)}의 ${cmd.entity} 꼭짓점 처리 제거`;
     case 'import_mesh':
       return `메시 가져오기${cmd.name ? ` "${cmd.name}"` : ''}`;
+    case 'add_mesh':
+      return `메시 추가: ${MESH_LABEL[cmd.primitive]}`;
+    case 'mesh_edit':
+      return `${name(cmd.target)} 메시 편집: ${MESH_EDIT_LABEL[cmd.edit.op]}`;
     case 'offset_entity':
       return `${sketchName(cmd.sketch)}의 ${cmd.entity} ${cmd.distance > 0 ? '바깥' : '안쪽'}으로 ${formatMm(Math.abs(cmd.distance))}mm 오프셋`;
     case 'add_line':

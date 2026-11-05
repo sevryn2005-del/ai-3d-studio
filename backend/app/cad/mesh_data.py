@@ -30,3 +30,16 @@ def mesh_error(positions: str, indices: str, max_triangles: int) -> str | None:
     if not np.isfinite(v).all() or np.abs(v).max() > 10_000:
         return "메시 좌표가 허용 범위를 벗어납니다"
     return None
+
+
+def polymesh_error(verts: list, faces: list[list[int]]) -> str | None:
+    """편집 메시 (형식 v20) 검사 — 프론트 cad/polymesh.ts polyMeshError 와 같은 규칙"""
+    n = len(verts)
+    for fi, f in enumerate(faces):
+        if len(f) < 3:
+            return f"면 {fi} 의 점이 3개보다 적습니다"
+        if len(set(f)) != len(f):
+            return f"면 {fi} 에 같은 점이 두 번 있습니다"
+        if any(v < 0 or v >= n for v in f):
+            return f"면 {fi} 가 없는 점을 가리킵니다"
+    return None

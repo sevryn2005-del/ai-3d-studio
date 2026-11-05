@@ -19,9 +19,19 @@ MAX_SERVER_MESH_TRIANGLES = 20_000
 
 
 def mesh_solid(positions: str, indices: str, name: str) -> cq.Shape:
+    v, t = decode(positions, indices)
+    return sew_triangles(v, t, name)
+
+
+def polymesh_solid(verts, faces, name: str) -> cq.Shape:
+    """편집 메시 (형식 v20): 다각형 면을 부채꼴로 삼각형 나눔 (프론트 cad/polymesh.ts triangulate 와 같은 규칙)"""
+    t = [(f[0], f[i], f[i + 1]) for f in faces for i in range(1, len(f) - 1)]
+    return sew_triangles([tuple(p) for p in verts], t, name)
+
+
+def sew_triangles(v, t, name: str) -> cq.Shape:
     from app.cad.primitives import GeometryError
 
-    v, t = decode(positions, indices)
     if len(t) > MAX_SERVER_MESH_TRIANGLES:
         raise GeometryError(f"'{name}': 서버(CadQuery) 엔진은 삼각형 {MAX_SERVER_MESH_TRIANGLES:,}개까지 가져온 메시를 다룹니다. "
                             "브라우저 엔진을 쓰거나 메시를 줄이세요")
