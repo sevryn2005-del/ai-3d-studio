@@ -19,7 +19,7 @@ import { byId, sketchIndex, topLevelObjects } from '../../../cad/modelGraph';
 import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type BaseProfile, type Profile } from '../../../cad/sketch';
 import { cornerSegments, sweepError, type Segment } from '../../../cad/curves';
 import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
-import { helixError, helixProfilePoints, helixRings, REGION_UNSUPPORTED, sweepProfilePoints } from '../../../cad/sections';
+import { helixError, helixProfilePoints, REGION_UNSUPPORTED, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
@@ -284,21 +284,6 @@ function cone(c: Ctx, r1: number, r2: number, h: number, z0 = 0): TopoDS_Shape {
   return c.gc.k(c.gc.k(new c.oc.BRepPrimAPI_MakeRevol(face, ax, 2 * Math.PI, false)).Shape());
 }
 
-/** 단면 고리들을 직선(룰드) 면으로 잇기 — 서버 _ring_solid 와 같음 */
-function ringSolid(c: Ctx, rings: [number, number, number][][], name: string): TopoDS_Shape {
-  const ts = c.gc.k(new c.oc.BRepOffsetAPI_ThruSections(true, true, 1e-6));
-  for (const r of rings) ts.AddWire(polygonWire(c, r));
-  let s: TopoDS_Shape;
-  try {
-    ts.Build(progress(c));
-    if (!ts.IsDone()) throw new Error('loft');
-    s = c.gc.k(ts.Shape());
-  } catch {
-    throw new GeometryError(`'${name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)`);
-  }
-  return volumeOf(c.oc, s) < 0 ? c.gc.k(s.Reversed()) : s;
-}
-
 /** 정확한 단면 선들을 직선(룰드) 면으로 잇기 — 로프트 */
 function thruSections(c: Ctx, wires: ReturnType<typeof polygonWire>[], name: string): TopoDS_Shape {
   const ts = c.gc.k(new c.oc.BRepOffsetAPI_ThruSections(true, true, 1e-6));
@@ -352,6 +337,39 @@ function pipeSweep(c: Ctx, p: Profile, path: Extract<Sketch['entities'][number],
   } catch {
     throw new GeometryError(`'${name}': 스윕 결과 형상을 만들 수 없습니다 (경로가 자기 자신과 겹치거나 단면이 꼬였습니다)`);
   }
+}
+
+/**
+ * 헬릭스 (정확한 곡면, 서버 primitives.helix_sweep 과 같은 호출): 축 = Z 인 좌표계에서
+ * 원통면(반지름 = 단면 가운데 u) 위의 나선 모서리를 길로, 축을 품은 평면(XZ)의 단면을 BiNormal = Z 고정으로 쓸어 간다
+ * (= 나사 운동: 단면이 축 둘레로 돌며 바퀴마다 pitch 만큼 오른다). 결과를 스케치 좌표(축 = v)로 돌린다:
+ * 단면 (u, v, 0) → Rx(+90°) → (u, 0, v), 결과 → Rx(−90°) → (x, z, −y) — 메시 엔진 helixRings 와 같은 방향(+u 가 −w 쪽으로)
+ */
+function helixSweep(c: Ctx, p: Profile, pitch: number, turns: number, name: string): TopoDS_Shape {
+  const r0 = profileBounds(p).center[0];
+  const ax3 = c.gc.k(new c.oc.gp_Ax3(pnt(c, 0, 0, 0), dir(c, 0, 0, 1)));
+  const cyl = c.gc.k(new c.oc.Geom_CylindricalSurface(ax3, r0));
+  const line = c.gc.k(new c.oc.Geom2d_Line(c.gc.k(new c.oc.gp_Pnt2d(0, 0)), c.gc.k(new c.oc.gp_Dir2d(2 * Math.PI, pitch))));
+  const len = turns * Math.hypot(2 * Math.PI, pitch);
+  const edge = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(line as never, cyl as never, 0, len)).Edge());
+  c.oc.BRepLib.BuildCurves3d(edge);
+  const spine = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeWire(edge)).Wire());
+  const toXZ = new Matrix4().makeRotationX(Math.PI / 2);
+  const profile = c.oc.TopoDS.Wire(transformed(c, profileWire(c, p), toXZ, name));
+  let s: TopoDS_Shape;
+  try {
+    const ps = c.gc.k(new c.oc.BRepOffsetAPI_MakePipeShell(spine));
+    ps.SetMode(dir(c, 0, 0, 1));
+    ps.Add(profile, false, false);
+    ps.Build(progress(c));
+    if (!ps.IsDone() || !ps.MakeSolid()) throw new Error('pipe');
+    s = c.gc.k(ps.Shape());
+    if (!isValid(c, s)) throw new Error('invalid');
+    if (volumeOf(c.oc, s) < 0) s = c.gc.k(s.Reversed());
+  } catch {
+    throw new GeometryError(`'${name}': 헬릭스를 만들 수 없습니다 (피치를 늘리거나 단면을 줄여 보세요)`);
+  }
+  return transformed(c, s, new Matrix4().makeRotationX(-Math.PI / 2), name);
 }
 
 /** 삼각형 메시를 꿰매 솔리드로 — 서버 mesh_import.mesh_solid 와 같음 */
@@ -772,7 +790,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       if (err) throw new GeometryError(`'${obj.name}': ${err}`);
       const local = extrudeLocalMatrix(modelOf(c), obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
-      return transformed(c, ringSolid(c, helixRings(pts, obj.params.pitch, obj.params.turns, SECTION_TOLERANCE), obj.name), local, obj.name);
+      return transformed(c, helixSweep(c, p, obj.params.pitch, obj.params.turns, obj.name), local, obj.name);
     }
     case 'loft': {
       const model = modelOf(c);

@@ -429,6 +429,17 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'helix', id: 'h', sketch: 's', profile: 'r', pitch: 5, turns: 3 },
     ],
   },
+  'helix-quarter-direction': {
+    // 1/4 바퀴: 도는 방향·오르는 방향까지 세 엔진이 같은지 (바운딩 박스). XZ 평면: u = X, v = Z, 오른손 v 축 둘레로 +u → −w(= +Y)
+    volume: 8 * 2 * PI * 10 * 0.25,
+    roots: 1,
+    bbox: [[0, 0, -1], [12, 12, 2.25]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [10, 0], width: 4, height: 2 },
+      { type: 'helix', id: 'h', sketch: 's', profile: 'r', pitch: 5, turns: 0.25 },
+    ],
+  },
   'mesh-import-cube': {
     volume: 1000,
     roots: 1,

@@ -104,33 +104,10 @@ def section_points(p: dict, n: int):
     return resample(outline(p), n, bounds(p)[0])
 
 
-def helix_steps_per_turn(r_max: float, tol: float) -> int:
-    n = 16 if r_max <= tol else math.ceil(math.pi / math.acos(1 - tol / r_max))
-    return min(256, max(16, math.ceil(n / 8) * 8))
-
-
 def helix_profile_points(p: dict, tol: float):
     if p["type"] in ("polygon", "rectangle"):
         return outline(p)
     return section_points(p, loft_segments([p], tol))
-
-
-def helix_rings(pts, pitch: float, turns: float, tol: float):
-    r_max = max(q[0] for q in pts)
-    steps = helix_steps(turns, helix_steps_per_turn(r_max, tol))
-    rings = []
-    for k in range(steps + 1):
-        th = 2 * math.pi * turns * k / steps
-        dv = pitch * turns * k / steps
-        rings.append([(u * math.cos(th), v + dv, -u * math.sin(th)) for u, v in pts])
-    return rings
-
-
-MAX_HELIX_STEPS = 400  # sections.ts 와 같음
-
-
-def helix_steps(turns: float, per_turn: int) -> int:
-    return max(2, math.ceil(turns * 16), min(math.ceil(turns * per_turn), MAX_HELIX_STEPS))
 
 
 def helix_error(pts, pitch: float) -> str | None:

@@ -1646,6 +1646,88 @@
       ]
     }
   },
+  "helix-quarter-direction": {
+    "volume": 125.66370614359172,
+    "roots": 1,
+    "bbox": [
+      [
+        0,
+        0,
+        -1
+      ],
+      [
+        12,
+        12,
+        2.25
+      ]
+    ],
+    "model": {
+      "schemaVersion": 17,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "XZ",
+            "offset": 0
+          },
+          "entities": [
+            {
+              "id": "r",
+              "type": "rectangle",
+              "center": [
+                10,
+                0
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "r.width",
+              "entity": "r",
+              "kind": "width",
+              "value": 4
+            },
+            {
+              "id": "r.height",
+              "entity": "r",
+              "kind": "height",
+              "value": 2
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "h",
+          "name": "헬릭스 1",
+          "kind": "helix",
+          "params": {
+            "pitch": 5,
+            "turns": 0.25
+          },
+          "helix": {
+            "sketch": "s",
+            "profile": "r"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
   "mesh-import-cube": {
     "volume": 1000,
     "roots": 1,

@@ -20,12 +20,27 @@ import cadquery as cq
 import numpy as np
 from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_GTransform,
+    BRepBuilderAPI_MakeEdge,
+    BRepBuilderAPI_MakeWire,
     BRepBuilderAPI_RightCorner,
     BRepBuilderAPI_Transform,
 )
+from OCP.BRepLib import BRepLib
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell
 from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol
-from OCP.gp import gp_Ax1, gp_Dir, gp_GTrsf, gp_Pnt, gp_Trsf, gp_Vec
+from OCP.Geom import Geom_CylindricalSurface
+from OCP.Geom2d import Geom2d_Line
+from OCP.gp import (
+    gp_Ax1,
+    gp_Ax3,
+    gp_Dir,
+    gp_Dir2d,
+    gp_GTrsf,
+    gp_Pnt,
+    gp_Pnt2d,
+    gp_Trsf,
+    gp_Vec,
+)
 
 from app.cad.commands import (
     BooleanObject,
@@ -62,7 +77,6 @@ from app.cad.sections import bounds as section_bounds
 from app.cad.sections import (
     helix_error,
     helix_profile_points,
-    helix_rings,
     sweep_profile_points,
 )
 
@@ -266,16 +280,38 @@ def _rigid(shape: cq.Shape, m) -> cq.Shape:
     return cq.Shape.cast(BRepBuilderAPI_Transform(shape.wrapped, trsf, True).Shape())
 
 
-def _ring_solid(rings, name: str) -> cq.Shape:
-    """단면 고리들을 직선(룰드) 면으로 잇기 — 브라우저 ringSolid.ts 와 같은 고리"""
-    wires = [cq.Wire.makePolygon([cq.Vector(*p) for p in r], close=True) for r in rings]
+def _rot_x(deg: float) -> np.ndarray:
+    a = math.radians(deg)
+    m = np.eye(4)
+    m[1, 1], m[1, 2], m[2, 1], m[2, 2] = math.cos(a), -math.sin(a), math.sin(a), math.cos(a)
+    return m
+
+
+def helix_sweep(p: dict, pitch: float, turns: float, name: str) -> cq.Shape:
+    """헬릭스 (정확한 곡면) — 브라우저 occtGeometry.helixSweep 와 같은 호출: 축 Z 의 원통면(반지름 = 단면 가운데 u) 위 나선을 길로,
+    XZ 평면 단면을 BiNormal = Z 고정으로 쓸기 (나사 운동). 단면 (u, v, 0) → Rx(+90°), 결과 → Rx(−90°) 로 스케치 좌표(축 = v)"""
+    (cx, _cy), _, _ = section_bounds(p)
+    cyl = Geom_CylindricalSurface(gp_Ax3(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), cx)
+    line = Geom2d_Line(gp_Pnt2d(0, 0), gp_Dir2d(2 * math.pi, pitch))
+    edge = BRepBuilderAPI_MakeEdge(line, cyl, 0.0, turns * math.hypot(2 * math.pi, pitch)).Edge()
+    BRepLib.BuildCurves3d_s(edge)
+    spine = BRepBuilderAPI_MakeWire(edge).Wire()
+    profile = _rigid(profile_wire(p), _rot_x(90))
     try:
-        solid = cq.Solid.makeLoft(wires, ruled=True)
+        builder = BRepOffsetAPI_MakePipeShell(spine)
+        builder.SetMode(gp_Dir(0, 0, 1))
+        builder.Add(profile.wrapped, False, False)
+        builder.Build()
+        if not builder.IsDone() or not builder.MakeSolid():
+            raise RuntimeError("pipe")
+        solid = cq.Shape.cast(builder.Shape())
+        if not solid.isValid():
+            raise RuntimeError("invalid")
     except Exception as e:
-        raise GeometryError(f"'{name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)") from e
+        raise GeometryError(f"'{name}': 헬릭스를 만들 수 없습니다 (피치를 늘리거나 단면을 줄여 보세요)") from e
     if solid.Volume() < 0:
         solid = cq.Shape.cast(solid.wrapped.Reversed())
-    return solid
+    return _rigid(solid, _rot_x(-90))
 
 
 def helix_solid(obj: HelixObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
@@ -290,7 +326,7 @@ def helix_solid(obj: HelixObject, index: dict[str, CadObject], sketches: dict[st
     local = sketch_local_matrix(model, obj.id, obj.helix.sketch)  # type: ignore[arg-type]
     if local is None:
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
-    return _rigid(_ring_solid(helix_rings(pts, obj.params.pitch, obj.params.turns, HELIX_TOLERANCE), obj.name), local)
+    return _rigid(helix_sweep(p, obj.params.pitch, obj.params.turns, obj.name), local)
 
 
 def loft_solid(obj: LoftObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
