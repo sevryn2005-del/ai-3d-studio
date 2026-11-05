@@ -49,7 +49,7 @@ export function DevProbe() {
           baseRevision: h.past.at(-1)?.revision ?? null,
           command: h.present.command,
           objects: h.present.model.objects.map((o) => ({ id: o.id, position: [...o.transform.position], rotation: [...o.transform.rotation] })),
-          sketches: h.present.model.sketches.map((k) => ({ id: k.id, plane: k.plane })),
+          sketches: h.present.model.sketches.map((k) => ({ id: k.id, plane: k.plane, entities: k.entities.map((e) => ({ id: e.id, type: e.type, ...('center' in e ? { center: [...e.center] } : {}) })) })),
           mates: h.present.model.mates ?? [],
         };
       },

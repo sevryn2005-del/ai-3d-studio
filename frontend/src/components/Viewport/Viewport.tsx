@@ -10,6 +10,10 @@ import { ProjectionSwitch } from './ProjectionSwitch';
 import { ViewportToolbar } from './ViewportToolbar';
 import { DevProbe } from './DevProbe';
 import { SketchOutlines } from './SketchOutlines';
+import { SketchPaper } from './SketchPaper';
+import { SketchOptionsBar } from './SketchOptionsBar';
+import { useActiveSketch } from '../../features/sketch/activeSketch';
+import { useSketchView } from '../../features/sketch/sketchSettings';
 import { SketchDrawTool } from './SketchDrawTool';
 import { MouseScheme } from './MouseScheme';
 import { ConfirmationCorner, PendingPreview, PlanePicker } from './FeatureFlow';
@@ -37,6 +41,10 @@ export function Viewport() {
   const gizmoActiveRef = useRef(false);
   const drawTool = useEditorStore((s) => s.drawTool);
   const mouseScheme = useEditorStore((s) => s.mouseScheme);
+  // 스케치 중 종이를 깔면 바닥 격자는 숨긴다 (종이의 모눈이 대신)
+  const sketchActive = useActiveSketch();
+  const paperOn = useSketchView((s) => s.paper);
+  const onPaper = !!sketchActive && paperOn;
 
   return (
     <section className="panel viewport" aria-label="3D 뷰포트">
@@ -53,7 +61,7 @@ export function Viewport() {
         <directionalLight position={[-150, 100, 80]} intensity={0.4} />
 
         {/* 출력 베드: 1mm 셀, 10mm 섹션. drei Grid는 XZ 평면이므로 XY로 회전 */}
-        <Grid
+        {!onPaper && <Grid
           rotation={[Math.PI / 2, 0, 0]}
           cellSize={1}
           sectionSize={10}
@@ -64,12 +72,13 @@ export function Viewport() {
           fadeDistance={600}
           fadeStrength={1.5}
           infiniteGrid
-        />
+        />}
 
         {roots.map((o) => (
           <CadNode key={o.id} object={o} index={index} mode="solid" />
         ))}
 
+        <SketchPaper />
         <SketchOutlines />
         <SketchDrawTool />
         <PlanePicker />
@@ -91,6 +100,7 @@ export function Viewport() {
         </GizmoHelper>
       </Canvas>
       <ViewportToolbar />
+      <SketchOptionsBar />
       <ConfirmationCorner />
       <SectionPanel />
       <MeasureReadout />

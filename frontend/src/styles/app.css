@@ -476,3 +476,26 @@ label.check.small { font-size: 12px; }
 .modeling-hint { right: 12px; }
 .modeling-guide p { font-size: 13px; margin: 6px 0 10px; }
 .modeling-guide .guide-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- 스케치 화면 (종이·격자·스냅) ---- */
+.sketch-options {
+  position: absolute; left: 10px; bottom: 28px; z-index: 4;
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 140px);
+  padding: 4px 6px; border-radius: 8px;
+  background: rgba(31, 35, 41, 0.92); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+}
+.sketch-options button { padding: 3px 8px; background: transparent; border-color: transparent; font-size: 12px; }
+.sketch-options button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.sketch-options .grid-step { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); margin-left: 4px; }
+.sketch-options select { font: inherit; font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+.sketch-options .grid-scale, .sketch-options .sketch-tips { color: var(--muted); padding: 0 4px; }
+.snap-hud {
+  transform: translate(14px, 10px);
+  display: flex; flex-direction: column; gap: 1px;
+  white-space: nowrap; padding: 2px 6px; border-radius: 4px;
+  background: rgba(20, 24, 30, 0.82); color: #fff; font-size: 11px; line-height: 1.35;
+}
+.snap-hud b { color: #ffb04a; font-weight: 600; }
+.snap-hud.on-paper { background: rgba(255, 255, 255, 0.95); color: #1d2733; border: 1px solid #c7d3e0; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.snap-hud.on-paper b { color: #d55a1f; }

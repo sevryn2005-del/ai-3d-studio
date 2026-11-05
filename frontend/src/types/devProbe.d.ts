@@ -18,7 +18,7 @@ declare global {
         baseRevision: number | null;
         command: unknown;
         objects: { id: string; position: number[]; rotation: number[] }[];
-        sketches: { id: string; plane: Record<string, unknown> }[];
+        sketches: { id: string; plane: Record<string, unknown>; entities: { id: string; type: string; center?: number[] }[] }[];
         mates: { id: string; type: string; refs: unknown[] }[];
       };
       /** 명령 봉투를 직접 제출 (재시도·오래된 리비전 시험용) */

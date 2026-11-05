@@ -1,11 +1,13 @@
-import { useEffect, useMemo } from 'react';
-import { BufferGeometry, Float32BufferAttribute } from 'three';
+import { useMemo } from 'react';
+import { Line } from '@react-three/drei';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { dimensionValue, ellipseOutline, sketchFeatureRef, sketchRefs, slotOutline } from '../../cad/sketch';
 import { roundedPoints } from '../../cad/curves';
 import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
+import { useSketchView } from '../../features/sketch/sketchSettings';
+import { useActiveSketch } from '../../features/sketch/activeSketch';
 
 /**
  * 스케치 윤곽 표시 (보기 전용, 선택·편집은 속성 패널).
@@ -17,12 +19,22 @@ export function SketchOutlines() {
   const model = useSceneStore(selectModel);
   const selectedId = useSceneStore((s) => s.selectedId);
   const visible = useMemo(() => visibleSketches(model, selectedId), [model, selectedId]);
+  // 스케치 중 종이 위: 솔리드웍스 색 (덜 정의 = 파랑, 완전 정의 = 검정), 어두운 화면: 밝은 파랑 / 흰색
+  const paperOn = useSketchView((s) => s.paper);
+  const active = useActiveSketch();
+  const paper = paperOn && !!active;
   return (
     <>
       {visible.map(({ sketch, frame, highlighted, dof }) => (
         <group key={sketch.id} matrixAutoUpdate={false} matrix={frame} userData={{ sketchId: sketch.id }}>
           {sketch.entities.map((e) => (
-            <EntityOutline key={e.id} sketch={sketch} entity={e} color={highlighted ? (dof > 0 ? '#6fb0ff' : '#f2f4f7') : '#7f8ea6'} />
+            <EntityOutline
+              key={e.id}
+              sketch={sketch}
+              entity={e}
+              width={highlighted ? 2 : 1}
+              color={highlighted ? (dof > 0 ? (paper ? '#1f5fd6' : '#6fb0ff') : paper ? '#111827' : '#f2f4f7') : '#7f8ea6'}
+            />
           ))}
         </group>
       ))}
@@ -46,16 +58,18 @@ function visibleSketches(model: ModelDefinition, selectedId: ObjectId | null) {
     .filter((x) => x !== null);
 }
 
-function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: SketchEntity; color: string }) {
-  const geometry = useMemo(() => {
+function EntityOutline({ sketch, entity, color, width }: { sketch: Sketch; entity: SketchEntity; color: string; width: number }) {
+  const points = useMemo(() => {
     const z = 0.02; // 돌출 바닥면과 겹쳐 깜빡이지 않도록 평면에서 살짝 띄움
     const pts: number[] = [];
+    let closed = true;
     if (entity.type === 'polygon' || entity.type === 'path') {
       // 꼭짓점 처리(필렛·모따기)를 반영한 윤곽. 경로는 열린 선 → 끝에서 처음으로 잇지 않도록 되돌아가는 점을 붙인다
       const outline = roundedPoints(entity.points, entity.corners, entity.type === 'polygon', undefined, entity.arcs, entity.spline);
-      const all = entity.type === 'path' ? [...outline, ...outline.slice(1, -1).reverse()] : outline;
-      for (const [x, y] of all) pts.push(x, y, z);
+      closed = entity.type === 'polygon';
+      for (const [x, y] of outline) pts.push(x, y, z);
     } else if (entity.type === 'line') {
+      closed = false;
       for (const [x, y] of entity.points) pts.push(x, y, z);
     } else if (entity.type === 'slot') {
       const length = dimensionValue(sketch, entity.id, 'length') ?? 0;
@@ -80,14 +94,11 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
         pts.push(cx + r * Math.cos(a), cy + r * Math.sin(a), z);
       }
     }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(pts, 3));
-    return g;
+    const out: [number, number, number][] = [];
+    for (let i = 0; i < pts.length; i += 3) out.push([pts[i]!, pts[i + 1]!, pts[i + 2]!]);
+    if (closed && out.length > 2) out.push(out[0]!);
+    return out;
   }, [sketch, entity]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return (
-    <lineLoop geometry={geometry} raycast={() => null}>
-      <lineBasicMaterial color={color} depthTest={false} transparent opacity={0.9} />
-    </lineLoop>
-  );
+  if (points.length < 2) return null;
+  return <Line points={points} color={color} lineWidth={width} depthTest={false} transparent opacity={0.95} raycast={() => null} />;
 }

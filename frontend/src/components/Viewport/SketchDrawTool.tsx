@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Html } from '@react-three/drei';
+import { Html, Line as DreiLine } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Line, LineBasicMaterial, Matrix4, Vector3 } from 'three';
 import type { Point2 } from '../../cad/commandTypes';
@@ -8,7 +8,9 @@ import { drawShapeCommands, type DrawnShape } from '../../cad/sketchActions';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 import { formatMm } from '../../cad/units';
 import { bulgeArc, bulgeThrough, sampleSegments } from '../../cad/curves';
-import { selectSnap, useEditorStore } from '../../features/selection/editorStore';
+import { useEditorStore } from '../../features/selection/editorStore';
+import { SNAP_LABEL, sketchSnapPoints, snapSketchPoint, type SnapResult } from '../../cad/sketchSnap';
+import { drawStep, useSketchView } from '../../features/sketch/sketchSettings';
 
 /**
  * 뷰포트 직접 그리기 (사각형: 두 모서리 드래그, 원: 중심에서 드래그,
@@ -19,14 +21,14 @@ import { selectSnap, useEditorStore } from '../../features/selection/editorStore
  */
 export function SketchDrawTool() {
   const tool = useEditorStore((s) => s.drawTool);
-  const snap = useEditorStore(selectSnap);
   const model = useSceneStore(selectModel);
   const sketch = useSceneStore(selectSelectedSketch);
+  const view = useSketchView();
   const [drag, setDrag] = useState<{ from: Point2; to: Point2 } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
   const [poly, setPoly] = useState<Point2[]>([]);
-  const [hover, setHover] = useState<Point2 | null>(null);
+  const [hover, setHover] = useState<SnapResult | null>(null);
   const polyRef = useRef(poly);
   polyRef.current = poly;
 
@@ -35,10 +37,13 @@ export function SketchDrawTool() {
     return (sketch && sketchWorldMatrix(model, sketch)) || new Matrix4(); // 스케치가 없으면 바닥(XY, z=0)
   }, [model, sketch]);
   const inverse = useMemo(() => frame.clone().invert(), [frame]);
+  // 붙을 점: 원점 + 스케치 요소의 끝점·중심·중간점·사분점 + 지금 찍은 점들
+  const snapPoints = useMemo(() => sketchSnapPoints(sketch, poly), [sketch, poly]);
 
   useEffect(() => {
     setDrag(null);
     setPoly([]);
+    setHover(null);
   }, [tool, sketch?.id]);
   const multi = tool === 'polygon' || tool === 'path' || tool === 'arc' || tool === 'spline';
   const finishArc = (from: Point2, to: Point2, through: Point2) => {
@@ -66,6 +71,10 @@ export function SketchDrawTool() {
       if (e.key === 'Enter' && polyRef.current.length >= (tool === 'polygon' ? 3 : 2)) {
         e.preventDefault();
         finishPolygon(polyRef.current);
+      } else if (e.key === 'Backspace' && polyRef.current.length > 0) {
+        // 마지막으로 찍은 점 지우기 (그리는 도중 실수 고치기)
+        e.preventDefault();
+        setPoly(polyRef.current.slice(0, -1));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -81,25 +90,38 @@ export function SketchDrawTool() {
 
   if (!tool) return null;
 
-  const step = snap.translation ?? 0.1;
-  const toSketch = (world: Vector3): Point2 => {
+  const step = drawStep(view);
+  const tol = view.mmPerPx * SNAP_PX;
+  /** 월드 점 → 스케치 좌표 + 스냅 (Shift: 다각형·경로는 앞 점에서 15° 각도) */
+  const snapAt = (world: Vector3, shift: boolean): SnapResult => {
     const p = world.clone().applyMatrix4(inverse);
-    return [Math.round(p.x / step) * step, Math.round(p.y / step) * step];
+    const anchor = shift && multi && tool !== 'arc' ? polyRef.current.at(-1) : null;
+    return snapSketchPoint([p.x, p.y], snapPoints, { tol, grid: view.gridSnap ? step : null, inference: view.inference, angleFrom: anchor, angleStep: 15 });
   };
-  const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> =>
-    tool === 'rectangle' || tool === 'ellipse'
-      ? { type: tool, from: d.from, to: d.to }
-      : { type: 'circle', center: d.from, radius: Math.round(Math.hypot(d.to[0] - d.from[0], d.to[1] - d.from[1]) / step) * step };
+  /** Shift: 사각형 → 정사각형, 타원 → 원 모양 (두 변 같게) */
+  const square = (from: Point2, to: Point2, shift: boolean): Point2 => {
+    if (!shift || (tool !== 'rectangle' && tool !== 'ellipse')) return to;
+    const d = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+    return [from[0] + Math.sign(to[0] - from[0] || 1) * d, from[1] + Math.sign(to[1] - from[1] || 1) * d];
+  };
+  const shapeOf = (d: { from: Point2; to: Point2 }, exact = false): Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> => {
+    if (tool === 'rectangle' || tool === 'ellipse') return { type: tool, from: d.from, to: d.to };
+    const r = Math.hypot(d.to[0] - d.from[0], d.to[1] - d.from[1]);
+    // 다른 점에 붙었으면 그 점을 지나는 원 (정확히), 아니면 반지름을 격자로
+    return { type: 'circle', center: d.from, radius: exact ? Number(r.toFixed(6)) : Math.round(r / step) * step };
+  };
+  const isPointSnap = (r: SnapResult | null) => !!r && r.kind !== 'grid' && r.kind !== 'free';
 
   const down = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    const r = snapAt(e.point, e.nativeEvent.shiftKey);
+    const p = r.point;
     if (multi) {
-      const p = toSketch(e.point);
       const pts = polyRef.current;
       const first = pts[0];
       const last = pts.at(-1);
-      const near = (q: Point2 | undefined) => !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= Math.max(1.5 * step, 1);
+      const near = (q: Point2 | undefined) => !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= Math.max(tol, 1e-6);
       // 호: 시작 → 끝 → 호 위의 점 (세 번째 클릭에서 끝)
       if (tool === 'arc' && pts.length === 2) return finishArc(pts[0]!, pts[1]!, p);
       // 다각형: 첫 점을 다시 누르면 닫힘. 경로: 마지막 점을 다시 누르면 끝 (열린 선)
@@ -111,17 +133,19 @@ export function SketchDrawTool() {
       return;
     }
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    const p = toSketch(e.point);
     setDrag({ from: p, to: p });
   };
   const move = (e: ThreeEvent<PointerEvent>) => {
-    if (multi) {
-      setHover(toSketch(e.point));
+    const r = snapAt(e.point, e.nativeEvent.shiftKey);
+    const d = dragRef.current;
+    if (d && !multi) {
+      e.stopPropagation();
+      const to = square(d.from, r.point, e.nativeEvent.shiftKey);
+      setHover({ ...r, point: to });
+      setDrag({ from: d.from, to });
       return;
     }
-    if (!dragRef.current) return;
-    e.stopPropagation();
-    setDrag({ from: dragRef.current.from, to: toSketch(e.point) });
+    setHover(r);
   };
   const up = (e: ThreeEvent<PointerEvent>) => {
     if (multi) return;
@@ -129,26 +153,90 @@ export function SketchDrawTool() {
     if (!d) return;
     e.stopPropagation();
     setDrag(null);
+    const r = snapAt(e.point, e.nativeEvent.shiftKey);
+    const to = square(d.from, r.point, e.nativeEvent.shiftKey);
     const store = useSceneStore.getState();
-    const cmds = drawShapeCommands(store.history.present.model, sketch?.id ?? null, shapeOf({ from: d.from, to: toSketch(e.point) }));
+    const cmds = drawShapeCommands(store.history.present.model, sketch?.id ?? null, shapeOf({ from: d.from, to }, isPointSnap(r)));
     if (cmds) store.dispatchBatch(cmds);
   };
+  const color = view.paper ? '#1f5fd6' : '#ffd166';
+  const hoverPt = hover?.point ?? null;
 
   return (
     <group matrixAutoUpdate={false} matrix={frame}>
       {/* 포인터를 받는 보이지 않는 평면 (스케치 평면 위) */}
-      <mesh onPointerDown={down} onPointerMove={move} onPointerUp={up} name="sketch-draw-plane">
+      <mesh onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={() => setHover(null)} name="sketch-draw-plane">
         <planeGeometry args={[20000, 20000]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} side={DoubleSide} />
       </mesh>
-      {drag && <DrawPreview shape={shapeOf(drag)} />}
-      {multi && poly.length > 0 && tool !== 'arc' && <PolylinePreview points={hover ? [...poly, hover] : poly} count={poly.length} />}
-      {tool === 'arc' && poly.length > 0 && <ArcPreview points={poly} hover={hover} />}
+      {drag && <DrawPreview shape={shapeOf(drag, isPointSnap(hover))} color={color} />}
+      {multi && poly.length > 0 && tool !== 'arc' && <PolylinePreview points={hoverPt ? [...poly, hoverPt] : poly} count={poly.length} color={color} />}
+      {tool === 'arc' && poly.length > 0 && <ArcPreview points={poly} hover={hoverPt} color={color} />}
+      {hover && <SnapFeedback snap={hover} px={view.mmPerPx} paper={view.paper} from={drag ? null : poly.at(-1) ?? null} showSegment={multi && tool !== 'arc'} />}
     </group>
   );
 }
 
-function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> }) {
+/** 화면에서 이만큼(픽셀) 가까우면 점·정렬에 붙는다 */
+const SNAP_PX = 10;
+
+/**
+ * 스냅 표시: 붙은 점 모양(끝점 □, 중심 ○, 중간점 △, 사분점 ◇, 원점 ●) + 이름, 정렬 안내선(파란 점선),
+ * 커서 좌표, 선을 그리는 중이면 길이·각도
+ */
+function SnapFeedback({ snap, px, paper, from, showSegment }: { snap: SnapResult; px: number; paper: boolean; from: Point2 | null; showSegment: boolean }) {
+  const [x, y] = snap.point;
+  const s = px * 6;
+  const z = 0.03;
+  const accent = paper ? '#e0662b' : '#ffb04a';
+  const guide = paper ? '#2f7de1' : '#7fb6ff';
+  let glyph: [number, number, number][] | null = null;
+  if (snap.kind === 'endpoint') glyph = [[x - s, y - s, z], [x + s, y - s, z], [x + s, y + s, z], [x - s, y + s, z], [x - s, y - s, z]];
+  else if (snap.kind === 'midpoint') glyph = [[x - s, y - s * 0.7, z], [x + s, y - s * 0.7, z], [x, y + s, z], [x - s, y - s * 0.7, z]];
+  else if (snap.kind === 'quadrant') glyph = [[x, y - s, z], [x + s, y, z], [x, y + s, z], [x - s, y, z], [x, y - s, z]];
+  else if (snap.kind === 'center' || snap.kind === 'origin')
+    glyph = Array.from({ length: 17 }, (_, i) => [x + s * Math.cos((i / 16) * Math.PI * 2), y + s * Math.sin((i / 16) * Math.PI * 2), z] as [number, number, number]);
+  const name = SNAP_LABEL[snap.kind];
+  const extras: string[] = [];
+  for (const g of snap.guides) {
+    if (g.dir === 'h') extras.push('수평 정렬');
+    if (g.dir === 'v') extras.push('수직 정렬');
+  }
+  let segment = '';
+  if (showSegment && from) {
+    const len = Math.hypot(x - from[0], y - from[1]);
+    const ang = ((Math.atan2(y - from[1], x - from[0]) * 180) / Math.PI + 360) % 360;
+    if (len > 0) segment = `${formatMm(len)} mm · ${formatMm(Math.round(ang * 10) / 10)}°`;
+  }
+  return (
+    <group raycast={() => null}>
+      {snap.guides.map((g, i) => (
+        <DreiLine
+          key={i}
+          points={g.dir === 'angle' ? [[g.from[0], g.from[1], z], [x + (x - g.from[0]) * 0.6, y + (y - g.from[1]) * 0.6, z]] : [[g.from[0], g.from[1], z], [x, y, z]]}
+          color={guide}
+          lineWidth={1}
+          dashed
+          dashSize={px * 6}
+          gapSize={px * 4}
+          depthTest={false}
+        />
+      ))}
+      {glyph && <DreiLine points={glyph} color={accent} lineWidth={2} depthTest={false} />}
+      <Html position={[x, y, 0]} style={{ pointerEvents: 'none' }}>
+        <div className={`snap-hud${paper ? ' on-paper' : ''}`} data-testid="snap-hud" data-snap={snap.kind}>
+          {(name || extras.length > 0) && <b>{[name, ...extras].filter(Boolean).join(' · ')}</b>}
+          <span>
+            {formatMm(x)}, {formatMm(y)}
+          </span>
+          {segment && <span data-testid="segment-hud">{segment}</span>}
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function DrawPreview({ shape, color }: { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }>; color: string }) {
   const { geometry, label, anchor } = useMemo(() => {
     const pts: number[] = [];
     let label: string;
@@ -181,7 +269,7 @@ function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' |
   return (
     <>
       <lineLoop geometry={geometry} raycast={() => null}>
-        <lineBasicMaterial color="#1c232e" depthTest={false} />
+        <lineBasicMaterial color={color} depthTest={false} />
       </lineLoop>
       <Html position={anchor} style={{ pointerEvents: 'none' }}>
         <div className="draw-label" data-testid="draw-label">
@@ -193,7 +281,7 @@ function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' |
 }
 
 /** 그리는 중인 호: 시작점 → (끝점) → 커서. 점 둘을 찍은 뒤에는 커서를 지나는 호를 보여 준다 */
-function ArcPreview({ points, hover }: { points: Point2[]; hover: Point2 | null }) {
+function ArcPreview({ points, hover, color }: { points: Point2[]; hover: Point2 | null; color: string }) {
   const line = useMemo(() => {
     let pts: Point2[] = hover ? [...points, hover] : points;
     if (points.length === 2 && hover) {
@@ -202,10 +290,10 @@ function ArcPreview({ points, hover }: { points: Point2[]; hover: Point2 | null 
     }
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(pts.flatMap(([x, y]) => [x, y, 0.03]), 3));
-    const l = new Line(g, new LineBasicMaterial({ color: '#ffd166', depthTest: false }));
+    const l = new Line(g, new LineBasicMaterial({ color, depthTest: false }));
     l.raycast = () => {};
     return l;
-  }, [points, hover]);
+  }, [points, hover, color]);
   useEffect(() => () => {
     line.geometry.dispose();
     (line.material as LineBasicMaterial).dispose();
@@ -224,15 +312,15 @@ function ArcPreview({ points, hover }: { points: Point2[]; hover: Point2 | null 
 }
 
 /** 그리는 중인 다각형: 찍은 꼭짓점 + 커서까지의 선 */
-function PolylinePreview({ points, count }: { points: Point2[]; count: number }) {
+function PolylinePreview({ points, count, color }: { points: Point2[]; count: number; color: string }) {
   // <line> 은 JSX 에서 SVG 요소와 이름이 겹치므로 Three.js Line 객체를 직접 만든다
   const line = useMemo(() => {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(points.flatMap(([x, y]) => [x, y, 0.03]), 3));
-    const l = new Line(g, new LineBasicMaterial({ color: '#ffd166', depthTest: false }));
+    const l = new Line(g, new LineBasicMaterial({ color, depthTest: false }));
     l.raycast = () => {};
     return l;
-  }, [points]);
+  }, [points, color]);
   useEffect(() => () => {
     line.geometry.dispose();
     (line.material as LineBasicMaterial).dispose();
