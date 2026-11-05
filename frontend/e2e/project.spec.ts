@@ -30,7 +30,7 @@ test.describe('파일 선택 창/다운로드 방식 (File System Access API 미
     expect(download.suggestedFilename()).toBe('제목 없음.ai3d');
     await expect(page.getByTestId('project-name')).toHaveText('제목 없음');
     const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-    expect(saved).toMatchObject({ format: 'ai3d-project', formatVersion: 18, name: '제목 없음' });
+    expect(saved).toMatchObject({ format: 'ai3d-project', formatVersion: 19, name: '제목 없음' });
     expect(saved.model.objects[0].params.height).toBe(50);
 
     // 실행 취소 → 미저장, 다시 실행(저장 시점) → 저장됨
@@ -39,14 +39,14 @@ test.describe('파일 선택 창/다운로드 방식 (File System Access API 미
     await page.keyboard.press('Control+Shift+z');
     await expect(page.getByTestId('project-name')).toHaveText('제목 없음');
 
-    // 새 프로젝트 → 기본 큐브
+    // 새 프로젝트 → 시작 화면 (작업 모드 고르기)
     await page.getByRole('button', { name: '새 프로젝트' }).click();
-    await expect(listText(page)).toContainText('20×20×20');
+    await expect(page.getByTestId('home')).toBeVisible();
 
-    // 다른 이름의 파일로 열기
+    // 시작 화면에서 다른 이름의 파일로 열기
     const file = info.outputPath('받침대.ai3d');
     writeFileSync(file, JSON.stringify(saved));
-    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: '열기' }).click()]);
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByTestId('home-open').click()]);
     await chooser.setFiles(file);
     await expect(listText(page)).toContainText('20×20×50');
     await expect(page.getByTestId('project-name')).toHaveText('받침대');

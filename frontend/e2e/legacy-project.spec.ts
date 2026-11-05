@@ -40,8 +40,8 @@ test('구버전(e0ac5e7) 파일: 열기 → 그대로 저장 → 다시 열기, 
   const saved = await save(page);
   // 저장은 최신 형식(v3)으로: 객체는 그대로, 스케치 없음 (v1 → v2 → v3 마이그레이션)
   const v1 = JSON.parse(original).model;
-  expect(JSON.parse(saved).formatVersion).toBe(18);
-  expect(JSON.parse(saved).model).toEqual({ ...v1, schemaVersion: 18, sketches: [] });
+  expect(JSON.parse(saved).formatVersion).toBe(19);
+  expect(JSON.parse(saved).model).toEqual({ ...v1, schemaVersion: 19, sketches: [] });
 
   const resaved = info.outputPath('다시 저장.ai3d');
   writeFileSync(resaved, saved);

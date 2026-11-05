@@ -20,6 +20,7 @@ import { PickBar, PickOverlay } from './PickOverlay';
 import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
+import { startSketch } from '../../features/selection/featureFlow';
 
 /**
  * 3D 뷰포트. 1 Three.js 단위 = 1 mm, Z-up.
@@ -100,6 +101,7 @@ export function Viewport() {
       <PickBar />
       <MeasureEntityPanel />
       <DrawingPanel />
+      <DesignStartGuide />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
           ? `${drawTool === 'spline' ? '클릭: 스플라인이 지날 점 (첫 점 클릭 = 닫힌 곡선, 마지막 점 다시 클릭·Enter = 열린 곡선)' : drawTool === 'arc' ? '클릭: 호 시작점 → 끝점 → 호가 지날 점' : drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : drawTool === 'ellipse' ? '타원 (바운딩 박스 모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`
@@ -113,4 +115,26 @@ export function Viewport() {
 function navHint(scheme: 'solidworks' | 'simple', drawing: boolean): string {
   if (scheme === 'solidworks') return '가운데 버튼 드래그: 회전 · Ctrl+가운데: 이동 · 휠: 확대/축소 · Ctrl+1~7: 표준 보기 · 스페이스: 보기 방향';
   return drawing ? '오른쪽 드래그: 이동 · 휠: 확대/축소' : '왼쪽 드래그: 회전 · 오른쪽 드래그: 이동 · 휠: 확대/축소 · Ctrl+1~7: 표준 보기';
+}
+
+/** 설계 모드의 빈 부품: 솔리드웍스처럼 평면 → 스케치 → 피처 순서를 안내 */
+function DesignStartGuide() {
+  const model = useSceneStore(selectModel);
+  const drawTool = useEditorStore((s) => s.drawTool);
+  const picking = useEditorStore((s) => s.pickingPlane);
+  if (model.workspace !== 'design' || model.objects.length || model.sketches.length || drawTool || picking) return null;
+  return (
+    <div className="start-guide" data-testid="design-start-guide">
+      <strong>새 부품</strong>
+      <ol>
+        <li>스케치할 평면을 고릅니다 (정면 · 윗면 · 우측면)</li>
+        <li>사각형·원·선으로 2D 모양을 그리고 치수를 넣습니다</li>
+        <li>오른쪽 위 ✓ 로 스케치를 마칩니다</li>
+        <li>피처 탭 → 돌출·회전으로 3D 부품을 만듭니다</li>
+      </ol>
+      <button className="ok" onClick={startSketch} data-testid="guide-start-sketch">
+        스케치 시작
+      </button>
+    </div>
+  );
 }

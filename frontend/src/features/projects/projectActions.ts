@@ -1,5 +1,6 @@
 /** 새 프로젝트 / 열기 / 저장. UI(툴바·단축키)는 이 함수들만 호출한다. */
-import { createDefaultModel } from '../../cad/defaultModel';
+import { emptyModel, type Workspace } from '../../cad/commandTypes';
+import { useAppScreen } from './appScreen';
 import { useSceneStore } from '../../cad/sceneStore';
 import { clearDraft, readDraft, writeDraft } from './draft';
 import { nameFromFileName, parseProject, PROJECT_EXTENSION, serializeProject } from './projectFile';
@@ -24,11 +25,18 @@ function fail(prefix: string, e: unknown) {
 // window.confirm 은 iframe·일부 WebView 에서 동작하지 않거나 항상 false 를 돌려주므로 앱 내부 확인 창을 쓴다
 export async function newProject(): Promise<boolean> {
   if (isDirtyNow() && !(await confirmDialog(DISCARD_PROMPT, '새 프로젝트'))) return false;
-  const model = createDefaultModel();
+  // 시작 화면에서 작업 모드를 고른다 (모드 없는 예전 통합 화면으로 시작한 경우도 같다)
+  useAppScreen.getState().setScreen('home');
+  return true;
+}
+
+/** 시작 화면에서 모드를 골라 새로 시작: 설계 = 빈 부품(정면·윗면·우측면 평면과 원점), 모델링 = 빈 장면 */
+export function startNew(workspace: Workspace): void {
+  const model = { ...emptyModel(), workspace };
   useSceneStore.getState().reset(model);
   useProjectStore.getState().set({ name: UNTITLED, handle: null, savedModel: model });
   clearDraft();
-  return true;
+  useAppScreen.getState().setScreen('editor');
 }
 
 export async function openProject(): Promise<boolean> {
@@ -43,6 +51,7 @@ export async function openProject(): Promise<boolean> {
     const model = r.project.model;
     useSceneStore.getState().reset(model);
     useProjectStore.getState().set({ name: nameFromFileName(fileName), handle, savedModel: model });
+    useAppScreen.getState().setScreen('editor');
     writeDraft(nameFromFileName(fileName), model, true);
     notify(`열었습니다: ${fileName}`);
     return true;
@@ -74,12 +83,14 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
   }
 }
 
-/** 앱 시작 시(첫 렌더 전) 임시 저장된 작업을 복원한다. */
-export function restoreDraft(): void {
+/** 임시 저장된 작업을 복원한다 (시작 화면의 "이어서 작업", 홈을 건너뛰는 시작). 없으면 false */
+export function restoreDraft(): boolean {
   const draft = readDraft();
-  if (!draft) return;
+  if (!draft) return false;
   const model = draft.project.model;
   useSceneStore.getState().reset(model);
   useProjectStore.getState().set({ name: draft.project.name, savedModel: draft.clean ? model : null });
   notify('이전 작업을 복원했습니다');
+  useAppScreen.getState().setScreen('editor');
+  return true;
 }

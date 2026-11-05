@@ -1,0 +1,59 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:5174",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "origin": "http://127.0.0.1:5174",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "origin": "http://127.0.0.1:4180",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "origin": "http://localhost:4180",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "origin": "http://127.0.0.1:8765",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "origin": "http://localhost:8765",
+      "localStorage": [
+        {
+          "name": "ai3d.skipHome",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}

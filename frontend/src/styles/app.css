@@ -403,3 +403,22 @@ label.check.small { font-size: 12px; }
 .drawing-dim-list input { width: 54px; }
 .drawing-dims { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px 6px; }
 @media print { .drawing-pick { display: none !important; } }
+
+/* 시작 화면 */
+.home { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 32px 16px; background: var(--bg); color: var(--text); }
+.home-head { text-align: center; }
+.home-head h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.01em; }
+.home-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 340px)); gap: 18px; width: 100%; justify-content: center; }
+.home-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 22px 22px 18px; text-align: left; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); cursor: pointer; }
+.home-card:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.home-card:disabled { opacity: 0.55; cursor: default; }
+.home-card strong { font-size: 20px; }
+.home-icon svg { width: 34px; height: 34px; color: var(--accent); }
+.home-sub { color: var(--muted); font-size: 13px; }
+.home-steps { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.home-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.home-actions button { padding: 8px 16px; }
+.mode-badge { margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+/* 설계 모드 빈 부품 안내 */
+.start-guide { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 4; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; max-width: 420px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3); }
+.start-guide ol { margin: 6px 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.7; }

@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 18
+      "const": 19
     },
     "units": {
       "type": "string",
@@ -3414,6 +3414,13 @@
         "centerlines"
       ],
       "additionalProperties": false
+    },
+    "workspace": {
+      "type": "string",
+      "enum": [
+        "design",
+        "modeling"
+      ]
     }
   },
   "required": [

@@ -53,6 +53,7 @@ export function Toolbar() {
   const projection = useEditorStore((s) => s.projection);
   const editor = useEditorStore.getState();
   const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
+  const workspace = useSceneStore((s) => s.history.present.model.workspace);
   const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
   const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline') => editor.setDrawTool(drawTool === t ? null : t);
@@ -62,6 +63,11 @@ export function Toolbar() {
       {/* 1줄: 메뉴 (파일·실행 취소·내보내기·AI) */}
       <div className="menu-bar">
         <div className="brand">AI 3D Studio</div>
+        {workspace && (
+          <span className="mode-badge" data-testid="mode-badge" title="작업 모드 (새 프로젝트에서 바꿀 수 있습니다)">
+            {workspace === 'design' ? '설계' : '3D 모델링'}
+          </span>
+        )}
         <nav className="tools">
           <button onClick={() => void newProject()}>새 프로젝트</button>
           <button onClick={() => void openProject()} title="프로젝트 열기 (Ctrl+O)">
@@ -123,21 +129,26 @@ export function Toolbar() {
             <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />
             <Cmd icon="scale" label="크기 조정" title="선택한 객체를 원점 기준으로 늘리거나 줄임 (축별 배율)" onClick={quickScale} testId="cmd-scale" />
             <Cmd icon="mirror" label="대칭 복사" title="선택한 객체를 YZ 평면에 대칭 복사" onClick={() => quickPattern('mirror')} testId="cmd-mirror" />
-            <span className="sep" />
-            <span className="cmd-group-label">기본 도형</span>
-            {PRIMITIVES.map((p) => (
-              <button key={p.label} className="cmd small" onClick={() => add(p)}>
-                + {p.label}
-              </button>
-            ))}
-            <span className="sep" />
-            <button
-              className="cmd small"
-              onClick={() => dispatchBatch(rectangleSketchCommands(useSceneStore.getState().history.present.model).commands)}
-              title="XY 평면에 치수가 있는 사각형(60×40mm)을 바로 만듭니다 (빠른 시작)"
-            >
-              + 사각형 스케치
-            </button>
+            {/* 설계 모드는 솔리드웍스처럼 스케치에서 시작한다 — 기본 도형 바로 넣기는 예전 통합 화면에만 */}
+            {workspace !== 'design' && (
+              <>
+                <span className="sep" />
+                <span className="cmd-group-label">기본 도형</span>
+                {PRIMITIVES.map((p) => (
+                  <button key={p.label} className="cmd small" onClick={() => add(p)}>
+                    + {p.label}
+                  </button>
+                ))}
+                <span className="sep" />
+                <button
+                  className="cmd small"
+                  onClick={() => dispatchBatch(rectangleSketchCommands(useSceneStore.getState().history.present.model).commands)}
+                  title="XY 평면에 치수가 있는 사각형(60×40mm)을 바로 만듭니다 (빠른 시작)"
+                >
+                  + 사각형 스케치
+                </button>
+              </>
+            )}
           </>
         )}
         {tab === 'sketch' && (

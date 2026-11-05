@@ -918,12 +918,14 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[18]
+    schemaVersion: Literal[19]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
     mates: Annotated[list[Mate] | None, Field(max_length=MAX_MATES, exclude_if=lambda v: v is None)] = None
     drawing: Annotated[DrawingSettings | None, Field(exclude_if=lambda v: v is None)] = None
+    # 작업 모드 (형식 v19): design = 설계(스케치 → 피처), modeling = 3D 모델링(메시 편집). 없으면 예전 통합 화면
+    workspace: Annotated[Literal["design", "modeling"] | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------

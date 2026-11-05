@@ -75,6 +75,9 @@ test('앱 내부 확인 창: window.confirm 이 막힌 환경에서도 새 프�
 
   await page.getByRole('button', { name: '새 프로젝트' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '새 프로젝트' }).click();
-  await expect(page.locator('.object-list')).toContainText('20×20×20');
+  // 확인하면 시작 화면 → 설계를 고르면 빈 부품
+  await expect(page.getByTestId('home')).toBeVisible();
+  await page.getByTestId('home-design').click();
+  await expect(page.getByTestId('mode-badge')).toHaveText('설계');
   await expect(page.getByTestId('project-name')).toHaveText('제목 없음');
 });

@@ -15,6 +15,8 @@ export default defineConfig({
     // E2E_BASE_URL=http://127.0.0.1:8765 으로 로컬 모드(빌드본)를 대상으로 실행할 수 있다
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:5174',
     viewport: { width: 1440, height: 860 },
+    // 기존 테스트는 시작 화면을 건너뛰고 예전 통합 화면(큐브 하나)에서 시작한다. 시작 화면 자체는 home.spec.ts 가 검사
+    storageState: 'e2e/skip-home.json',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
     launchOptions: {

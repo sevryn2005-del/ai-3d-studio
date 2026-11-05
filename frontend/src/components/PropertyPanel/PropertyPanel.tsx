@@ -13,6 +13,7 @@ import { PropertyManager } from './PropertyManager';
 import { AppearanceFields, HoleActions, LoftOrMeshInfo, PreciseFields, PatternActions, PatternFields, ShellFields } from './FeatureFields';
 import { isSuppressed } from '../../cad/features';
 import { useEditorStore } from '../../features/selection/editorStore';
+import { startSketchOnPlane } from '../../features/selection/featureFlow';
 
 /** 원점 기준 평면 (Z-up: 윗면 = XY, 정면 = XZ, 우측면 = YZ) */
 const ORIGIN_PLANES = [
@@ -33,6 +34,8 @@ export function PropertyPanel() {
   const pending = useEditorStore((s) => s.pending);
   const selectedPlane = useEditorStore((s) => s.selectedPlane);
   const pickPlane = (t: (typeof ORIGIN_PLANES)[number]['type']) => {
+    // 스케치할 평면을 고르는 중이면 트리에서 눌러도 바로 그 평면에 스케치 (솔리드웍스처럼 트리·화면 어느 쪽이든)
+    if (useEditorStore.getState().pickingPlane) return startSketchOnPlane(t);
     useEditorStore.getState().selectPlane(selectedPlane === t ? null : t);
     select(null);
   };

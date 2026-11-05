@@ -8,8 +8,22 @@ import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { useEditorStore } from './features/selection/editorStore';
 import { useBackendSync } from './features/backend/useBackendSync';
 import { useProjectLifecycle } from './features/projects/useProjectLifecycle';
+import { useAppScreen } from './features/projects/appScreen';
+import { HomeScreen } from './components/Home/HomeScreen';
 
 export function App() {
+  const screen = useAppScreen((s) => s.screen);
+  if (screen === 'home')
+    return (
+      <>
+        <HomeScreen />
+        <ConfirmDialog />
+      </>
+    );
+  return <Editor />;
+}
+
+function Editor() {
   const chatOpen = useEditorStore((s) => s.chatOpen);
   useKeyboardShortcuts();
   useBackendSync();

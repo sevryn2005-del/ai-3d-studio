@@ -639,7 +639,14 @@ export const DrawingSettingsSchema = z.strictObject({
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
 
-export const MODEL_SCHEMA_VERSION = 18;
+/**
+ * 작업 모드 (형식 v19): 'design' = 설계(솔리드웍스식: 평면 → 2D 스케치 → 피처), 'modeling' = 3D 모델링(블렌더식 메시 편집).
+ * 없으면 예전 파일 그대로의 통합 화면. 만들 때 정하고 명령으로 바꾸지 않는다
+ */
+export const WorkspaceSchema = z.enum(['design', 'modeling']);
+export type Workspace = z.infer<typeof WorkspaceSchema>;
+
+export const MODEL_SCHEMA_VERSION = 19;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -648,6 +655,7 @@ export const ModelDefinitionSchema = z.strictObject({
   objects: z.array(CadObjectSchema).max(LIMITS.maxObjects, `객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`),
   mates: z.array(MateSchema).max(MAX_MATES).optional(),
   drawing: DrawingSettingsSchema.optional(),
+  workspace: WorkspaceSchema.optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 

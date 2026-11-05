@@ -41,9 +41,13 @@ async function setField(page: Page, testId: string, value: string) {
   await f.press('Enter');
 }
 
+/** 파일 열기: 편집기에서는 툴바 "열기", "새 프로젝트" 뒤의 시작 화면에서는 "파일 열기" */
 async function open(page: Page, file: string) {
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: '열기' }).click()]);
+  const onHome = await page.getByTestId('home').isVisible();
+  const button = onHome ? page.getByTestId('home-open') : page.getByRole('button', { name: '열기' });
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), button.click()]);
   await chooser.setFiles(file);
+  await page.waitForFunction(() => !!window.__AI3D_DEV__); // 시작 화면에서 열면 편집기가 다시 그려진다
 }
 
 function parseStl(buf: Buffer) {
@@ -100,7 +104,7 @@ test('사각형 스케치 → 4mm 돌출 → 폭 80 → 구멍 → 저장·다�
   // 5. 저장 (v2): 스케치·돌출·구멍이 원본 형태로 들어 있다 (메시는 저장하지 않음)
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(18);
+  expect(saved.formatVersion).toBe(19);
   expect(saved.model.sketches.map((s: { id: string }) => s.id)).toEqual(['sketch_1', 'sk_hole_1']);
   expect(saved.model.sketches[0].dimensions[0]).toEqual({ id: 'r1.width', entity: 'r1', kind: 'width', value: 80 });
   expect(JSON.stringify(saved)).not.toMatch(/positions|indices|revision|commandId/);
@@ -300,7 +304,7 @@ test('면 위 스케치: 판 윗면에 기둥 → 판 두께 변경을 따라감
   // 저장(v3) → 새 프로젝트 → 다시 열기: 면 참조가 그대로
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(18);
+  expect(saved.formatVersion).toBe(19);
   expect(saved.model.sketches[1].plane).toEqual({ type: 'face', object: 'extrude_1', face: 'end', offset: 0 });
   const file = info.outputPath('면 스케치.ai3d');
   writeFileSync(file, JSON.stringify(saved));
@@ -364,7 +368,7 @@ test('구속 해석기: 다각형 그리기 → 고정·수평·수직·길이�
   // 5. 저장(v4) → 다시 열기: 구속과 풀린 좌표가 그대로
   const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Control+s')]);
   const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(18);
+  expect(saved.formatVersion).toBe(19);
   expect(saved.model.sketches[0].constraints).toHaveLength(7);
   expect(saved.model.sketches[0].entities[0].points).toEqual([[0, 0], [50, 0], [50, 20], [0, 20]]);
   const file = info.outputPath('구속 판.ai3d');
