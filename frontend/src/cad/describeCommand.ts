@@ -126,6 +126,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 변경${cmd.value !== undefined ? ` → ${formatMm(cmd.value)}` : ''}${cmd.flip !== undefined ? ' (방향 뒤집기)' : ''}`;
     case 'delete_mate':
       return `메이트 ${cmd.mate} 삭제`;
+    case 'add_ellipse':
+      return `${sketchName(cmd.sketch)}에 타원 ${formatMm(cmd.width)}×${formatMm(cmd.height)}mm`;
     case 'set_spline':
       return `${sketchName(cmd.sketch)}의 ${cmd.entity} ${cmd.spline ? '스플라인으로 (매끈하게)' : '꺾은선으로'}`;
     case 'add_region':

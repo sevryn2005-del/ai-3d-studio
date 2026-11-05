@@ -43,6 +43,7 @@ describe('shared/schemas 동기화', () => {
       'set_region',
       'set_spline',
       'add_slot',
+      'add_ellipse',
       'set_entity_angle',
       'offset_entity',
       'move_point',

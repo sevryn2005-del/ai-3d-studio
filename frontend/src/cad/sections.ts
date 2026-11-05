@@ -6,7 +6,7 @@
  * 로프트는 단면마다 같은 n 으로 다시 나눠 점끼리 잇는다.
  */
 import type { Point2 } from './commandTypes';
-import { profileBounds, slotOutline, type Profile } from './sketch';
+import { ellipseOutline, profileBounds, slotOutline, type Profile } from './sketch';
 import { roundedPoints } from './curves';
 
 export const REGION_UNSUPPORTED = '영역 단면은 돌출·회전에만 쓸 수 있습니다 (로프트·헬릭스·스윕은 사각형·원·다각형·슬롯 하나로)';
@@ -20,6 +20,7 @@ export function outline(p: Profile): Point2[] {
     const [w, h] = [p.width / 2, p.height / 2];
     pts = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]];
   } else if (p.type === 'slot') pts = slotOutline(p, 64);
+  else if (p.type === 'ellipse') pts = ellipseOutline(p, 256);
   else {
     const r = p.diameter / 2;
     pts = Array.from({ length: 256 }, (_, k) => [p.center[0] + r * Math.cos((2 * Math.PI * k) / 256), p.center[1] + r * Math.sin((2 * Math.PI * k) / 256)] as Point2);

@@ -181,6 +181,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       if (!p) return `돌출 ${d}`;
       if (p.type === 'circle') return `Ø${formatMm(p.diameter)}×${d}`;
       if (p.type === 'slot') return `슬롯 ${formatMm(p.length + p.width)}×${formatMm(p.width)}×${d}`;
+      if (p.type === 'ellipse') return `타원 ${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
       if (obj.extrude.thin !== undefined) return `리브 t${formatMm(obj.extrude.thin)}×${d}`;
       return `${formatMm(p.width)}×${formatMm(p.height)}×${d}`;
     }

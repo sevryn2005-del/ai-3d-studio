@@ -50,7 +50,7 @@ def test_sweep_bend_too_sharp():
 
 
 def model(sketches, objects=()):
-    return ModelDefinition.model_validate({"schemaVersion": 17, "units": "mm", "sketches": sketches, "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 18, "units": "mm", "sketches": sketches, "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -220,3 +220,28 @@ def test_ai_validator_v16():
         {"type": "set_spline", "sketch": "s", "entity": "c", "spline": True},
     ], m)
     assert len(errs) == 1 and "'c' is not a polygon or path" in errs[0]
+
+
+# ---- 형식 v18: 타원 -----------------------------------------------------------------------------
+
+
+def test_ellipse_exact_revolve_and_validator():
+    from app.cad.primitives import build_solid
+
+    m = model([{"id": "s", "name": "s", "plane": {"type": "XZ", "offset": 0}, "constraints": [],
+                "entities": [{"id": "el", "type": "ellipse", "center": [30, 0], "angle": 0}],
+                "dimensions": [{"id": "el.width", "entity": "el", "kind": "width", "value": 8},
+                               {"id": "el.height", "entity": "el", "kind": "height", "value": 16}]}],
+              [{"id": "v", "name": "v", "kind": "revolve", "params": {"angle": 360}, "revolve": {"sketch": "s", "profile": "el"}, "transform": T0}])
+    assert check_model(m) == []
+    # 정확한 B-rep 부피 (세로로 긴 타원 → 축을 바꿔 만든다): 파푸스 2π·30·(π·4·8)
+    solid = build_solid(m.objects[0], {o.id: o for o in m.objects}, {k.id: k for k in m.sketches})
+    assert solid.Volume() == pytest.approx(2 * math.pi * 30 * math.pi * 4 * 8, rel=1e-9)
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_ellipse", "sketch": "s", "id": "e1", "center": [0, 0], "width": 20, "height": 10, "angle": 15},
+        {"type": "set_entity_angle", "sketch": "s", "entity": "e1", "angle": 30},
+        {"type": "set_dimension", "sketch": "s", "dimension": "e1.height", "value": 12},
+        {"type": "extrude", "sketch": "s", "profile": "e1", "distance": 3},
+    ], model([]))
+    assert errs == []

@@ -71,7 +71,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 17, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 18, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -220,6 +220,15 @@ function profileWire(c: Ctx, p: Profile): ReturnType<typeof polygonWire> {
     const w = p.width / 2;
     const h = p.height / 2;
     return polygonWire(c, [[cx - w, cy - h, 0], [cx + w, cy - h, 0], [cx + w, cy + h, 0], [cx - w, cy + h, 0]]);
+  }
+  if (p.type === 'ellipse') {
+    // 정확한 타원: 긴 축이 x 방향 (gp_Elips 는 긴 반지름 ≥ 짧은 반지름) — 폭이 작으면 90° 돌려 바꾼다
+    const swap = p.width < p.height;
+    const t = ((p.angle + (swap ? 90 : 0)) * Math.PI) / 180;
+    const ax = c.gc.k(new c.oc.gp_Ax2(pnt(c, cx, cy, 0), dir(c, 0, 0, 1), dir(c, Math.cos(t), Math.sin(t), 0)));
+    const el = c.gc.k(new c.oc.gp_Elips(ax, Math.max(p.width, p.height) / 2, Math.min(p.width, p.height) / 2));
+    const edge = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(el)).Edge());
+    return c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeWire(edge)).Wire());
   }
   if (p.type === 'circle') {
     const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [cx, cy, 0]), p.diameter / 2));

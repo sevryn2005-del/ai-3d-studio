@@ -253,7 +253,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if c["items"][0]["op"] != "add":
                     errors.append(f"commands[{i}].items[0]: the first region item must be op 'add'")
                 for k, it in enumerate(c["items"]):
-                    if ents.get(it["entity"]) not in ("rectangle", "circle", "polygon", "slot"):
+                    if ents.get(it["entity"]) not in ("rectangle", "circle", "polygon", "slot", "ellipse"):
                         errors.append(f"commands[{i}].items[{k}]: '{it['entity']}' is not a closed element (rectangle, circle, polygon, slot) "
                                       f"of sketch '{c['sketch']}'")
                 if len({it["entity"] for it in c["items"]}) != len(c["items"]):
@@ -310,10 +310,10 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             errors.append(f"commands[{i}]: insert_part is only for project files the user opens, not for AI")
         elif t == "import_mesh":
             errors.append(f"commands[{i}]: import_mesh is only for files the user opens, not for AI")
-        elif t in ("add_line", "add_slot"):
+        elif t in ("add_line", "add_slot", "add_ellipse"):
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]
-                etype = "line" if t == "add_line" else "slot"
+                etype = {"add_line": "line", "add_slot": "slot", "add_ellipse": "ellipse"}[t]
                 eid = c.get("id") or next_entity_id(ents, etype)
                 if eid in ents:
                     errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
@@ -321,8 +321,8 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 if etype == "line":
                     poly_sizes[(c["sketch"], eid)] = 2
         elif t == "set_entity_angle":
-            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) != "slot":
-                errors.append(f"commands[{i}].entity: '{c['entity']}' is not a slot of sketch '{c['sketch']}'")
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) not in ("slot", "ellipse"):
+                errors.append(f"commands[{i}].entity: '{c['entity']}' is not a slot or ellipse of sketch '{c['sketch']}'")
         elif t == "move_point":
             if sketch_exists(i, c["sketch"]) and geom_kind(c["sketch"], c["point"]) != "point":
                 errors.append(f"commands[{i}].point: '{c['point']}' is not a point of sketch '{c['sketch']}' "

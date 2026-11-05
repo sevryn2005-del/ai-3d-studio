@@ -12,9 +12,10 @@ const dimLabel = (kind: DimensionKind, plane: SketchPlane, type?: SketchEntity['
   kind === 'diameter' ? '지름'
   : kind === 'length' ? '길이 (반원 중심 사이)'
   : type === 'slot' && kind === 'width' ? '폭'
+  : type === 'ellipse' ? (kind === 'width' ? '지름 (방향 축)' : '지름 (수직 축)')
   : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
-export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯', path: '경로', region: '영역' };
-const CLOSED = new Set<SketchEntity['type']>(['rectangle', 'circle', 'polygon', 'slot']);
+export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯', path: '경로', region: '영역', ellipse: '타원' };
+const CLOSED = new Set<SketchEntity['type']>(['rectangle', 'circle', 'polygon', 'slot', 'ellipse']);
 
 /**
  * 스케치 요소 하나의 치수·중심 입력. 바꾸면 set_dimension / set_entity_center 1건
@@ -71,7 +72,7 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
           다각형으로 바꾸기 (모서리 둥글게·호)
         </button>
       )}
-      {entity.type === 'slot' && (
+      {(entity.type === 'slot' || entity.type === 'ellipse') && (
         <NumberField
           label="방향"
           unit="°"
@@ -260,6 +261,9 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           + 사각형
         </button>
         <button onClick={() => submitNow({ type: 'add_circle', sketch: sketch.id, id: nextEntity('c'), diameter: 10 })}>+ 원</button>
+        <button onClick={() => submitNow({ type: 'add_ellipse', sketch: sketch.id, id: nextEntity('ellipse'), width: 20, height: 10 })} data-testid="add-ellipse">
+          + 타원
+        </button>
         <button
           title="삼각형으로 시작하는 다각형 (꼭짓점을 옮기고 구속을 더해 모양을 정합니다). 뷰포트 다각형 도구(P)로도 그릴 수 있습니다"
           onClick={() =>

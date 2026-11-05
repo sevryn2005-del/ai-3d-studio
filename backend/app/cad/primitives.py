@@ -32,9 +32,11 @@ from OCP.Geom import Geom_CylindricalSurface
 from OCP.Geom2d import Geom2d_Line
 from OCP.gp import (
     gp_Ax1,
+    gp_Ax2,
     gp_Ax3,
     gp_Dir,
     gp_Dir2d,
+    gp_Elips,
     gp_GTrsf,
     gp_Pnt,
     gp_Pnt2d,
@@ -184,6 +186,14 @@ def profile_workplane(p: dict) -> cq.Workplane:
         return cq.Workplane("XY").add(cq.Wire.assembleEdges(edges)).toPending()
     if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
         return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
+    if p["type"] == "ellipse":
+        # 정확한 타원 (occtGeometry profileWire 와 같음): 긴 축이 x (gp_Elips 는 긴 반지름 ≥ 짧은 반지름), 폭이 작으면 90° 돌려 바꾼다
+        swap = p["width"] < p["height"]
+        t = math.radians(p["angle"] + (90 if swap else 0))
+        ax = gp_Ax2(gp_Pnt(p["center"][0], p["center"][1], 0), gp_Dir(0, 0, 1), gp_Dir(math.cos(t), math.sin(t), 0))
+        el = gp_Elips(ax, max(p["width"], p["height"]) / 2, min(p["width"], p["height"]) / 2)
+        wire = cq.Wire(BRepBuilderAPI_MakeWire(BRepBuilderAPI_MakeEdge(el).Edge()).Wire())
+        return cq.Workplane("XY").add(wire).toPending()
     # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
     w = cq.Workplane("XY").pushPoints([tuple(p["center"])])
     if p["type"] == "slot":  # slot2D 길이 = 끝에서 끝 (= 반원 중심 거리 + 폭)

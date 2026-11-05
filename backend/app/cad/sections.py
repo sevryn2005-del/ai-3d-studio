@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from app.cad.commands import slot_half_extent
+from app.cad.commands import ellipse_half_extent, slot_half_extent
 from app.cad.curves import rounded_points
 
 
@@ -46,6 +46,8 @@ def outline(p: dict) -> list[tuple[float, float]]:
         pts = [(cx - w, cy - h), (cx + w, cy - h), (cx + w, cy + h), (cx - w, cy + h)]
     elif t == "slot":
         pts = slot_outline(p, 64)
+    elif t == "ellipse":
+        pts = ellipse_outline(p, 256)
     else:
         r = p["diameter"] / 2
         cx, cy = p["center"]
@@ -53,12 +55,25 @@ def outline(p: dict) -> list[tuple[float, float]]:
     return pts[::-1] if signed_area(pts) < 0 else pts
 
 
+def ellipse_outline(p: dict, n: int) -> list[tuple[float, float]]:
+    """타원 윤곽 n 점 (반시계, 첫 점 = 방향 축 끝) — sketch.ts ellipseOutline"""
+    t = math.radians(p["angle"])
+    a, b = p["width"] / 2, p["height"] / 2
+    cx, cy = p["center"]
+    out = []
+    for k in range(n):
+        s = 2 * math.pi * k / n
+        x, y = a * math.cos(s), b * math.sin(s)
+        out.append((cx + x * math.cos(t) - y * math.sin(t), cy + x * math.sin(t) + y * math.cos(t)))
+    return out
+
+
 def bounds(p: dict) -> tuple[tuple[float, float], float, float]:
     """(중심, 폭 u, 높이 v) — sketch.ts profileBounds 와 같음"""
     if p["type"] == "circle":
         return tuple(p["center"]), p["diameter"], p["diameter"]
-    if p["type"] == "slot":
-        hu, hv = slot_half_extent(p)
+    if p["type"] in ("slot", "ellipse"):
+        hu, hv = slot_half_extent(p) if p["type"] == "slot" else ellipse_half_extent(p)
         return tuple(p["center"]), 2 * hu, 2 * hv
     return tuple(p["center"]), p["width"], p["height"]
 

@@ -16,7 +16,7 @@ const SKETCH_TYPES = [
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
   'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
-  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon', 'add_region', 'set_region', 'set_spline',
+  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon', 'add_region', 'set_region', 'set_spline', 'add_ellipse',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -246,12 +246,30 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return ok(replaceSketch(model, next), cmd, sketch.id);
     }
 
+    case 'add_ellipse': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+      const id = cmd.id ?? nextEntityId(sketch, 'ellipse');
+      if (sketch.entities.some((e) => e.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      const next: Sketch = {
+        ...sketch,
+        entities: [...sketch.entities, { id, type: 'ellipse', center: cmd.center ?? [0, 0], angle: cmd.angle ?? 0 }],
+        dimensions: [
+          ...sketch.dimensions,
+          { id: `${id}.width`, entity: id, kind: 'width', value: cmd.width },
+          { id: `${id}.height`, entity: id, kind: 'height', value: cmd.height },
+        ],
+      };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
+    }
+
     case 'set_entity_angle': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
       const e = sketch.entities.find((x) => x.id === cmd.entity);
       if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
-      if (e.type !== 'slot') return fail('방향(각도)은 슬롯에만 있습니다');
+      if (e.type !== 'slot' && e.type !== 'ellipse') return fail('방향(각도)은 슬롯·타원에만 있습니다');
       return solvedResult(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? { ...e, angle: cmd.angle } : x)) }, cmd, null);
     }
 
@@ -462,6 +480,12 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         if (dia < LIMITS.minDimension) return tooSmall();
         entity = { id, type: 'circle', center: e.center };
         dims = [{ id: `${id}.diameter`, entity: id, kind: 'diameter', value: dia }];
+      } else if (e.type === 'ellipse') {
+        // 타원의 정확한 오프셋 곡선은 타원이 아니다 → 두 지름을 2d 씩 바꾼 타원 (근사)
+        const [w, h] = [dim('width') + 2 * d, dim('height') + 2 * d];
+        if (w < LIMITS.minDimension || h < LIMITS.minDimension) return tooSmall();
+        entity = { id, type: 'ellipse', center: e.center, angle: e.angle };
+        dims = [{ id: `${id}.width`, entity: id, kind: 'width', value: w }, { id: `${id}.height`, entity: id, kind: 'height', value: h }];
       } else if (e.type === 'slot') {
         const w = dim('width') + 2 * d;
         if (w < LIMITS.minDimension) return tooSmall();

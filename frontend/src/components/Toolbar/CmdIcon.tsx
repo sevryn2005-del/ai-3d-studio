@@ -8,6 +8,7 @@ const PATHS: Record<string, string> = {
   sketch: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
   rectangle: 'M4 6h16v12H4z',
   circle: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16z',
+  ellipse: 'M12 7c5 0 9 2.2 9 5s-4 5-9 5-9-2.2-9-5 4-5 9-5z',
   polygon: 'M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z',
   front: 'M5 5h14v14H5z',
   top: 'M3 9l6-5h12l-6 5zM3 9h12v11H3z',

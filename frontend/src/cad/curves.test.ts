@@ -5,7 +5,7 @@ import { emptyModel, type ModelDefinition } from './commandTypes';
 import { executeCommand } from './commandExecutor';
 import { bezierPoint, bulgeArc, bulgeThrough, cornerError, cornerSegments, roundedPoints, splineSegments, sweepError, thinPolygon } from './curves';
 import { drawShapeCommands } from './sketchActions';
-import { resolveProfile, revolveProfileError } from './sketch';
+import { ellipseOutline, profileBounds, resolveProfile, revolveProfileError } from './sketch';
 import { signedArea } from './sections';
 import { validateGraph } from './modelGraph';
 
@@ -249,5 +249,31 @@ describe('형식 v16 스플라인 (서버 tests/test_curves.py 와 같은 값)',
     expect(closed.map((c) => (c as { type: string }).type)).toEqual(['create_sketch', 'add_polygon', 'set_spline']);
     const open = drawShapeCommands(emptyModel(), null, { type: 'path', points: [[0, 0], [10, 5], [20, 0]], spline: true })!;
     expect(run(open).sketches[0]!.entities[0]).toMatchObject({ type: 'path', spline: true });
+  });
+});
+
+describe('형식 v18 타원', () => {
+  const base = run([{ type: 'create_sketch', id: 's', plane: XY }]);
+  it('add_ellipse: 치수 두 개, 단면 범위(돌림 포함), 방향 바꾸기, 오프셋 근사', () => {
+    const m = run([{ type: 'add_ellipse', sketch: 's', center: [1, 2], width: 30, height: 10, angle: 90 }], base);
+    const sk = m.sketches[0]!;
+    expect(sk.entities[0]).toEqual({ id: 'ellipse1', type: 'ellipse', center: [1, 2], angle: 90 });
+    expect(sk.dimensions.map((d) => d.id)).toEqual(['ellipse1.width', 'ellipse1.height']);
+    const p = resolveProfile(sk, 'ellipse1')!;
+    expect(p).toMatchObject({ type: 'ellipse', width: 30, height: 10, angle: 90 });
+    expect(profileBounds(p).width).toBeCloseTo(10, 9); // 90° 돌림 → u 범위 = 짧은 지름
+    expect(profileBounds(p).height).toBeCloseTo(30, 9);
+    const turned = run([{ type: 'set_entity_angle', sketch: 's', entity: 'ellipse1', angle: 0 }], m);
+    expect(profileBounds(resolveProfile(turned.sketches[0]!, 'ellipse1')!).width).toBeCloseTo(30, 9);
+    const off = run([{ type: 'offset_entity', sketch: 's', entity: 'ellipse1', distance: 1 }], m);
+    expect(off.sketches[0]!.dimensions.filter((d) => d.entity !== 'ellipse1').map((d) => d.value)).toEqual([32, 12]);
+    expect(validateGraph(m)).toEqual([]);
+  });
+  it('타원 윤곽 넓이 ≈ π·a·b, 회전 축 검사, 그리기', () => {
+    const pts = ellipseOutline({ center: [0, 0], width: 30, height: 10, angle: 30 }, 512);
+    expect(area(pts)).toBeCloseTo(Math.PI * 15 * 5, 0);
+    expect(revolveProfileError(resolveProfile(run([{ type: 'add_ellipse', sketch: 's', center: [3, 0], width: 10, height: 4 }], base).sketches[0]!, 'ellipse1')!)).toMatch('회전축');
+    const cmds = drawShapeCommands(emptyModel(), null, { type: 'ellipse', from: [-5, -2], to: [5, 2] })!;
+    expect(cmds[1]).toMatchObject({ type: 'add_ellipse', center: [0, 0], width: 10, height: 4 });
   });
 });

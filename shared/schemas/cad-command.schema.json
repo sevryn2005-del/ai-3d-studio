@@ -1328,6 +1328,63 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "add_ellipse"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "center": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "set_entity_angle"
         },
         "sketch": {
@@ -2859,6 +2916,49 @@
                             "type": {
                               "type": "string",
                               "const": "slot"
+                            },
+                            "center": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number",
+                                  "minimum": -10000,
+                                  "maximum": 10000
+                                },
+                                {
+                                  "type": "number",
+                                  "minimum": -10000,
+                                  "maximum": 10000
+                                }
+                              ],
+                              "items": false,
+                              "minItems": 2,
+                              "maxItems": 2
+                            },
+                            "angle": {
+                              "type": "number",
+                              "minimum": -360,
+                              "maximum": 360
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type",
+                            "center",
+                            "angle"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "ellipse"
                             },
                             "center": {
                               "type": "array",

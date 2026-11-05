@@ -571,6 +571,42 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'sweep', id: 'w', sketch: 'sp', profile: 'c', pathSketch: 'pp', path: 'pa' },
     ],
   },
+  'ellipse-rotated-extrude': {
+    // 형식 v18 타원: 지름 30×10, 30° 돌림, 높이 4 → π·15·5·4
+    volume: PI * 15 * 5 * 4,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_ellipse', sketch: 's', id: 'e1', center: [5, 5], width: 30, height: 10, angle: 30 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'e1', distance: 4 },
+    ],
+  },
+  'ellipse-tall-region': {
+    // 세로로 긴 타원(폭 10 < 높이 20 — 정밀 엔진은 축을 바꿔 만든다)을 판 40×30 에서 빼기, 두께 3
+    volume: (1200 - PI * 5 * 10) * 3,
+    roots: 1,
+    bbox: [[-20, -15, 0], [20, 15, 3]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 40, height: 30 },
+      { type: 'add_ellipse', sketch: 's', id: 'el', center: [0, 0], width: 10, height: 20 },
+      { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'r', op: 'add' }, { entity: 'el', op: 'subtract' }] },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'g', distance: 3 },
+    ],
+  },
+  'ellipse-revolve-ring': {
+    // XZ 평면 사각형 24×12 − 타원 16×8 (같은 중심 u 30) 을 v 축 둘레로: 파푸스 2π·30·(288 − 32π).
+    // (타원만 돌린 형상의 정확한 부피는 서버 test_curves 가 B-rep 으로 따로 검사 — 메시 부피는 두 방향 곡면 근사 오차가 커서)
+    volume: 2 * PI * 30 * (288 - 32 * PI),
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [30, 0], width: 24, height: 12 },
+      { type: 'add_ellipse', sketch: 's', id: 'el', center: [30, 0], width: 16, height: 8 },
+      { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'r', op: 'add' }, { entity: 'el', op: 'subtract' }] },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 'g' },
+    ],
+  },
   'rib-l-path': {
     // 리브: 꺾은 중심선 길이 30 × 두께 2 (마이터 이음은 넓이 = 두께 × 중심선 길이) × 높이 5
     volume: 30 * 2 * 5,

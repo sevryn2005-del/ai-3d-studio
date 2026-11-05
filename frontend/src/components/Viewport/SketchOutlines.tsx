@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { ModelDefinition, ObjectId, Sketch, SketchEntity } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { dimensionValue, sketchFeatureRef, sketchRefs, slotOutline } from '../../cad/sketch';
+import { dimensionValue, ellipseOutline, sketchFeatureRef, sketchRefs, slotOutline } from '../../cad/sketch';
 import { roundedPoints } from '../../cad/curves';
 import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
@@ -66,6 +66,10 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
       const w = (dimensionValue(sketch, entity.id, 'width') ?? 0) / 2;
       const h = (dimensionValue(sketch, entity.id, 'height') ?? 0) / 2;
       for (const [x, y] of [[-w, -h], [w, -h], [w, h], [-w, h]] as const) pts.push(cx + x, cy + y, z);
+    } else if (entity.type === 'ellipse') {
+      const width = dimensionValue(sketch, entity.id, 'width') ?? 0;
+      const height = dimensionValue(sketch, entity.id, 'height') ?? 0;
+      for (const [x, y] of ellipseOutline({ center: entity.center, angle: entity.angle, width, height }, 64)) pts.push(x, y, z);
     } else if (entity.type === 'region') {
       // 영역은 따로 그리지 않는다 (구성 요소의 윤곽이 이미 보인다)
     } else {

@@ -55,7 +55,7 @@ export function Toolbar() {
   const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
   const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
-  const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path' | 'arc' | 'spline') => editor.setDrawTool(drawTool === t ? null : t);
+  const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
     <header className="toolbar">
@@ -147,6 +147,7 @@ export function Toolbar() {
             <span className="sep" />
             <Cmd icon="rectangle" label="사각형" shortcut="R" title="사각형 그리기 (R): 선택한 스케치에, 없으면 바닥(윗면)에 새 스케치" pressed={drawTool === 'rectangle'} onClick={() => draw('rectangle')} />
             <Cmd icon="circle" label="원" shortcut="C" title="원 그리기 (C): 중심 → 반지름 드래그" pressed={drawTool === 'circle'} onClick={() => draw('circle')} />
+            <Cmd icon="ellipse" label="타원" title="타원 그리기: 바운딩 박스를 드래그 (속성에서 두 지름·방향)" pressed={drawTool === 'ellipse'} onClick={() => draw('ellipse')} testId="cmd-ellipse" />
             <Cmd icon="slot" label="슬롯" title="선택한 스케치에 슬롯(긴 구멍) 추가" onClick={quickSlot} testId="cmd-slot" />
             <Cmd icon="line" label="구성선" title="선택한 스케치에 구성선(형상 없는 기준선) 추가 — 각도·평행 구속 기준" onClick={quickLine} testId="cmd-line" />
             <Cmd icon="polygon" label="다각형" shortcut="P" title="다각형 그리기 (P): 클릭으로 꼭짓점, 첫 점을 다시 클릭하거나 Enter 로 닫기" pressed={drawTool === 'polygon'} onClick={() => draw('polygon')} />

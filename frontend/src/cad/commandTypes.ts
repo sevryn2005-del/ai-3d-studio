@@ -233,6 +233,10 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
    */
   z.strictObject({ id: ObjectIdSchema, type: z.literal('slot'), center: Point2Schema, angle: z.number().min(-360).max(360) }),
   /**
+   * 타원 (형식 v18): 중심, 방향 angle(°, u 축 기준 반시계). 치수 `ID.width` = 방향 축(angle) 쪽 지름, `ID.height` = 그와 수직인 지름
+   */
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('ellipse'), center: Point2Schema, angle: z.number().min(-360).max(360) }),
+  /**
    * 영역 (형식 v15): 같은 스케치의 닫힌 요소(사각형·원·다각형·슬롯)를 순서대로 합치고(add) 빼서(subtract) 만든 단면.
    * 첫 항목은 add. 구성 요소 치수를 고치면 영역도 따라 바뀐다 (잘라내기 대신 — 원본을 지우지 않는다). 돌출·회전에 쓴다
    */
@@ -635,7 +639,7 @@ export const DrawingSettingsSchema = z.strictObject({
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
 
-export const MODEL_SCHEMA_VERSION = 17;
+export const MODEL_SCHEMA_VERSION = 18;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -910,6 +914,17 @@ export const SetEntityAngleCommandSchema = z.strictObject({
   sketch: ObjectIdSchema,
   entity: ObjectIdSchema,
   angle: z.number().min(-360).max(360),
+});
+
+/** 타원 추가 (형식 v18): width = 방향 축 지름, height = 수직 지름 */
+export const AddEllipseCommandSchema = z.strictObject({
+  type: z.literal('add_ellipse'),
+  sketch: ObjectIdSchema,
+  id: ObjectIdSchema.optional(),
+  center: Point2Schema.optional(),
+  width: dimension,
+  height: dimension,
+  angle: z.number().min(-360).max(360).optional(),
 });
 
 /** 점(다각형 꼭짓점·원/사각형 중심)을 옮기고 구속을 다시 푼다. 구속과 모순되면 거부 */
@@ -1187,6 +1202,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetRegionCommandSchema,
   SetSplineCommandSchema,
   AddSlotCommandSchema,
+  AddEllipseCommandSchema,
   SetEntityAngleCommandSchema,
   OffsetEntityCommandSchema,
   MovePointCommandSchema,

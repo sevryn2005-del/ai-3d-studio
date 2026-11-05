@@ -5,7 +5,7 @@
 import type { CadCommand, ModelDefinition, ObjectId, Point2, Transform } from './commandTypes';
 import { nextId } from './commandExecutor';
 import { byId, parentMap } from './modelGraph';
-import { findSketch, resolveProfile, slotOutline } from './sketch';
+import { ellipseOutline, findSketch, resolveProfile, slotOutline } from './sketch';
 import { composeTransform } from './transformMath';
 import { polygonError } from './solver';
 import { bulgeThrough, openPathError } from './curves';
@@ -92,9 +92,9 @@ export function throughHoleCommands(
       ? Math.abs(dx) + r + HOLE_MIN_WALL <= profile.width / 2 && Math.abs(dy) + r + HOLE_MIN_WALL <= profile.height / 2
       : profile.type === 'circle'
         ? Math.hypot(dx, dy) + r + HOLE_MIN_WALL <= profile.diameter / 2
-        : profile.type === 'slot'
+        : profile.type === 'slot' || profile.type === 'ellipse'
           ? (() => {
-              const pts = slotOutline(profile, 24);
+              const pts = profile.type === 'slot' ? slotOutline(profile, 24) : ellipseOutline(profile, 96);
               return pointInPolygon(hole.center, pts) && edgeDistance(hole.center, pts) >= r + HOLE_MIN_WALL;
             })()
           : pointInPolygon(hole.center, profile.points) && edgeDistance(hole.center, profile.points) >= r + HOLE_MIN_WALL;
@@ -128,6 +128,8 @@ export function throughHoleCommands(
 /** 뷰포트에서 그린 도형 (스케치 평면 좌표, mm) */
 export type DrawnShape =
   | { type: 'rectangle'; from: Point2; to: Point2 }
+  /** 타원 (형식 v18): 바운딩 박스 두 모서리 → 중심·두 지름, 방향 0° */
+  | { type: 'ellipse'; from: Point2; to: Point2 }
   | { type: 'circle'; center: Point2; radius: number }
   | { type: 'polygon'; points: Point2[]; spline?: boolean }
   | { type: 'path'; points: Point2[]; spline?: boolean }
@@ -169,6 +171,12 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
     const points = shape.points.map(([x, y]) => [round(x), round(y)] as Point2);
     if (points.length < 3 || polygonError(points)) return null; // 꼬였거나 넓이가 없으면 만들지 않는다
     add = { type: 'add_polygon', sketch: sid, id: entityId('poly'), points };
+  } else if (shape.type === 'ellipse') {
+    const width = round(Math.abs(shape.to[0] - shape.from[0]));
+    const height = round(Math.abs(shape.to[1] - shape.from[1]));
+    if (width < MIN_DRAWN_SIZE || height < MIN_DRAWN_SIZE) return null;
+    const center: Point2 = [round((shape.from[0] + shape.to[0]) / 2), round((shape.from[1] + shape.to[1]) / 2)];
+    add = { type: 'add_ellipse', sketch: sid, id: entityId('ellipse'), center, width, height };
   } else if (shape.type === 'rectangle') {
     const width = round(Math.abs(shape.to[0] - shape.from[0]));
     const height = round(Math.abs(shape.to[1] - shape.from[1]));

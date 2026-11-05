@@ -102,7 +102,7 @@ export function Viewport() {
       <DrawingPanel />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
-          ? `${drawTool === 'spline' ? '클릭: 스플라인이 지날 점 (첫 점 클릭 = 닫힌 곡선, 마지막 점 다시 클릭·Enter = 열린 곡선)' : drawTool === 'arc' ? '클릭: 호 시작점 → 끝점 → 호가 지날 점' : drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`
+          ? `${drawTool === 'spline' ? '클릭: 스플라인이 지날 점 (첫 점 클릭 = 닫힌 곡선, 마지막 점 다시 클릭·Enter = 열린 곡선)' : drawTool === 'arc' ? '클릭: 호 시작점 → 끝점 → 호가 지날 점' : drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : drawTool === 'ellipse' ? '타원 (바운딩 박스 모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`
           : navHint(mouseScheme, false)}
       </div>
     </section>

@@ -87,8 +87,8 @@ export function SketchDrawTool() {
     return [Math.round(p.x / step) * step, Math.round(p.y / step) * step];
   };
   const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> =>
-    tool === 'rectangle'
-      ? { type: 'rectangle', from: d.from, to: d.to }
+    tool === 'rectangle' || tool === 'ellipse'
+      ? { type: tool, from: d.from, to: d.to }
       : { type: 'circle', center: d.from, radius: Math.round(Math.hypot(d.to[0] - d.from[0], d.to[1] - d.from[1]) / step) * step };
 
   const down = (e: ThreeEvent<PointerEvent>) => {
@@ -153,11 +153,16 @@ function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' |
     const pts: number[] = [];
     let label: string;
     let anchor: [number, number, number];
-    if (shape.type === 'rectangle') {
+    if (shape.type === 'rectangle' || shape.type === 'ellipse') {
       const [x0, y0] = shape.from;
       const [x1, y1] = shape.to;
-      for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as const) pts.push(x, y, 0.03);
-      label = `${formatMm(Math.abs(x1 - x0))} × ${formatMm(Math.abs(y1 - y0))} mm`;
+      if (shape.type === 'rectangle') for (const [x, y] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as const) pts.push(x, y, 0.03);
+      else
+        for (let i = 0; i < 64; i++) {
+          const a = (i / 64) * Math.PI * 2;
+          pts.push((x0 + x1) / 2 + (Math.abs(x1 - x0) / 2) * Math.cos(a), (y0 + y1) / 2 + (Math.abs(y1 - y0) / 2) * Math.sin(a), 0.03);
+        }
+      label = `${shape.type === 'ellipse' ? '타원 ' : ''}${formatMm(Math.abs(x1 - x0))} × ${formatMm(Math.abs(y1 - y0))} mm`;
       anchor = [x1, y1, 0];
     } else {
       const [cx, cy] = shape.center;

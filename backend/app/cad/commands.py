@@ -255,6 +255,15 @@ class SlotEntity(Strict):
     angle: SketchAngle
 
 
+class EllipseEntity(Strict):
+    """타원 (형식 v18): 치수 ID.width(방향 축 지름)·ID.height(수직 지름), 방향 angle(°)"""
+
+    id: ObjectId
+    type: Literal["ellipse"]
+    center: Point2
+    angle: SketchAngle
+
+
 class RegionItem(Strict):
     entity: ObjectId
     op: Literal["add", "subtract"]
@@ -273,7 +282,8 @@ class RegionEntity(Strict):
 
 
 SketchEntity = Annotated[
-    Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity, PathEntity, RegionEntity], Field(discriminator="type")
+    Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity, PathEntity, RegionEntity, EllipseEntity],
+    Field(discriminator="type"),
 ]
 
 ConstraintType = Literal[
@@ -351,7 +361,8 @@ class Sketch(Strict):
     constraints: Annotated[list[SketchConstraint], Field(max_length=Limits.MAX_SKETCH_CONSTRAINTS)]
 
 
-REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width"), "path": (), "region": ()}
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width"), "path": (), "region": (),
+                       "ellipse": ("width", "height")}
 
 
 def slot_half_extent(p: dict) -> tuple[float, float]:
@@ -370,6 +381,8 @@ def revolve_profile_error(p: dict) -> str | None:
         min_u = p["center"][0] - p["diameter"] / 2
     elif p["type"] == "slot":
         min_u = p["center"][0] - slot_half_extent(p)[0]
+    elif p["type"] == "ellipse":
+        min_u = p["center"][0] - ellipse_half_extent(p)[0]
     else:
         min_u = p["center"][0] - p["width"] / 2
     if min_u < -1e-9:
@@ -414,7 +427,14 @@ def profile_of(sketch: Sketch, ref) -> dict | None:
     return _polygon_profile(thin_polygon(pts, thin), None, sketch.plane.offset, sketch.plane)
 
 
-CLOSED_TYPES = ("rectangle", "circle", "polygon", "slot")
+CLOSED_TYPES = ("rectangle", "circle", "polygon", "slot", "ellipse")
+
+
+def ellipse_half_extent(p: dict) -> tuple[float, float]:
+    """타원 바운딩 반폭 (u, v) — sketch.ts ellipseHalfExtent"""
+    t = math.radians(p["angle"])
+    a, b = p["width"] / 2, p["height"] / 2
+    return math.hypot(a * math.cos(t), b * math.sin(t)), math.hypot(a * math.sin(t), b * math.cos(t))
 
 
 def region_error(sketch: Sketch, items, self_id: str | None = None) -> str | None:
@@ -443,8 +463,8 @@ def profile_bounds(p: dict) -> tuple[float, float, float, float]:
     if p["type"] == "circle":
         r = p["diameter"] / 2
         return p["center"][0] - r, p["center"][1] - r, p["center"][0] + r, p["center"][1] + r
-    if p["type"] == "slot":
-        hu, hv = slot_half_extent(p)
+    if p["type"] in ("slot", "ellipse"):
+        hu, hv = slot_half_extent(p) if p["type"] == "slot" else ellipse_half_extent(p)
         return p["center"][0] - hu, p["center"][1] - hv, p["center"][0] + hu, p["center"][1] + hv
     cx, cy = p["center"]
     return cx - p["width"] / 2, cy - p["height"] / 2, cx + p["width"] / 2, cy + p["height"] / 2
@@ -473,6 +493,11 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
+                    "plane": sketch.plane}
+        return None
+    if e.type == "ellipse":
+        if "width" in dims and "height" in dims:
+            return {"type": "ellipse", "center": e.center, "width": dims["width"], "height": dims["height"], "angle": e.angle, "z": z,
                     "plane": sketch.plane}
         return None
     if e.type == "slot":
@@ -893,7 +918,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[17]
+    schemaVersion: Literal[18]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1113,6 +1138,18 @@ class AddLine(Strict):
     sketch: ObjectId
     id: ObjectId | None = None
     points: tuple[Point2, Point2]
+
+
+class AddEllipse(Strict):
+    """타원 추가 (형식 v18)"""
+
+    type: Literal["add_ellipse"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    center: Point2 | None = None
+    width: Dimension
+    height: Dimension
+    angle: SketchAngle | None = None
 
 
 class AddSlot(Strict):
@@ -1435,6 +1472,7 @@ CadCommand = Annotated[
         SetRegion,
         SetSpline,
         AddSlot,
+        AddEllipse,
         SetEntityAngle,
         OffsetEntity,
         MovePoint,
@@ -1505,6 +1543,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetRegion,
     SetSpline,
     AddSlot,
+    AddEllipse,
     SetEntityAngle,
     OffsetEntity,
     MovePoint,

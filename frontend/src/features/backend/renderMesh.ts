@@ -136,7 +136,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 17, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 18, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 
@@ -153,6 +153,7 @@ function profileKey(p: Profile | null): string {
   if (p.type === 'rectangle') return `rect:${p.width}x${p.height}@${p.center.join(',')},${p.z}${tag}`;
   if (p.type === 'polygon') return `poly:${p.points.map((q) => q.join(',')).join(';')}${p.corners?.length ? `|c:${p.corners.map((c) => `${c.k}${c.type[0]}${c.size}`).join(',')}` : ''}${p.arcs?.length ? `|a:${p.arcs.map((a) => `${a.k}~${a.bulge}`).join(',')}` : ''}${p.spline ? '|s' : ''}@${p.z}${tag}`;
   if (p.type === 'region') return `region:[${p.items.map((it) => `${it.op === 'add' ? '+' : '-'}${profileKey(it.profile)}`).join(';')}]`;
+  if (p.type === 'ellipse') return `ellipse:${p.width}x${p.height}<${p.angle}@${p.center.join(',')},${p.z}${tag}`;
   if (p.type === 'slot') return `slot:${p.length}x${p.width}<${p.angle}@${p.center.join(',')},${p.z}${tag}`;
   return `circle:${p.diameter}@${p.center.join(',')},${p.z}${tag}`;
 }

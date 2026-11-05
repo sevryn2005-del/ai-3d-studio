@@ -4,7 +4,7 @@ import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
-import { profileOf, slotOutline, type Profile } from '../../cad/sketch';
+import { ellipseOutline, profileOf, slotOutline, type Profile } from '../../cad/sketch';
 import { roundedPoints } from '../../cad/curves';
 import { pickBusy } from '../../features/selection/pick';
 import { useEditorStore } from '../../features/selection/editorStore';
@@ -29,7 +29,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 17, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 18, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -263,7 +263,7 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
       if (!profile || !local) return { position: [0, 0, 0] };
       // 다각형: 평면 좌표의 ExtrudeGeometry(z 0..|d|) → 음수 거리는 법선 반대쪽으로 내린다
       const m =
-        profile.type === 'polygon' || profile.type === 'slot'
+        profile.type === 'polygon' || profile.type === 'slot' || profile.type === 'ellipse'
           ? local.clone().multiply(new Matrix4().makeTranslation(0, 0, Math.min(0, o.params.distance)))
           : extrudePreviewMatrix(profile, o.params.distance, local);
       const pos = new Vector3();
@@ -297,6 +297,10 @@ function profileOutline(p: Profile): Vector2[] {
     const pts = slotOutline(p, 16);
     return [...pts, pts[0]!].map(([x, y]) => new Vector2(x, y));
   }
+  if (p.type === 'ellipse') {
+    const pts = ellipseOutline(p, 48);
+    return [...pts, pts[0]!].map(([x, y]) => new Vector2(x, y));
+  }
   if (p.type === 'rectangle') {
     const [cx, cy] = p.center;
     const [w, h] = [p.width / 2, p.height / 2];
@@ -324,8 +328,8 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
     case 'sphere':
       return <sphereGeometry args={[o.params.radius, SEGMENTS, SEGMENTS / 2]} />;
     case 'extrude':
-      if (profile?.type === 'polygon' || profile?.type === 'slot') {
-        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : roundedPoints(profile.points, profile.corners, true, undefined, profile.arcs, profile.spline);
+      if (profile?.type === 'polygon' || profile?.type === 'slot' || profile?.type === 'ellipse') {
+        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : profile.type === 'ellipse' ? ellipseOutline(profile, 48) : roundedPoints(profile.points, profile.corners, true, undefined, profile.arcs, profile.spline);
         const shape = new Shape(pts.map(([x, y]) => new Vector2(x, y)));
         return <extrudeGeometry args={[shape, { depth: Math.abs(o.params.distance), bevelEnabled: false }]} />;
       }

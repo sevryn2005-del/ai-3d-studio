@@ -14,6 +14,7 @@ export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> 
   path: [], // 경로(형식 v10): 열린 꺾은선, 꼭짓점 좌표 + 구속
   slot: ['length', 'width'], // 반원 중심 거리, 폭
   region: [], // 영역(형식 v15): 구성 요소의 치수를 따른다
+  ellipse: ['width', 'height'], // 타원(형식 v18): 방향 축 지름, 수직 지름
 };
 
 export function findSketch(model: ModelDefinition, id: ObjectId): Sketch | undefined {
@@ -29,7 +30,8 @@ export type BaseProfile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
   | { type: 'polygon'; points: Point2[]; corners?: Corner[]; arcs?: Arc[]; spline?: true; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
-  | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
+  | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane }
+  | { type: 'ellipse'; center: Point2; width: number; height: number; angle: number; z: number; plane: SketchPlane };
 /**
  * 영역 단면 (형식 v15): 단면들을 순서대로 합치고(add) 뺀 것. center·width·height = 합친(add) 단면들의 바운딩 박스
  * (빼기로 줄어들 수 있으나 크기 표시·회전 반지름용으로 충분). 엔진은 정확한 2D 불리언 (manifold CrossSection, OCCT 면 불리언)
@@ -64,12 +66,34 @@ export function slotOutline(p: { center: Point2; length: number; width: number; 
 /** 단면의 바운딩 박스 (평면 좌표): 중심·폭(u)·높이(v). 크기 표시·회전 반지름용 */
 export function profileBounds(p: Profile): { center: Point2; width: number; height: number } {
   if (p.type === 'region') return { center: p.center, width: p.width, height: p.height };
+  if (p.type === 'ellipse') {
+    const [hu, hv] = ellipseHalfExtent(p);
+    return { center: p.center, width: 2 * hu, height: 2 * hv };
+  }
   if (p.type === 'circle') return { center: p.center, width: p.diameter, height: p.diameter };
   if (p.type === 'slot') {
     const [hu, hv] = slotHalfExtent(p);
     return { center: p.center, width: 2 * hu, height: 2 * hv };
   }
   return { center: p.center, width: p.width, height: p.height };
+}
+
+/** 타원 바운딩 반폭 [u, v] (방향 angle 로 돌린 반지름 a = width/2, b = height/2) */
+export function ellipseHalfExtent(p: { width: number; height: number; angle: number }): [number, number] {
+  const t = (p.angle * Math.PI) / 180;
+  const [a, b] = [p.width / 2, p.height / 2];
+  return [Math.hypot(a * Math.cos(t), b * Math.sin(t)), Math.hypot(a * Math.sin(t), b * Math.cos(t))];
+}
+
+/** 타원 윤곽 n 점 (반시계, 첫 점 = 방향 축 끝) — 미리보기·메시 엔진·로프트 단면 (서버 sections.ellipse_outline 과 같음) */
+export function ellipseOutline(p: { center: Point2; width: number; height: number; angle: number }, n: number): Point2[] {
+  const t = (p.angle * Math.PI) / 180;
+  const [a, b] = [p.width / 2, p.height / 2];
+  return Array.from({ length: n }, (_, k) => {
+    const s = (2 * Math.PI * k) / n;
+    const [x, y] = [a * Math.cos(s), b * Math.sin(s)];
+    return [p.center[0] + x * Math.cos(t) - y * Math.sin(t), p.center[1] + x * Math.sin(t) + y * Math.cos(t)] as Point2;
+  });
 }
 
 /** 슬롯 축 방향 바운딩 반폭 [u, v] */
@@ -100,6 +124,11 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
     return width && height ? { type: 'rectangle', center: e.center, width, height, z, plane } : null;
+  }
+  if (e.type === 'ellipse') {
+    const width = dimensionValue(sketch, e.id, 'width');
+    const height = dimensionValue(sketch, e.id, 'height');
+    return width && height ? { type: 'ellipse', center: e.center, width, height, angle: e.angle, z, plane } : null;
   }
   if (e.type === 'slot') {
     const length = dimensionValue(sketch, e.id, 'length');
@@ -266,6 +295,8 @@ export function revolveProfileError(p: Profile): string | null {
         ? p.center[0] - p.diameter / 2
         : p.type === 'slot'
           ? p.center[0] - slotHalfExtent(p)[0]
+          : p.type === 'ellipse'
+            ? p.center[0] - ellipseHalfExtent(p)[0]
           : p.center[0] - p.width / 2;
   return minU < -1e-9 ? `회전 프로파일은 회전축(스케치 v 축, u = 0)의 한쪽(u ≥ 0)에 있어야 합니다 (지금 u 최소 ${Math.round(minU * 1000) / 1000})` : null;
 }
