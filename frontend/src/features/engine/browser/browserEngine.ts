@@ -97,5 +97,12 @@ export function createBrowserEngine(
       if (r.type !== 'interference') throw new EngineError('잘못된 응답입니다');
       return r.pairs;
     },
+
+    async topology(model: ModelDefinition, objectId: string, signal?: AbortSignal) {
+      const r = await request({ type: 'topology', model, objectId }, signal);
+      if (!r.ok) throw new EngineError(r.error);
+      if (r.type !== 'topology') throw new EngineError('잘못된 응답입니다');
+      return r.topology;
+    },
   };
 }

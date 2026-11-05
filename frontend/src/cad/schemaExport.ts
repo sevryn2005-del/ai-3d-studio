@@ -490,6 +490,16 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'sweep', id: 'w', sketch: 'sp', profile: 'r', pathSketch: 'pp', path: 'pa' },
     ],
   },
+  'frame-plane-extrude': {
+    // 형식 v12 고른 면 평면(frame): 원점 (5, 5, 5), 법선 (1, 1, 1)/√3 기울어진 평면 위 사각형 10×6 을 4mm 돌출
+    volume: 10 * 6 * 4,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'frame', origin: [5, 5, 5], normal: [1, 1, 1], xDir: [1, -1, 0], offset: 2 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [1, 2], width: 10, height: 6 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 4 },
+    ],
+  },
   'suppressed-tool-and-root': {
     volume: 16000,
     roots: 1,
@@ -542,6 +552,18 @@ export function preciseCases(samples: FixtureSamples): typeof FEATURE_CASES {
         { type: 'edge_feature', id: 'f', target: 'cut_1', feature: 'chamfer', size: 2, edges: 'bottom' },
       ],
     },
+    'chamfer-picked-edges': {
+      // 화면에서 고른 위 모서리 두 개(마주 보는 변, 점 = 모서리 가운데): 깎인 삼각기둥 2 × (2²/2 × 20)
+      volume: 4000 - 2 * 2 * 20,
+      roots: 1,
+      commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'chamfer', size: 2, edges: { at: [[0, -10, 10], [0, 10, 10]] } }],
+    },
+    'fillet-picked-circle': {
+      // 원통 위 원 모서리를 고른 점(10, 0, 10)으로: 위 모서리 규칙과 같은 형상
+      volume: PI * 100 * 10 - cylinderTopFilletLoss(10, 2),
+      roots: 1,
+      commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 10 }, { type: 'edge_feature', id: 'f', target: 'c', feature: 'fillet', size: 2, edges: { at: [[10, 0, 10]] } }],
+    },
     'draft-box': { volume: frustum(400, top * top, 10), roots: 1, bbox: [[-10, -10, 0], [10, 10, 10]], commands: [box('b', 20, 20, 10), { type: 'draft', id: 'd', target: 'b', angle: 5 }] },
     'step-import-block': {
       volume: 6000 - PI * 4 * 30,
@@ -592,6 +614,8 @@ export const ASSEMBLY_COMMANDS: unknown[] = [
   { type: 'add_mate', id: 'm_axis', mate: 'concentric', refs: ['post.axis', 'pin.axis'] },
   { type: 'add_mate', id: 'm_gap', mate: 'distance', refs: ['post.top', 'pin.bottom'], value: 1.5 },
   { type: 'add_mate', id: 'm_tilt', mate: 'angle', refs: ['base.+Y', 'lid.+X'], value: 90 },
+  // 형식 v12: 화면에서 고른 이름 없는 면(부품 로컬 기하)도 같은 잔차로 검사된다
+  { type: 'add_mate', id: 'm_picked', mate: 'parallel', refs: [{ object: 'base', kind: 'face', origin: [0, 0, 10], dir: [0, 0, 1] }, 'pin.axis'] },
 ];
 
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */

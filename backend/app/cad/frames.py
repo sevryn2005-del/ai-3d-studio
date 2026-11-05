@@ -75,7 +75,16 @@ def transform_matrix(t: Transform) -> np.ndarray:
 
 
 def plane_matrix(plane) -> np.ndarray:
-    """기준 평면 / 각도 평면 (= 기준(offset 0) · R(u 또는 v 축, angle) · T(0, 0, offset)) → 객체 로컬"""
+    """기준 평면 / 각도 평면 (= 기준(offset 0) · R(u 또는 v 축, angle) · T(0, 0, offset)) / 고른 면 평면 → 객체 로컬"""
+    if plane.type == "frame":  # sketchPlane.ts planeMatrix 와 같음: u = xDir 를 법선에 수직으로, v = 법선 × u
+        n = np.asarray(plane.normal, float)
+        n = n / np.linalg.norm(n)
+        x = np.asarray(plane.xDir, float)
+        x = x - n * (x @ n)
+        x = x / np.linalg.norm(x)
+        m = np.eye(4)
+        m[:3, 0], m[:3, 1], m[:3, 2], m[:3, 3] = x, np.cross(n, x), n, np.asarray(plane.origin, float) + n * plane.offset
+        return m
     if plane.type == "angled":
         u, v, n = (np.asarray(x, float) for x in _BASES[plane.base])
         base = np.eye(4)

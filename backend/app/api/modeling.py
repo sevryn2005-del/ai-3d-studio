@@ -152,3 +152,23 @@ def model_interference(
     except CadEngineError as e:
         return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()], "pairs": []}
     return {"ok": True, "issues": [], "pairs": pairs}
+
+
+@router.post("/model/topology")
+def model_topology(
+    pool: Annotated[WorkerPool, Depends(get_cad_pool)],
+    payload: Any = Body(...),
+) -> dict[str, Any]:
+    """화면 선택용 면·모서리 (형식 v12): {model, id} → {ok, faces, edges}"""
+    try:
+        model = ModelDefinition.model_validate(payload.get("model") if isinstance(payload, dict) else None)
+    except ValidationError as e:
+        return {"ok": False, "issues": [i.model_dump() for i in issues_from_validation_error(e)]}
+    issues = [i for i in check_model(model) if i.severity == "error"]
+    if issues:
+        return {"ok": False, "issues": [i.model_dump() for i in issues]}
+    try:
+        topo = pool.run("topology", {"model": model.model_dump(mode="json"), "id": str(payload.get("id", ""))}, timeout=INTERFERENCE_TIMEOUT_S)
+    except CadEngineError as e:
+        return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()]}
+    return {"ok": True, "issues": [], **topo}

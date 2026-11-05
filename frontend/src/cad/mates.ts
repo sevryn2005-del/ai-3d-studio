@@ -15,7 +15,7 @@
  * 메이트로 이어진 무리에 고정이 없으면 모델 순서상 첫 객체를 고정한다 (솔리드웍스: 처음 넣은 부품 고정).
  */
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import type { CadObject, FaceName, Mate, ModelDefinition, ObjectId } from './commandTypes';
+import type { CadObject, FaceName, Mate, MateRef, ModelDefinition, ObjectId } from './commandTypes';
 import { extrudeLocalMatrix, faceLocalMatrix, facesOf } from './sketchPlane';
 import { findSketch, profileOf } from './sketch';
 import { topLevelObjects } from './modelGraph';
@@ -95,10 +95,23 @@ function localFrame(model: ModelDefinition, obj: CadObject, part: string): Frame
   return m ? { origin: new Vector3().setFromMatrixPosition(m), dir: new Vector3(0, 0, 1).transformDirection(m) } : null;
 }
 
-const split = (ref: string): [ObjectId, string] => {
+/** 참조 → [객체, 면 이름 | 'axis' | '' (고정) | '@face' · '@axis' (화면에서 고른 이름 없는 면·축)] */
+const split = (ref: MateRef): [ObjectId, string] => {
+  if (typeof ref !== 'string') return [ref.object, `@${ref.kind}`];
   const i = ref.indexOf('.');
   return i < 0 ? [ref, ''] : [ref.slice(0, i), ref.slice(i + 1)];
 };
+export const refObject = (ref: MateRef): ObjectId => split(ref)[0];
+export const isAxisRef = (ref: MateRef) => (typeof ref === 'string' ? ref.endsWith('.axis') : ref.kind === 'axis');
+
+/** 참조의 객체 로컬 좌표계 (원점, 방향). 고른 면·축은 저장된 값, 이름 면은 지금 치수로 계산 */
+function refLocalFrame(model: ModelDefinition, obj: CadObject, ref: MateRef): Frame | null {
+  if (typeof ref !== 'string') {
+    const dir = new Vector3(...ref.dir);
+    return dir.length() > 1e-9 ? { origin: new Vector3(...ref.origin), dir: dir.normalize() } : null;
+  }
+  return localFrame(model, obj, split(ref)[1]);
+}
 
 /** 메이트 형식 검사. 문제가 없으면 null */
 export function mateError(model: ModelDefinition, m: Pick<Mate, 'type' | 'refs' | 'value'>): string | null {
@@ -114,13 +127,13 @@ export function mateError(model: ModelDefinition, m: Pick<Mate, 'type' | 'refs' 
       if (part) return '고정 메이트는 객체 ID 만 참조합니다';
       continue;
     }
-    if (!part) return `${ref}: 면 또는 축을 지정하세요 (예: ${id}.top, ${id}.axis)`;
-    if (!localFrame(model, obj, part)) return `'${obj.name}'에는 ${part === 'axis' ? '축' : `'${part}' 면`}이 없습니다 (쓸 수 있는 것: ${mateRefsOf(model, obj).map((r) => split(r)[1]).join(', ') || '없음'})`;
-    const isAxis = part === 'axis';
+    if (!part) return `${id}: 면 또는 축을 지정하세요 (예: ${id}.top, ${id}.axis)`;
+    if (!refLocalFrame(model, obj, ref)) return `'${obj.name}'에는 ${part === 'axis' ? '축' : `'${part}' 면`}이 없습니다 (쓸 수 있는 것: ${mateRefsOf(model, obj).map((r) => split(r)[1]).join(', ') || '없음'})`;
+    const isAxis = isAxisRef(ref);
     if ((m.type === 'coincident' || m.type === 'distance') && isAxis) return `${MATE_LABEL[m.type]} 메이트는 면끼리 겁니다 (축은 동심)`;
     if (m.type === 'concentric' && !isAxis) return '동심 메이트는 축끼리 겁니다 (예: cylinder_1.axis)';
   }
-  if (m.type !== 'fix' && split(m.refs[0]!)[0] === split(m.refs[1]!)[0]) return '같은 객체끼리는 메이트를 걸 수 없습니다';
+  if (m.type !== 'fix' && refObject(m.refs[0]!) === refObject(m.refs[1]!)) return '같은 객체끼리는 메이트를 걸 수 없습니다';
   if ((m.type === 'distance' || m.type === 'angle') && m.value === undefined) return `${MATE_LABEL[m.type]} 메이트에는 값이 필요합니다`;
   return null;
 }
@@ -130,9 +143,9 @@ type WorldOf = (id: ObjectId) => Matrix4;
 function residuals(model: ModelDefinition, m: Mate, world: WorldOf): number[] {
   if (m.type === 'fix') return [];
   const fr = m.refs.map((ref) => {
-    const [id, part] = split(ref);
+    const id = refObject(ref);
     const obj = model.objects.find((o) => o.id === id)!;
-    const f = localFrame(model, obj, part)!;
+    const f = refLocalFrame(model, obj, ref)!;
     const w = world(id);
     return { o: f.origin.clone().applyMatrix4(w), n: f.dir.clone().transformDirection(w) };
   });
@@ -181,11 +194,11 @@ function grounded(model: ModelDefinition, pinned: ReadonlySet<ObjectId>): { move
     return a;
   };
   const ids = new Set<ObjectId>();
-  for (const m of mates) for (const r of m.refs) ids.add(split(r)[0]);
+  for (const m of mates) for (const r of m.refs) ids.add(refObject(r));
   for (const id of ids) parent.set(id, id);
-  for (const m of mates) if (m.refs.length === 2) parent.set(find(split(m.refs[0]!)[0]), find(split(m.refs[1]!)[0]));
+  for (const m of mates) if (m.refs.length === 2) parent.set(find(refObject(m.refs[0]!)), find(refObject(m.refs[1]!)));
   const fixed = new Set<ObjectId>([...pinned].filter((id) => ids.has(id)));
-  for (const m of mates) if (m.type === 'fix') fixed.add(split(m.refs[0]!)[0]);
+  for (const m of mates) if (m.type === 'fix') fixed.add(refObject(m.refs[0]!));
   const groups = new Map<ObjectId, ObjectId[]>();
   for (const id of ids) groups.set(find(id), [...(groups.get(find(id)) ?? []), id]);
   for (const members of groups.values()) {
@@ -264,14 +277,14 @@ export function mateDof(model: ModelDefinition): number {
 
 /** 객체를 참조하는 메이트 ID */
 export function matesOf(model: ModelDefinition, id: ObjectId): string[] {
-  return (model.mates ?? []).filter((m) => m.refs.some((r) => split(r)[0] === id)).map((m) => m.id);
+  return (model.mates ?? []).filter((m) => m.refs.some((r) => refObject(r) === id)).map((m) => m.id);
 }
 
 /** 삭제된 객체를 참조하는 메이트를 뺀 모델 */
 export function pruneMates(model: ModelDefinition): ModelDefinition {
   if (!model.mates?.length) return model;
   const ids = new Set(model.objects.map((o) => o.id));
-  const mates = model.mates.filter((m) => m.refs.every((r) => ids.has(split(r)[0])));
+  const mates = model.mates.filter((m) => m.refs.every((r) => ids.has(refObject(r))));
   return mates.length === model.mates.length ? model : { ...model, mates };
 }
 

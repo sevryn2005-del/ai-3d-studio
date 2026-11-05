@@ -6,6 +6,7 @@ import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandType
 import { childIds, sketchIndex } from '../../cad/modelGraph';
 import { profileOf, slotOutline, type Profile } from '../../cad/sketch';
 import { roundedPoints } from '../../cad/curves';
+import { pickBusy } from '../../features/selection/pick';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { DEG2RAD } from '../../cad/units';
@@ -28,7 +29,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 11, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 12, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -198,6 +199,7 @@ function ObjectMesh({
       onClick={(e) => {
         const ed = useEditorStore.getState();
         if (ed.drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
+        if (pickBusy()) return; // 면·모서리 고르는 중 (PickOverlay 가 처리)
         e.stopPropagation();
         if (ed.measuring) {
           ed.addMeasurePoint(e.point.toArray() as [number, number, number]);

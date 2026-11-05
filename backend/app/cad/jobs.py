@@ -111,7 +111,67 @@ def interference(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def topology(payload: dict[str, Any]) -> dict[str, Any]:
+    """{model, id} → 화면 선택용 면·모서리 (객체 변환 적용 = 부모 좌표계) — 브라우저 occtGeometry.shapeTopology 와 같은 내용"""
+    import base64
+
+    import numpy as np
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Plane, GeomAbs_Sphere
+
+    from app.cad.mesh import DISPLAY_ANGULAR_TOLERANCE, DISPLAY_LINEAR_TOLERANCE
+
+    model = ModelDefinition.model_validate(payload["model"])
+    index = {o.id: o for o in model.objects}
+    obj = index.get(payload["id"])
+    if obj is None:
+        raise GeometryError(f"존재하지 않는 객체입니다: {payload['id']}")
+    shape = apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform)
+    b64 = lambda a, t: base64.b64encode(np.asarray(a, dtype=t).tobytes()).decode("ascii")  # noqa: E731
+    xyz = lambda p: [p.X(), p.Y(), p.Z()]  # noqa: E731
+    faces = []
+    for f in shape.Faces():
+        a = BRepAdaptor_Surface(f.wrapped, True)
+        t = a.GetType()
+        kind, origin, d, radius = "other", [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.0
+        if t == GeomAbs_Plane:
+            kind, origin, d = "plane", list(f.Center().toTuple()), list(f.normalAt().toTuple())
+        elif t in (GeomAbs_Cylinder, GeomAbs_Cone):
+            surf = a.Cylinder() if t == GeomAbs_Cylinder else a.Cone()
+            ax = surf.Axis()
+            kind = "cylinder" if t == GeomAbs_Cylinder else "cone"
+            origin, d = xyz(ax.Location()), xyz(ax.Direction())
+            radius = surf.Radius() if t == GeomAbs_Cylinder else surf.RefRadius()
+        elif t == GeomAbs_Sphere:
+            kind, origin, radius = "sphere", xyz(a.Sphere().Location()), a.Sphere().Radius()
+        vs, tris = f.tessellate(DISPLAY_LINEAR_TOLERANCE, DISPLAY_ANGULAR_TOLERANCE)
+        faces.append({"kind": kind, "origin": origin, "dir": d, "radius": radius,
+                      "positions": b64([v.toTuple() for v in vs], "<f4"), "indices": b64(tris, "<u4")})
+    edges, seen = [], []
+    for e in shape.Edges():
+        if BRep_Tool.Degenerated_s(e.wrapped) or any(x.IsSame(e.wrapped) for x in seen):
+            continue
+        seen.append(e.wrapped)
+        c = BRepAdaptor_Curve(e.wrapped)
+        u0, u1 = c.FirstParameter(), c.LastParameter()
+        t = c.GetType()
+        n = 1 if t == GeomAbs_Line else max(8, min(128, int(np.ceil(abs(u1 - u0) / (np.pi / 32)))))
+        pts = [xyz(c.Value(u0 + (u1 - u0) * i / n)) for i in range(n + 1)]
+        edge = {"kind": "other", "points": b64(pts, "<f4"), "mid": xyz(c.Value((u0 + u1) / 2)), "center": [0.0, 0.0, 0.0],
+                "dir": [0.0, 0.0, 1.0], "radius": 0.0, "length": e.Length()}
+        if t == GeomAbs_Line:
+            v = np.subtract(pts[1], pts[0])
+            edge.update(kind="line", dir=list(v / (np.linalg.norm(v) or 1)))
+        elif t == GeomAbs_Circle:
+            circ = c.Circle()
+            edge.update(kind="circle", center=xyz(circ.Axis().Location()), dir=xyz(circ.Axis().Direction()), radius=circ.Radius())
+        edges.append(edge)
+    return {"faces": faces, "edges": edges}
+
+
 JOBS: dict[str, Callable[[Any], Any]] = {
+    "topology": topology,
     "interference": interference,
     "evaluate": evaluate,
     "evaluate_objects": evaluate_objects,

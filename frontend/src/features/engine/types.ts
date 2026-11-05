@@ -43,6 +43,33 @@ export interface CadEngine {
   exportFile(format: ExportFormat, model: ModelDefinition, signal?: AbortSignal): Promise<Blob>;
   /** 간섭 검사 (형식 v11): 서로 파고드는 최상위 객체 쌍과 겹친 부피(mm³). 계산 실패는 EngineError */
   interference(model: ModelDefinition, signal?: AbortSignal): Promise<InterferencePair[]>;
+  /** 화면 선택용 위상 (형식 v12): 객체 하나의 B-rep 면·모서리 (객체 변환 적용 = 부모 좌표계). 계산 실패는 EngineError */
+  topology(model: ModelDefinition, objectId: string, signal?: AbortSignal): Promise<Topology>;
+}
+
+type V3 = [number, number, number];
+/** 면: 평면은 origin = 면 중심, dir = 바깥 법선 / 원통·원뿔은 축(origin, dir)과 반지름 / 구는 중심·반지름 */
+export interface TopoFace {
+  kind: 'plane' | 'cylinder' | 'cone' | 'sphere' | 'other';
+  origin: V3;
+  dir: V3;
+  radius: number;
+  positions: Float32Array;
+  indices: Uint32Array;
+}
+/** 모서리: points = 곡선 위의 점(꺾은선), mid = 매개변수 가운데 점(모서리 위 — 필렛 at 점으로 쓴다) */
+export interface TopoEdge {
+  kind: 'line' | 'circle' | 'other';
+  points: Float32Array;
+  mid: V3;
+  center: V3;
+  dir: V3;
+  radius: number;
+  length: number;
+}
+export interface Topology {
+  faces: TopoFace[];
+  edges: TopoEdge[];
 }
 
 export interface InterferencePair {

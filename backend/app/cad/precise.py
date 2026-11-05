@@ -19,7 +19,9 @@ from OCP.Bnd import Bnd_Box
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBndLib import BRepBndLib
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCP.BRepCheck import BRepCheck_Analyzer
+from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeChamfer, BRepFilletAPI_MakeFillet
 from OCP.BRepOffsetAPI import BRepOffsetAPI_DraftAngle
 from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
@@ -31,7 +33,8 @@ from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape
 
 EPS = 1e-4
-EdgeRule = str  # "all" | "vertical" | "top" | "bottom"
+PICK_TOLERANCE = 1e-3  # 고른 점이 모서리 위에 있다고 보는 거리 — occtGeometry.ts PICK_TOLERANCE 와 같음
+EdgeRule = object  # "all" | "vertical" | "top" | "bottom" | EdgePicks(at=[...])
 
 
 def _bounds(s: TopoDS_Shape) -> tuple[float, float, float, float, float, float]:
@@ -50,7 +53,7 @@ def _explore(s: TopoDS_Shape, kind) -> list[TopoDS_Shape]:
 
 
 def select_edges(s: TopoDS_Shape, rule: EdgeRule) -> list[TopoDS_Edge]:
-    """규칙에 맞는 모서리 (중복·이음선·퇴화 모서리 제외)"""
+    """규칙에 맞는 모서리 (중복·이음선·퇴화 모서리 제외). 고른 점(at)이면 각 점을 지나는 모서리"""
     _, _, zmin, _, _, zmax = _bounds(s)
     skip: list[TopoDS_Edge] = []
     for f in _explore(s, TopAbs_FACE):
@@ -64,6 +67,9 @@ def select_edges(s: TopoDS_Shape, rule: EdgeRule) -> list[TopoDS_Edge]:
         edge = TopoDS.Edge_s(e)
         if BRep_Tool.Degenerated_s(edge) or any(x.IsSame(edge) for x in skip) or any(x.IsSame(edge) for x in kept):
             continue
+        if not isinstance(rule, str):
+            kept.append(edge)
+            continue
         x0, y0, z0, x1, y1, z1 = _bounds(edge)
         if rule == "all":
             ok = True
@@ -75,7 +81,18 @@ def select_edges(s: TopoDS_Shape, rule: EdgeRule) -> list[TopoDS_Edge]:
             ok = x1 - x0 < EPS and y1 - y0 < EPS and z1 - z0 > EPS
         if ok:
             kept.append(edge)
-    return kept
+    if isinstance(rule, str):
+        return kept
+    from app.cad.primitives import GeometryError
+
+    picked: set[int] = set()
+    for p in rule.at:
+        v = BRepBuilderAPI_MakeVertex(gp_Pnt(*p)).Vertex()
+        hits = [i for i, e in enumerate(kept) if (d := BRepExtrema_DistShapeShape(v, e)).IsDone() and d.Value() < PICK_TOLERANCE]
+        if not hits:
+            raise GeometryError(f"고른 모서리 ({', '.join(f'{q:.2f}' for q in p)}) 를 찾을 수 없습니다. 형상이 바뀌었으면 모서리를 다시 고르세요")
+        picked.update(hits)
+    return [e for i, e in enumerate(kept) if i in picked]
 
 
 def draft_faces(s: TopoDS_Shape) -> list[TopoDS_Face]:

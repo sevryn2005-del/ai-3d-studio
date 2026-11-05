@@ -11,7 +11,7 @@
  *   월드에 고정되며, 돌출 객체의 로컬 좌표로는 inverse(돌출 객체 월드) ∘ (면 월드) 로 옮긴다.
  */
 import { Matrix4, Vector3 } from 'three';
-import type { AngledPlane, CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
+import type { FramePlane, AngledPlane, CadObject, FaceName, ModelDefinition, ObjectId, Sketch, SketchPlane, StandardPlane } from './commandTypes';
 import type { Profile } from './sketch';
 import { findSketch, profileOf, sketchFeatureRef, sketchRefs } from './sketch';
 import { toMatrix } from './transformMath';
@@ -50,7 +50,15 @@ const MAX_DEPTH = 16;
  * 기준 평면 → 돌출 객체 로컬.
  * 각도 평면: 기준 평면(offset 0) · R(그 평면의 u 또는 v 축, angle) · T(0, 0, offset) — 백엔드 frames.plane_matrix 와 같음
  */
-export function planeMatrix(plane: StandardPlane | AngledPlane): Matrix4 {
+export function planeMatrix(plane: StandardPlane | AngledPlane | FramePlane): Matrix4 {
+  if (plane.type === 'frame') {
+    // 고른 면 평면: u = xDir 를 법선에 수직으로 맞춘 것, v = 법선 × u (백엔드 frames.plane_matrix 와 같음)
+    const n = new Vector3(...plane.normal).normalize();
+    const x = new Vector3(...plane.xDir);
+    x.sub(n.clone().multiplyScalar(x.dot(n))).normalize();
+    const y = n.clone().cross(x);
+    return new Matrix4().makeBasis(x, y, n).setPosition(new Vector3(...plane.origin).add(n.clone().multiplyScalar(plane.offset)));
+  }
   if (plane.type === 'angled') {
     const [u, v, n] = BASES[plane.base];
     const rad = (plane.angle * Math.PI) / 180;
@@ -253,6 +261,7 @@ export function planeAxes(plane: SketchPlane): [string, string] {
       return ['Y', 'Z'];
     case 'face':
     case 'angled':
+    case 'frame':
       return ['u', 'v'];
   }
 }

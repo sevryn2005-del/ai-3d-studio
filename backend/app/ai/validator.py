@@ -245,7 +245,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             if len(c["refs"]) != need:
                 errors.append(f"commands[{i}].refs: {c['mate']} mate needs {need} reference(s)")
             for k, ref in enumerate(c["refs"]):
-                oid, _, part = ref.partition(".")
+                oid, _, part = (ref["object"], "", "") if isinstance(ref, dict) else ref.partition(".")
                 if not exists(i, oid, f"refs[{k}]"):
                     continue
                 if oid in parent:

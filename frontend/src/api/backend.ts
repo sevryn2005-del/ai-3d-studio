@@ -46,6 +46,17 @@ export const InterferenceSchema = z.object({
   issues: z.array(IssueSchema),
   pairs: z.array(z.object({ a: z.string(), b: z.string(), volume: z.number() })),
 });
+const V3Schema = z.tuple([z.number(), z.number(), z.number()]);
+export const TopologySchema = z.object({
+  ok: z.boolean(),
+  issues: z.array(IssueSchema),
+  faces: z.array(z.object({ kind: z.enum(['plane', 'cylinder', 'cone', 'sphere', 'other']), origin: V3Schema, dir: V3Schema, radius: z.number(), positions: z.string(), indices: z.string() })).optional(),
+  edges: z.array(z.object({ kind: z.enum(['line', 'circle', 'other']), points: z.string(), mid: V3Schema, center: V3Schema, dir: V3Schema, radius: z.number(), length: z.number() })).optional(),
+});
+/** 화면 선택용 위상 (형식 v12) */
+export const topologyModel = (model: ModelDefinition, id: string, signal?: AbortSignal) =>
+  apiPost('/model/topology', { model, id }, TopologySchema, signal, 70_000);
+
 /** 간섭 검사 (조립품): 서로 파고드는 최상위 객체 쌍 */
 export const interferenceModel = (model: ModelDefinition, signal?: AbortSignal) =>
   apiPost('/model/interference', model, InterferenceSchema, signal, 70_000);

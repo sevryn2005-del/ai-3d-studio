@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
+import { startMeasurePick, startSketchOnFace } from '../Viewport/PickFlows';
 import {
   importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
@@ -140,6 +141,7 @@ export function Toolbar() {
         {tab === 'sketch' && (
           <>
             <Cmd icon="sketch" label="스케치" title="선택한 평면·객체 면에 스케치 시작 (없으면 평면을 고릅니다)" onClick={startSketch} testId="cmd-sketch" />
+            <Cmd icon="sketchFace" label="면에 스케치" title="화면에서 평면(어느 형상의 면이든)을 클릭해 그 위에 스케치" onClick={startSketchOnFace} testId="cmd-sketch-face" />
             <span className="sep" />
             <Cmd icon="rectangle" label="사각형" shortcut="R" title="사각형 그리기 (R): 선택한 스케치에, 없으면 바닥(윗면)에 새 스케치" pressed={drawTool === 'rectangle'} onClick={() => draw('rectangle')} />
             <Cmd icon="circle" label="원" shortcut="C" title="원 그리기 (C): 중심 → 반지름 드래그" pressed={drawTool === 'circle'} onClick={() => draw('circle')} />
@@ -176,6 +178,7 @@ export function Toolbar() {
             <Cmd icon="camera" label="이미지 저장" title="현재 화면을 PNG 로 저장" onClick={editor.requestScreenshot} testId="cmd-screenshot" />
             <span className="sep" />
             <Cmd icon="fit" label="화면 맞춤" shortcut="F" title="화면 맞춤 (F)" onClick={editor.requestFit} />
+                      <Cmd icon="measureEntity" label="면·모서리 측정" title="면·모서리를 클릭해 길이·지름·거리·각도 재기" onClick={startMeasurePick} testId="cmd-measure-entity" />
           </>
         )}
       </div>

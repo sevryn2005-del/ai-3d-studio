@@ -113,8 +113,8 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
             value={sketch.plane.type}
             onChange={(e) => {
               const v = e.target.value;
-              if (v === 'face') return;
-              const base: StandardPlane['type'] = sketch.plane.type === 'angled' ? sketch.plane.base : sketch.plane.type === 'face' ? 'XY' : sketch.plane.type;
+              if (v === 'face' || v === 'frame') return;
+              const base: StandardPlane['type'] = sketch.plane.type === 'angled' ? sketch.plane.base : sketch.plane.type === 'face' || sketch.plane.type === 'frame' ? 'XY' : sketch.plane.type;
               submitNow({
                 type: 'set_sketch_plane',
                 sketch: sketch.id,
@@ -130,6 +130,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
                 {FACE_LABEL[sketch.plane.face]}
               </option>
             )}
+            {sketch.plane.type === 'frame' && <option value="frame">고른 면 (고정 위치)</option>}
             {(Object.keys(PLANE_LABEL) as StandardPlane['type'][]).map((t) => (
               <option key={t} value={t}>
                 {PLANE_LABEL[t]}

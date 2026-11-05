@@ -3,9 +3,10 @@
  * 모델 변경은 모두 명령(add_mate·set_mate·delete_mate)으로 — 실행기가 부품 위치를 다시 푼다.
  */
 import { useMemo, useState } from 'react';
-import type { Mate } from '../../cad/commandTypes';
+import type { Mate, MateRef } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
-import { MATE_LABEL, mateDof, mateRefsOf } from '../../cad/mates';
+import { MATE_LABEL, isAxisRef, mateDof, mateRefsOf, refObject } from '../../cad/mates';
+import { startMatePick } from './PickFlows';
 import { topLevelObjects } from '../../cad/modelGraph';
 import { bomCsv, bomRows } from '../../features/assembly/bom';
 import { formatMm } from '../../cad/units';
@@ -35,18 +36,30 @@ function MatePanel() {
   const [b, setB] = useState('');
   const [value, setValue] = useState('0');
   const [flip, setFlip] = useState(false);
+  /** 화면에서 고른 이름 없는 면·축 (목록에 더해 고를 수 있게) */
+  const [extra, setExtra] = useState<MateRef[]>([]);
   const tops = topLevelObjects(model);
-  const name = (ref: string) => {
+  const name = (ref: MateRef) => {
+    if (typeof ref !== 'string') return `${model.objects.find((x) => x.id === ref.object)?.name ?? ref.object} · 고른 ${ref.kind === 'axis' ? '축' : '면'}`;
     const [id, part] = ref.split('.');
     const o = model.objects.find((x) => x.id === id);
     return `${o?.name ?? id}${part ? ` · ${part === 'axis' ? '축' : part}` : ''}`;
   };
   // 메이트 종류에 맞는 참조만: 일치·거리 = 면, 동심 = 축, 고정 = 객체, 나머지 = 면·축
-  const refs = tops.flatMap((o) =>
-    type === 'fix' ? [o.id] : mateRefsOf(model, o).filter((r) => (type === 'concentric' ? r.endsWith('.axis') : type === 'coincident' || type === 'distance' ? !r.endsWith('.axis') : true)),
-  );
+  const fits = (r: MateRef) => (type === 'concentric' ? isAxisRef(r) : type === 'coincident' || type === 'distance' ? !isAxisRef(r) : true);
+  const all: MateRef[] =
+    type === 'fix' ? tops.map((o) => o.id) : [...tops.flatMap((o) => mateRefsOf(model, o)), ...extra].filter(fits);
+  const keyOf = (r: MateRef) => (typeof r === 'string' ? r : JSON.stringify(r));
+  const byKey = new Map(all.map((r) => [keyOf(r), r]));
+  const refs = [...byKey.keys()];
+  const objOf = (k: string) => refObject(byKey.get(k)!);
   const ra = refs.includes(a) ? a : (refs[0] ?? '');
-  const rb = refs.includes(b) && b.split('.')[0] !== ra.split('.')[0] ? b : (refs.find((r) => r.split('.')[0] !== ra.split('.')[0]) ?? '');
+  const rb = refs.includes(b) && objOf(b) !== objOf(ra) ? b : (refs.find((r) => objOf(r) !== objOf(ra)) ?? '');
+  const pick = (set: (k: string) => void) =>
+    startMatePick((ref) => {
+      if (typeof ref !== 'string') setExtra((x) => [...x, ref]);
+      set(keyOf(ref));
+    });
   const dof = useMemo(() => mateDof(model), [model]);
   const needsValue = type === 'distance' || type === 'angle';
   const add = () => {
@@ -54,7 +67,7 @@ function MatePanel() {
     submitNow({
       type: 'add_mate',
       mate: type,
-      refs: type === 'fix' ? [ra] : [ra, rb],
+      refs: type === 'fix' ? [byKey.get(ra)!] : [byKey.get(ra)!, byKey.get(rb)!],
       ...(needsValue && Number.isFinite(v) ? { value: v } : {}),
       ...((type === 'coincident' || type === 'distance') && flip ? { flip: true } : {}),
     });
@@ -73,15 +86,23 @@ function MatePanel() {
       <label className="field">
         {type === 'fix' ? '부품' : '기준 (고정 쪽)'}
         <select value={ra} onChange={(e) => setA(e.target.value)} data-testid="mate-a">
-          {refs.map((r) => <option key={r} value={r}>{name(r)}</option>)}
+          {refs.map((r) => <option key={r} value={r}>{name(byKey.get(r)!)}</option>)}
         </select>
+        {type !== 'fix' && (
+          <button onClick={() => pick(setA)} data-testid="mate-pick-a" title="화면에서 면을 클릭해 고릅니다">
+            화면에서
+          </button>
+        )}
       </label>
       {type !== 'fix' && (
         <label className="field">
           움직일 부품
           <select value={rb} onChange={(e) => setB(e.target.value)} data-testid="mate-b">
-            {refs.filter((r) => r.split('.')[0] !== ra.split('.')[0]).map((r) => <option key={r} value={r}>{name(r)}</option>)}
+            {refs.filter((r) => objOf(r) !== objOf(ra)).map((r) => <option key={r} value={r}>{name(byKey.get(r)!)}</option>)}
           </select>
+          <button onClick={() => pick(setB)} data-testid="mate-pick-b" title="화면에서 면을 클릭해 고릅니다">
+            화면에서
+          </button>
         </label>
       )}
       {needsValue && (

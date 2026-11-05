@@ -34,7 +34,7 @@ import {
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
 import { byId, depthOf, parentMap, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
-import { mateError, pruneMates, solveMates } from './mates';
+import { mateError, pruneMates, refObject, solveMates } from './mates';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
@@ -362,8 +362,8 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (err) return fail(err);
       // 솔리드웍스처럼 둘째로 고른 부품이 움직인다: 나머지 부품을 붙잡고 먼저 풀고, 안 되면 모두 풀어 본다
       const next = { ...model, mates: [...mates, mate] };
-      const mover = mate.refs[mate.refs.length - 1]!.split('.')[0]!;
-      const others = new Set(next.mates.flatMap((m) => m.refs.map((r) => r.split('.')[0]!)).filter((id) => id !== mover));
+      const mover = refObject(mate.refs[mate.refs.length - 1]!);
+      const others = new Set(next.mates.flatMap((m) => m.refs.map(refObject)).filter((id) => id !== mover));
       const first = solveMates(next, others);
       const solved = first.ok ? first : solveMates(next);
       return solved.ok ? done(model, solved.model, cmd, null) : fail(solved.error);

@@ -296,7 +296,17 @@ class AngledPlane(Strict):
     offset: Coordinate
 
 
-SketchPlane = Annotated[Union[StandardPlane, FacePlane, AngledPlane], Field(discriminator="type")]
+class FramePlane(Strict):
+    """고른 면 평면 (형식 v12): 월드 원점·법선·u 방향 + 법선 방향 offset (객체를 따라가지 않음)"""
+
+    type: Literal["frame"]
+    origin: Vec3
+    normal: Vec3
+    xDir: Vec3
+    offset: Coordinate
+
+
+SketchPlane = Annotated[Union[StandardPlane, FacePlane, AngledPlane, FramePlane], Field(discriminator="type")]
 
 
 class Sketch(Strict):
@@ -651,6 +661,15 @@ class PatternObject(_ObjectBase):
 
 
 EdgeRule = Literal["all", "vertical", "top", "bottom"]
+
+
+class EdgePicks(Strict):
+    """화면에서 고른 모서리 위의 점들 (형식 v12, 피처 좌표계) — precise.select_edges"""
+
+    at: Annotated[list[Vec3], Field(min_length=1, max_length=200)]
+
+
+FeatureEdges = Union[EdgeRule, EdgePicks]
 FeatureType = Literal["fillet", "chamfer"]
 DraftAngle = Annotated[float, _num(-30, 30)]
 
@@ -659,7 +678,7 @@ class FilletDef(Strict):
     source: ObjectId
     type: FeatureType
     size: Radius
-    edges: EdgeRule
+    edges: FeatureEdges
 
 
 class FilletObject(_ObjectBase):
@@ -718,18 +737,30 @@ MateRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_
 MAX_MATES = 200
 
 
+class MateRefCaptured(Strict):
+    """화면에서 고른 이름 없는 면·축 (형식 v12): 부품 로컬 원점·방향"""
+
+    object: ObjectId
+    kind: Literal["face", "axis"]
+    origin: Vec3
+    dir: Vec3
+
+
+MateRefAny = Union[MateRef, MateRefCaptured]
+
+
 class Mate(Strict):
     """조립 메이트 (형식 v11) — mates.py"""
 
     id: ObjectId
     type: MateType
-    refs: Annotated[list[MateRef], Field(min_length=1, max_length=2)]
+    refs: Annotated[list[MateRefAny], Field(min_length=1, max_length=2)]
     value: Annotated[Coordinate | None, Field(exclude_if=lambda v: v is None)] = None
     flip: Annotated[StrictBool | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[11]
+    schemaVersion: Literal[12]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -864,7 +895,7 @@ class AddMate(Strict):
     type: Literal["add_mate"]
     id: ObjectId | None = None
     mate: MateType
-    refs: Annotated[list[MateRef], Field(min_length=1, max_length=2)]
+    refs: Annotated[list[MateRefAny], Field(min_length=1, max_length=2)]
     value: Coordinate | None = None
     flip: StrictBool | None = None
 
@@ -1008,7 +1039,7 @@ class EdgeFeatureCommand(Strict):
     target: ObjectId
     feature: FeatureType
     size: Radius
-    edges: EdgeRule
+    edges: FeatureEdges
 
 
 class SetEdgeFeature(Strict):
@@ -1016,7 +1047,7 @@ class SetEdgeFeature(Strict):
     target: ObjectId
     feature: FeatureType | None = None
     size: Radius | None = None
-    edges: EdgeRule | None = None
+    edges: FeatureEdges | None = None
 
 
 class DraftCommand(Strict):

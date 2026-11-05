@@ -14,7 +14,7 @@ from app.cad.primitives import GeometryError, build_solid
 
 
 def model(*objects) -> ModelDefinition:
-    return ModelDefinition.model_validate({"schemaVersion": 11, "units": "mm", "sketches": [], "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 12, "units": "mm", "sketches": [], "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -61,3 +61,23 @@ def test_ai_validator_knows_wrappers():
     ], m)
     assert any("already inside 'f'" in e for e in errs)
     assert any("is not a draft feature" in e for e in errs)
+
+
+def test_topology_api_and_picked_edges(client):
+    t0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
+    model = {"schemaVersion": 12, "units": "mm", "sketches": [], "objects": [
+        {"id": "c", "name": "원통", "kind": "cylinder", "params": {"radius": 4, "height": 9}, "transform": t0}]}
+    r = client.post("/api/model/topology", json={"model": model, "id": "c"}).json()
+    assert r["ok"] is True
+    assert sorted(f["kind"] for f in r["faces"]) == ["cylinder", "plane", "plane"]
+    circles = [e for e in r["edges"] if e["kind"] == "circle"]
+    assert sorted(round(e["center"][2], 6) for e in circles) == [0, 9]
+    top = next(e for e in circles if abs(e["center"][2] - 9) < 1e-6)
+    # 중간점으로 모서리를 고르면 엔진이 같은 모서리를 찾는다
+    model["objects"].append({"id": "f", "name": "모따기", "kind": "fillet",
+                             "fillet": {"source": "c", "type": "chamfer", "size": 1, "edges": {"at": [top["mid"]]}}, "transform": t0})
+    ok = client.post("/api/model/evaluate", json=model).json()
+    assert ok["ok"] is True
+    model["objects"][1]["fillet"]["edges"] = {"at": [[50, 50, 50]]}
+    bad = client.post("/api/model/evaluate", json=model).json()
+    assert bad["ok"] is False and "다시 고르세요" in bad["issues"][0]["message"]

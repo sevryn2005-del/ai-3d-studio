@@ -3,7 +3,7 @@
     "volume": 7152,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -42,7 +42,7 @@
     "volume": 9024,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -79,7 +79,7 @@
     "volume": 7360,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -119,7 +119,7 @@
     "volume": 2664.0705702441446,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -157,7 +157,7 @@
     "volume": 2792,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -241,7 +241,7 @@
     "volume": 2672,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -316,7 +316,7 @@
     "volume": 15434.513322353838,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -422,7 +422,7 @@
     "volume": 15450.221285621787,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -503,7 +503,7 @@
     "volume": 15604.159325647686,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -584,7 +584,7 @@
     "volume": 6000,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -644,7 +644,7 @@
     "volume": 2000,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -701,7 +701,7 @@
     "volume": 3392.9200658769764,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -757,7 +757,7 @@
     "volume": 2000,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -813,7 +813,7 @@
     "volume": 31434.513322353836,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -929,7 +929,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -999,7 +999,7 @@
     "volume": 39634.1096995078,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1081,7 +1081,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1165,7 +1165,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -1222,7 +1222,7 @@
     "volume": 553.4046510711299,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1347,7 +1347,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1454,7 +1454,7 @@
     "volume": 7461.2825522757585,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1580,7 +1580,7 @@
     "volume": 1507.9644737231006,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1662,7 +1662,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -1694,7 +1694,7 @@
     "volume": 3142.831853071796,
     "roots": 2,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1877,7 +1877,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -1969,7 +1969,7 @@
     "volume": 1955,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -2063,7 +2063,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -2142,7 +2142,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -2234,7 +2234,7 @@
     "volume": 379.398223686155,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [
         {
@@ -2335,11 +2335,95 @@
       ]
     }
   },
+  "frame-plane-extrude": {
+    "volume": 240,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 12,
+      "units": "mm",
+      "sketches": [
+        {
+          "id": "s",
+          "name": "스케치 1",
+          "plane": {
+            "type": "frame",
+            "origin": [
+              5,
+              5,
+              5
+            ],
+            "normal": [
+              1,
+              1,
+              1
+            ],
+            "xDir": [
+              1,
+              -1,
+              0
+            ],
+            "offset": 2
+          },
+          "entities": [
+            {
+              "id": "r",
+              "type": "rectangle",
+              "center": [
+                1,
+                2
+              ]
+            }
+          ],
+          "dimensions": [
+            {
+              "id": "r.width",
+              "entity": "r",
+              "kind": "width",
+              "value": 10
+            },
+            {
+              "id": "r.height",
+              "entity": "r",
+              "kind": "height",
+              "value": 6
+            }
+          ],
+          "constraints": []
+        }
+      ],
+      "objects": [
+        {
+          "id": "e",
+          "name": "돌출 1",
+          "kind": "extrude",
+          "params": {
+            "distance": 4
+          },
+          "extrude": {
+            "sketch": "s",
+            "profile": "r"
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
   "suppressed-tool-and-root": {
     "volume": 16000,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2458,7 +2542,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2514,7 +2598,7 @@
     "volume": 3850.6666666666665,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2570,7 +2654,7 @@
     "volume": 3922.7433388230816,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2626,7 +2710,7 @@
     "volume": 3090.0668137679036,
     "roots": 1,
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2693,7 +2777,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2793,6 +2877,138 @@
       ]
     }
   },
+  "chamfer-picked-edges": {
+    "volume": 3920,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 12,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 20,
+            "depth": 20,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "f",
+          "name": "모따기 1",
+          "kind": "fillet",
+          "fillet": {
+            "source": "b",
+            "type": "chamfer",
+            "size": 2,
+            "edges": {
+              "at": [
+                [
+                  0,
+                  -10,
+                  10
+                ],
+                [
+                  0,
+                  10,
+                  10
+                ]
+              ]
+            }
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "fillet-picked-circle": {
+    "volume": 3090.0668137679036,
+    "roots": 1,
+    "model": {
+      "schemaVersion": 12,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder"
+        },
+        {
+          "id": "f",
+          "name": "필렛 1",
+          "kind": "fillet",
+          "fillet": {
+            "source": "c",
+            "type": "fillet",
+            "size": 2,
+            "edges": {
+              "at": [
+                [
+                  10,
+                  0,
+                  10
+                ]
+              ]
+            }
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
   "draft-box": {
     "volume": 3660.2510342237065,
     "roots": 1,
@@ -2809,7 +3025,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -2875,7 +3091,7 @@
       ]
     ],
     "model": {
-      "schemaVersion": 11,
+      "schemaVersion": 12,
       "units": "mm",
       "sketches": [],
       "objects": [

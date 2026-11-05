@@ -49,6 +49,8 @@ export function DevProbe() {
           baseRevision: h.past.at(-1)?.revision ?? null,
           command: h.present.command,
           objects: h.present.model.objects.map((o) => ({ id: o.id, position: [...o.transform.position], rotation: [...o.transform.rotation] })),
+          sketches: h.present.model.sketches.map((k) => ({ id: k.id, plane: k.plane })),
+          mates: h.present.model.mates ?? [],
         };
       },
       submit: (envelope) => useSceneStore.getState().submit(envelope),

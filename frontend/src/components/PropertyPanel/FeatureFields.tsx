@@ -8,6 +8,7 @@ import { useSceneStore } from '../../cad/sceneStore';
 import { shellFaces } from '../../cad/features';
 import { facesOf } from '../../cad/sketchPlane';
 import { EDGE_RULE_LABEL, PATTERN_LABEL } from '../../cad/objectKinds';
+import { startEdgePick } from '../Viewport/PickFlows';
 import { NumberField } from './NumberField';
 
 const FACE_LABEL: Record<string, string> = {
@@ -329,9 +330,10 @@ export function PreciseFields({ object }: { object: Extract<CadObject, { kind: '
             <select
               id="ef-edges"
               data-testid="ef-edges"
-              value={object.fillet.edges}
+              value={typeof object.fillet.edges === 'string' ? object.fillet.edges : 'picked'}
               onChange={(e) => submit({ type: 'set_edge_feature', target: object.id, edges: e.target.value as 'all' })}
             >
+              {typeof object.fillet.edges !== 'string' && <option value="picked" disabled>고른 모서리 {object.fillet.edges.at.length}개</option>}
               {(Object.keys(EDGE_RULE_LABEL) as (keyof typeof EDGE_RULE_LABEL)[]).map((k) => (
                 <option key={k} value={k}>
                   {EDGE_RULE_LABEL[k]}
@@ -346,6 +348,9 @@ export function PreciseFields({ object }: { object: Extract<CadObject, { kind: '
             onCommit={(v) => submit({ type: 'set_edge_feature', target: object.id, size: v })}
             testId="ef-size"
           />
+          <button onClick={() => startEdgePick(object)} data-testid="ef-pick" title="원본 형상의 모서리를 화면에서 클릭해 고릅니다 (다시 클릭하면 뺌, Enter 적용)">
+            화면에서 모서리 고르기
+          </button>
         </>
       )}
       <p className="muted small">정밀 엔진(OCCT)으로 계산합니다. 모서리를 고르는 기준: 월드 Z (위·아래·세로).</p>

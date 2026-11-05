@@ -208,7 +208,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
     case 'sweep':
       return `경로 ${obj.sweep.path}`;
     case 'fillet':
-      return `${obj.fillet.type === 'fillet' ? 'R' : 'C'}${formatMm(obj.fillet.size)} ${EDGE_RULE_LABEL[obj.fillet.edges]}`;
+      return `${obj.fillet.type === 'fillet' ? 'R' : 'C'}${formatMm(obj.fillet.size)} ${typeof obj.fillet.edges === 'string' ? EDGE_RULE_LABEL[obj.fillet.edges] : `고른 모서리 ${obj.fillet.edges.at.length}개`}`;
     case 'draft':
       return `${formatMm(obj.draft.angle)}°`;
     case 'step':

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "units": "mm",
   "sketches": [],
   "objects": [
@@ -140,6 +140,27 @@
         "lid.+X"
       ],
       "value": 90
+    },
+    {
+      "id": "m_picked",
+      "type": "parallel",
+      "refs": [
+        {
+          "object": "base",
+          "kind": "face",
+          "origin": [
+            0,
+            0,
+            10
+          ],
+          "dir": [
+            0,
+            0,
+            1
+          ]
+        },
+        "pin.axis"
+      ]
     }
   ]
 }

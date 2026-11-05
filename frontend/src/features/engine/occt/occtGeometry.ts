@@ -14,7 +14,7 @@
  */
 import type { OpenCascadeInstance, TopoDS_Edge, TopoDS_Face, TopoDS_Shape } from 'replicad-opencascadejs';
 import { Matrix4, Vector3 } from 'three';
-import type { CadObject, EdgeRule, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
+import type { CadObject, FeatureEdges, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects } from '../../../cad/modelGraph';
 import { openLinePoints, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
 import { cornerSegments, sweepError, sweepRings } from '../../../cad/curves';
@@ -24,6 +24,7 @@ import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
 import { DISPLAY_TOLERANCE, EXPORT_TOLERANCE, GeometryError, type PlainMesh } from '../browser/geometry';
+import type { TopoEdge, TopoFace, Topology } from '../types';
 
 export type OC = OpenCascadeInstance;
 
@@ -70,7 +71,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 11, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 12, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -302,7 +303,10 @@ function explore<T>(c: Ctx, s: TopoDS_Shape, kind: 'TopAbs_EDGE' | 'TopAbs_FACE'
 }
 
 /** 규칙에 맞는 모서리 (중복·이음선·퇴화 모서리 제외) */
-export function selectEdges(oc: OC, gc: Gc, s: TopoDS_Shape, rule: EdgeRule): TopoDS_Edge[] {
+/** 고른 점이 모서리 위에 있다고 보는 거리 (mm) — 서버 precise.PICK_TOLERANCE 와 같음 */
+export const PICK_TOLERANCE = 1e-3;
+
+export function selectEdges(oc: OC, gc: Gc, s: TopoDS_Shape, rule: FeatureEdges): TopoDS_Edge[] {
   const c = { oc, gc } as Ctx;
   const [, , zmin, , , zmax] = boundsOf(oc, s);
   const skip: TopoDS_Edge[] = []; // 원통 이음선처럼 한 면에 두 번 붙은 모서리는 필렛할 수 없다
@@ -311,6 +315,10 @@ export function selectEdges(oc: OC, gc: Gc, s: TopoDS_Shape, rule: EdgeRule): To
   const kept: TopoDS_Edge[] = [];
   for (const e of explore(c, s, 'TopAbs_EDGE', (x) => oc.TopoDS.Edge(x))) {
     if (oc.BRep_Tool.Degenerated(e) || skip.some((x) => x.IsSame(e)) || kept.some((x) => x.IsSame(e))) continue;
+    if (typeof rule !== 'string') {
+      kept.push(e);
+      continue;
+    }
     const [x0, y0, z0, x1, y1, z1] = boundsOf(oc, e);
     const ok =
       rule === 'all' ? true
@@ -319,7 +327,143 @@ export function selectEdges(oc: OC, gc: Gc, s: TopoDS_Shape, rule: EdgeRule): To
       : x1! - x0! < EPS && y1! - y0! < EPS && z1! - z0! > EPS;
     if (ok) kept.push(e);
   }
-  return kept;
+  if (typeof rule === 'string') return kept;
+  // 고른 모서리: 각 점을 지나는 모서리 (점 하나가 꼭짓점이라 여러 모서리에 닿으면 모두)
+  const picked = new Set<number>();
+  for (const [x, y, z] of rule.at) {
+    const v = gc.k(gc.k(new oc.BRepBuilderAPI_MakeVertex(gc.k(new oc.gp_Pnt(x, y, z)))).Vertex());
+    let hit = false;
+    kept.forEach((e, i) => {
+      const d = gc.k(new oc.BRepExtrema_DistShapeShape(v, e));
+      if (d.IsDone() && d.Value() < PICK_TOLERANCE) {
+        picked.add(i);
+        hit = true;
+      }
+    });
+    if (!hit) throw new GeometryError(`고른 모서리 (${[x, y, z].map((q) => Math.round(q * 100) / 100).join(', ')}) 를 찾을 수 없습니다. 형상이 바뀌었으면 모서리를 다시 고르세요`);
+  }
+  return kept.filter((_, i) => picked.has(i));
+}
+
+const v3 = (p: { X(): number; Y(): number; Z(): number }): [number, number, number] => [p.X(), p.Y(), p.Z()];
+
+export function shapeTopology(oc: OC, s: TopoDS_Shape, tol = DISPLAY_TOLERANCE): Topology {
+  const gc = new Gc();
+  const c = { oc, gc } as Ctx;
+  try {
+    gc.k(new oc.BRepMesh_IncrementalMesh(s, tol, false, DISPLAY_ANGULAR, false));
+    const faces: TopoFace[] = [];
+    for (const f of explore(c, s, 'TopAbs_FACE', (x) => oc.TopoDS.Face(x))) {
+      const a = gc.k(new oc.BRepAdaptor_Surface(f, true));
+      const t = a.GetType() as unknown as string;
+      const reversed = (f.Orientation() as unknown as string) === 'TopAbs_REVERSED';
+      let kind: TopoFace['kind'] = 'other';
+      let origin: [number, number, number] = [0, 0, 0];
+      let dir: [number, number, number] = [0, 0, 1];
+      let radius = 0;
+      if (t === 'GeomAbs_Plane') {
+        kind = 'plane';
+        const props = gc.k(new oc.GProp_GProps());
+        oc.BRepGProp.SurfaceProperties(f, props, false, false);
+        origin = v3(gc.k(props.CentreOfMass()));
+        const n = v3(gc.k(gc.k(gc.k(a.Plane()).Axis()).Direction()));
+        dir = reversed ? [-n[0], -n[1], -n[2]] : n; // 바깥 법선
+      } else if (t === 'GeomAbs_Cylinder' || t === 'GeomAbs_Cone') {
+        kind = t === 'GeomAbs_Cylinder' ? 'cylinder' : 'cone';
+        // 이 빌드의 타입 선언에는 Cone() 반환형이 빠져 있다 (실제로는 gp_Cone)
+        type Axial = { Axis(): { Location(): { X(): number; Y(): number; Z(): number }; Direction(): { X(): number; Y(): number; Z(): number } }; Radius?(): number; RefRadius?(): number };
+        const surf = gc.k((t === 'GeomAbs_Cylinder' ? a.Cylinder() : (a as unknown as { Cone(): unknown }).Cone()) as unknown as Axial);
+        const ax = gc.k(surf.Axis());
+        origin = v3(gc.k(ax.Location()));
+        dir = v3(gc.k(ax.Direction()));
+        radius = surf.Radius ? surf.Radius() : (surf.RefRadius?.() ?? 0);
+      } else if (t === 'GeomAbs_Sphere') {
+        kind = 'sphere';
+        const sp = gc.k(a.Sphere());
+        origin = v3(gc.k(sp.Location()));
+        radius = sp.Radius();
+      }
+      const m = tessellateFace(oc, gc, f);
+      faces.push({ kind, origin, dir, radius, ...m });
+    }
+    const edges: TopoEdge[] = [];
+    const seen: TopoDS_Edge[] = [];
+    for (const e of explore(c, s, 'TopAbs_EDGE', (x) => oc.TopoDS.Edge(x))) {
+      if (oc.BRep_Tool.Degenerated(e) || seen.some((x) => x.IsSame(e))) continue;
+      seen.push(e);
+      const a = gc.k(new oc.BRepAdaptor_Curve(e));
+      const t = a.GetType() as unknown as string;
+      const u0 = a.FirstParameter();
+      const u1 = a.LastParameter();
+      const isLine = t === 'GeomAbs_Line';
+      const n = isLine ? 1 : Math.max(8, Math.min(128, Math.ceil(Math.abs(u1 - u0) / (Math.PI / 32))));
+      const pts: number[] = [];
+      for (let i = 0; i <= n; i++) pts.push(...v3(gc.k(a.Value(u0 + ((u1 - u0) * i) / n))));
+      const props = gc.k(new oc.GProp_GProps());
+      oc.BRepGProp.LinearProperties(e, props, false, false);
+      const edge: TopoEdge = { kind: 'other', points: Float32Array.from(pts), mid: v3(gc.k(a.Value((u0 + u1) / 2))), center: [0, 0, 0], dir: [0, 0, 1], radius: 0, length: props.Mass() };
+      if (isLine) {
+        edge.kind = 'line';
+        const d = [pts[3]! - pts[0]!, pts[4]! - pts[1]!, pts[5]! - pts[2]!];
+        const l = Math.hypot(d[0]!, d[1]!, d[2]!) || 1;
+        edge.dir = [d[0]! / l, d[1]! / l, d[2]! / l];
+      } else if (t === 'GeomAbs_Circle') {
+        const circ = gc.k(a.Circle());
+        const ax = gc.k(circ.Axis());
+        edge.kind = 'circle';
+        edge.center = v3(gc.k(ax.Location()));
+        edge.dir = v3(gc.k(ax.Direction()));
+        edge.radius = circ.Radius();
+      }
+      edges.push(edge);
+    }
+    return { faces, edges };
+  } finally {
+    gc.dispose();
+  }
+}
+
+/** 면 하나의 삼각형 (정점은 면마다 따로) */
+function tessellateFace(oc: OC, gc: Gc, face: TopoDS_Face): { positions: Float32Array; indices: Uint32Array } {
+  const loc = gc.k(new oc.TopLoc_Location());
+  const tri = oc.BRep_Tool.Triangulation(face, loc, 0 as never) as unknown as {
+    NbNodes(): number; NbTriangles(): number; Node(i: number): { Transformed(t: unknown): { X(): number; Y(): number; Z(): number; delete(): void }; delete(): void };
+    Triangle(i: number): { Value(i: number): number; delete(): void }; delete(): void;
+  } | null;
+  if (!tri) return { positions: new Float32Array(), indices: new Uint32Array() };
+  gc.k(tri);
+  const trsf = gc.k(loc.Transformation());
+  const pos: number[] = [];
+  for (let i = 1; i <= tri.NbNodes(); i++) {
+    const n0 = tri.Node(i);
+    const n = n0.Transformed(trsf);
+    pos.push(n.X(), n.Y(), n.Z());
+    n0.delete();
+    n.delete();
+  }
+  const reversed = (face.Orientation() as unknown as string) === 'TopAbs_REVERSED';
+  const idx: number[] = [];
+  for (let i = 1; i <= tri.NbTriangles(); i++) {
+    const t = tri.Triangle(i);
+    const [a, b, d] = [t.Value(1) - 1, t.Value(2) - 1, t.Value(3) - 1];
+    t.delete();
+    if (reversed) idx.push(a, d, b);
+    else idx.push(a, b, d);
+  }
+  return { positions: Float32Array.from(pos), indices: Uint32Array.from(idx) };
+}
+
+/** 객체 하나의 위상 (객체 변환을 적용한 = 부모 좌표계) */
+export function occtTopology(oc: OC, model: ModelDefinition, obj: CadObject): Topology {
+  const gc = new Gc();
+  try {
+    const c = ctxOf(oc, model, gc);
+    return shapeTopology(oc, transformed(c, localShape(c, obj), toMatrix(obj.transform), obj.name));
+  } catch (e) {
+    throw asGeometryError(e, obj.name);
+  } finally {
+    gc.dispose();
+  }
 }
 
 /** 구배할 면: 옆면(법선이 수평인 평면, 축이 Z 와 평행한 원통면) */
@@ -340,7 +484,7 @@ export function draftFaces(oc: OC, gc: Gc, s: TopoDS_Shape): TopoDS_Face[] {
   });
 }
 
-function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: number, rule: EdgeRule, name: string): TopoDS_Shape {
+function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: number, rule: FeatureEdges, name: string): TopoDS_Shape {
   const edges = selectEdges(c.oc, c.gc, s, rule);
   if (edges.length === 0) throw new GeometryError(`'${name}': 규칙에 맞는 모서리가 없습니다`);
   const what = type === 'fillet' ? '모서리를 둥글게' : '모따기를';

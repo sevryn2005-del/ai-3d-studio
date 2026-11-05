@@ -15,6 +15,9 @@ import { MouseScheme } from './MouseScheme';
 import { ConfirmationCorner, PendingPreview, PlanePicker } from './FeatureFlow';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { AssemblyPanels } from './AssemblyPanels';
+import { PickBar, PickOverlay } from './PickOverlay';
+import { pickBusy } from '../../features/selection/pick';
+import { MeasureEntityPanel } from './PickFlows';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
 
 /**
@@ -38,7 +41,7 @@ export function Viewport() {
       <Canvas
         camera={{ position: [60, -80, 55], fov: 45, near: 0.1, far: 50_000 }}
         onPointerMissed={(e) => {
-          if (gizmoActiveRef.current || useEditorStore.getState().drawTool) return;
+          if (gizmoActiveRef.current || useEditorStore.getState().drawTool || pickBusy()) return;
           if (e.button === 0) select(null);
         }}
       >
@@ -71,6 +74,7 @@ export function Viewport() {
         <PendingPreview />
         <SectionClip />
         <MeasureOverlay />
+        <PickOverlay />
         <ScreenshotTaker />
         {!drawTool && <SelectionGizmo activeRef={gizmoActiveRef} />}
         <CameraFitter />
@@ -92,6 +96,8 @@ export function Viewport() {
       <LoftPanel />
       <SweepPanel />
       <AssemblyPanels />
+      <PickBar />
+      <MeasureEntityPanel />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
           ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`

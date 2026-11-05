@@ -271,11 +271,19 @@ export const AngledPlaneSchema = z.strictObject({
   offset: coordinate,
 });
 
+/**
+ * 고른 면 평면 (형식 v12): 화면에서 고른 이름 없는 면(회전체·STEP 등의 평면)에 놓은 스케치. 월드 좌표의 원점·법선·u 방향.
+ * 객체를 옮겨도 따라가지 않는다 (이름 있는 면은 face 평면이 따라간다)
+ */
+export const FramePlaneSchema = z.strictObject({ type: z.literal('frame'), origin: Vec3Schema, normal: Vec3Schema, xDir: Vec3Schema, offset: coordinate });
+
 export const SketchPlaneSchema = z.discriminatedUnion('type', [
   StandardPlaneSchema,
   FacePlaneSchema,
   AngledPlaneSchema,
+  FramePlaneSchema,
 ]);
+export type FramePlane = z.infer<typeof FramePlaneSchema>;
 export type AngledPlane = z.infer<typeof AngledPlaneSchema>;
 export type SketchPlane = z.infer<typeof SketchPlaneSchema>;
 export type StandardPlane = z.infer<typeof StandardPlaneSchema>;
@@ -343,6 +351,12 @@ const objectBase = {
  */
 export const EdgeRuleSchema = z.enum(['all', 'vertical', 'top', 'bottom']);
 export type EdgeRule = z.infer<typeof EdgeRuleSchema>;
+/**
+ * 모서리 고르기 (형식 v12): 규칙(EdgeRule) 또는 화면에서 고른 모서리 위의 점들(at, 피처 좌표계).
+ * 엔진은 각 점을 지나는(거리 0.001mm 이내) 모서리를 고른다 — 서버 precise.py 와 같은 규칙
+ */
+export const FeatureEdgesSchema = z.union([EdgeRuleSchema, z.strictObject({ at: z.array(Vec3Schema).min(1).max(200) })]);
+export type FeatureEdges = z.infer<typeof FeatureEdgesSchema>;
 
 /** 스케치 프로파일 참조 (돌출·회전·헬릭스·로프트 단면) */
 export const SketchRefSchema = z.strictObject({ sketch: ObjectIdSchema, profile: ObjectIdSchema });
@@ -507,7 +521,7 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
       source: ObjectIdSchema,
       type: z.enum(['fillet', 'chamfer']),
       size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
-      edges: EdgeRuleSchema,
+      edges: FeatureEdgesSchema,
     }),
   }),
   /**
@@ -534,9 +548,16 @@ export type PatternObject = CadObjectOf<'pattern'>;
  * 저장된 변환이 푼 결과다 (규칙: cad/mates.ts, 서버 app/cad/mates.py 가 만족 여부를 검사)
  */
 export const MateTypeSchema = z.enum(['coincident', 'distance', 'parallel', 'perpendicular', 'angle', 'concentric', 'fix']);
-export const MateRefSchema = z
+const MateRefNameSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]{0,63}(\.(top|bottom|\+X|-X|\+Y|-Y|start|end|\+u|-u|\+v|-v|axis))?$/, '메이트 참조는 "객체ID.면" 또는 "객체ID.axis" 입니다');
+/**
+ * 화면에서 고른 이름 없는 면·축 (형식 v12): 부품 로컬 좌표의 원점·방향을 그대로 저장한다 (치수가 바뀌어도 따라가지 않음).
+ * 이름 있는 면이면 이름 참조("객체ID.면")로 저장해 치수를 따라간다
+ */
+export const MateRefCapturedSchema = z.strictObject({ object: ObjectIdSchema, kind: z.enum(['face', 'axis']), origin: Vec3Schema, dir: Vec3Schema });
+export const MateRefSchema = z.union([MateRefNameSchema, MateRefCapturedSchema]);
+export type MateRef = z.infer<typeof MateRefSchema>;
 export const MateSchema = z.strictObject({
   id: ObjectIdSchema,
   type: MateTypeSchema,
@@ -547,7 +568,7 @@ export const MateSchema = z.strictObject({
 export type Mate = z.infer<typeof MateSchema>;
 export const MAX_MATES = 200;
 
-export const MODEL_SCHEMA_VERSION = 11;
+export const MODEL_SCHEMA_VERSION = 12;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -892,7 +913,7 @@ export const EdgeFeatureCommandSchema = z.strictObject({
   target: ObjectIdSchema,
   feature: z.enum(['fillet', 'chamfer']),
   size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
-  edges: EdgeRuleSchema,
+  edges: FeatureEdgesSchema,
 });
 
 /** 모서리 처리 값 바꾸기 */
@@ -901,7 +922,7 @@ export const SetEdgeFeatureCommandSchema = z.strictObject({
   target: ObjectIdSchema,
   feature: z.enum(['fillet', 'chamfer']).optional(),
   size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2).optional(),
-  edges: EdgeRuleSchema.optional(),
+  edges: FeatureEdgesSchema.optional(),
 });
 
 /** 구배 만들기 / 바꾸기 (정밀 엔진) */

@@ -145,6 +145,18 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     }
 
     if (graph.length) throw new GeometryError(graph[0]!);
+    if (req.type === 'topology') {
+      // 위상은 항상 정밀 엔진(B-rep)으로 — manifold 메시에는 면·모서리 구분이 없다
+      const obj = model.objects.find((o) => o.id === req.objectId);
+      if (!obj) throw new GeometryError(`존재하지 않는 객체입니다: ${req.objectId}`);
+      const { geo, oc } = await precise();
+      const topology = geo.occtTopology(oc, model, obj);
+      reply({ id: req.id, ok: true, type: 'topology', topology }, [
+        ...topology.faces.flatMap((f) => [f.positions.buffer, f.indices.buffer]),
+        ...topology.edges.map((e) => e.points.buffer),
+      ]);
+      return;
+    }
     if (req.type === 'interference') {
       reply({ id: req.id, ok: true, type: 'interference', pairs: await interferencePairs(w, model) });
       return;

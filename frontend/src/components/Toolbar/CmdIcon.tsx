@@ -18,6 +18,8 @@ const PATHS: Record<string, string> = {
   hole: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M9 9a3 1.6 0 1 0 6 0a3 1.6 0 1 0-6 0M9 9v4M15 9v4',
   shell: 'M3 8l9-5 9 5v8l-9 5-9-5zM6 9.5l6-3.3 6 3.3v5l-6 3.3-6-3.3z',
   fillet: 'M4 20V10a6 6 0 0 1 6-6h10M4 20h16',
+  sketchFace: 'M3 9l9-5 9 5-9 5zM8 9l4 2 4-2M12 14v7',
+  measureEntity: 'M4 20L20 4M4 20v-5M4 20h5M20 4v5M20 4h-5',
   insert: 'M12 3v10m0 0l-4-4m4 4l4-4M4 15v5h16v-5',
   mate: 'M3 10h8v8H3zM13 6h8v8h-8zM11 14h2',
   interference: 'M8 8a6 6 0 1 0 .01 0M16 8a6 6 0 1 0 .01 0',

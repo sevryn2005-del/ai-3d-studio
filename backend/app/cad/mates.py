@@ -18,9 +18,24 @@ LABEL = {"coincident": "일치", "distance": "거리", "parallel": "평행", "pe
          "concentric": "동심", "fix": "고정"}
 
 
-def _split(ref: str) -> tuple[str, str]:
+def _split(ref) -> tuple[str, str]:
+    """참조 → (객체, 면 이름 | 'axis' | '' | '@face' · '@axis'(고른 이름 없는 면·축)) — mates.ts split 과 같음"""
+    if not isinstance(ref, str):
+        return ref.object, f"@{ref.kind}"
     oid, _, part = ref.partition(".")
     return oid, part
+
+
+def _is_axis(ref) -> bool:
+    return ref.endswith(".axis") if isinstance(ref, str) else ref.kind == "axis"
+
+
+def _ref_frame(model: ModelDefinition, obj: CadObject, ref):
+    if not isinstance(ref, str):
+        d = np.asarray(ref.dir, float)
+        n = np.linalg.norm(d)
+        return (np.asarray(ref.origin, float), d / n) if n > 1e-9 else None
+    return _local_frame(model, obj, _split(ref)[1])
 
 
 def _local_frame(model: ModelDefinition, obj: CadObject, part: str):
@@ -55,11 +70,11 @@ def mate_error(model: ModelDefinition, m: Mate) -> str | None:
             continue
         if not part:
             return f"{ref}: 면 또는 축을 지정하세요"
-        if _local_frame(model, obj, part) is None:
+        if _ref_frame(model, obj, ref) is None:
             return f"'{obj.name}'에는 {'축' if part == 'axis' else repr(part) + ' 면'}이 없습니다"
-        if m.type in ("coincident", "distance") and part == "axis":
+        if m.type in ("coincident", "distance") and _is_axis(ref):
             return f"{LABEL[m.type]} 메이트는 면끼리 겁니다 (축은 동심)"
-        if m.type == "concentric" and part != "axis":
+        if m.type == "concentric" and not _is_axis(ref):
             return "동심 메이트는 축끼리 겁니다"
     if m.type != "fix" and _split(m.refs[0])[0] == _split(m.refs[1])[0]:
         return "같은 객체끼리는 메이트를 걸 수 없습니다"
@@ -73,9 +88,9 @@ def residuals(model: ModelDefinition, m: Mate) -> list[float]:
         return []
     frames = []
     for ref in m.refs:
-        oid, part = _split(ref)
+        oid, _ = _split(ref)
         obj = next(o for o in model.objects if o.id == oid)
-        o, n = _local_frame(model, obj, part)
+        o, n = _ref_frame(model, obj, ref)
         w = transform_matrix(obj.transform)
         frames.append(((w @ np.append(o, 1.0))[:3], w[:3, :3] @ n))
     (oa, na), (ob, nb) = frames

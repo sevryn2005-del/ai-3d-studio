@@ -7,7 +7,7 @@ import { ModelDefinitionSchema } from '../../../cad/commandTypes';
 import { topLevelObjects, byId } from '../../../cad/modelGraph';
 import { isSuppressed } from '../../../cad/features';
 import { toBinaryStl } from '../browser/exporters';
-import { occtLocalProps, occtStep, occtWorldMesh, readStep, volumeOf, boundsOf, type OC } from './occtGeometry';
+import { occtLocalProps, occtStep, occtTopology, occtWorldMesh, readStep, volumeOf, boundsOf, type OC } from './occtGeometry';
 import { executeCommand } from '../../../cad/commandExecutor';
 import { emptyModel } from '../../../cad/commandTypes';
 import { toBase64 } from '../../../cad/meshData';
@@ -89,5 +89,35 @@ describe('정밀 엔진(OCCT): 모서리 규칙·구배·STEP', () => {
 
   it('깨진 STEP 은 사용자 메시지로 실패한다', () => {
     expect(() => readStep(oc, btoa('not a step file'), '깨진 파일')).toThrow('STEP 파일을 읽을 수 없습니다');
+  });
+});
+
+describe('정밀 엔진(OCCT): 화면 선택용 위상', () => {
+  it('상자: 평면 6개(바깥 법선) · 직선 모서리 12개, 객체 변환 적용', () => {
+    const model = build([{ type: 'create_box', id: 'b', width: 20, depth: 10, height: 5, position: [100, 0, 0] }]);
+    const t = occtTopology(oc, model, model.objects[0]!);
+    expect(t.faces.map((f) => f.kind)).toEqual(Array(6).fill('plane'));
+    const top = t.faces.find((f) => f.dir[2] > 0.99)!;
+    expect(top.origin).toEqual([expect.closeTo(100, 6), expect.closeTo(0, 6), expect.closeTo(5, 6)]);
+    expect(top.indices.length).toBeGreaterThan(0);
+    expect(t.edges).toHaveLength(12);
+    expect(t.edges.every((e) => e.kind === 'line')).toBe(true);
+    expect(t.edges.map((e) => Math.round(e.length)).sort((a, b) => a - b)).toEqual([5, 5, 5, 5, 10, 10, 10, 10, 20, 20, 20, 20]);
+  });
+
+  it('원통: 원통면(축·반지름) · 원 모서리 2개(중심·반지름) + 이음선', () => {
+    const model = build([{ type: 'create_cylinder', id: 'c', radius: 4, height: 9 }]);
+    const t = occtTopology(oc, model, model.objects[0]!);
+    const side = t.faces.find((f) => f.kind === 'cylinder')!;
+    expect(side.radius).toBeCloseTo(4, 9);
+    expect(Math.abs(side.dir[2])).toBeCloseTo(1, 9);
+    const circles = t.edges.filter((e) => e.kind === 'circle');
+    expect(circles).toHaveLength(2);
+    expect(circles.map((e) => e.center[2]).sort()).toEqual([0, 9]);
+    expect(circles[0]!.radius).toBeCloseTo(4, 9);
+    // 중간점은 모서리 위의 점 → 필렛 at 점으로 쓰면 그 모서리가 골라진다
+    const pick = circles.find((e) => e.center[2] === 9)!.mid;
+    const f = build([{ type: 'create_cylinder', id: 'c', radius: 4, height: 9 }, { type: 'edge_feature', id: 'f', target: 'c', feature: 'chamfer', size: 1, edges: { at: [pick] } }]);
+    expect(occtLocalProps(oc, f, f.objects.find((o) => o.id === 'f')!).volume).toBeCloseTo(Math.PI * 16 * 9 - 0.5 * 2 * Math.PI * (4 - 1 / 3), 3);
   });
 });

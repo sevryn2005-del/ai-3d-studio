@@ -33,7 +33,8 @@
 | 나사산: 수나사(원통에 감기)·암나사(구멍 벽에 홈, ISO 보통 피치) | Thread | Screw modifier | ✅ |
 | 돔 · 랩 · 변형 | Dome / Wrap / Flex | Simple Deform | ⬜ |
 | 곡선 패턴 · 스케치 구동 패턴 | Curve/Sketch Driven Pattern | Array on curve | ⬜ |
-| 뷰포트에서 모서리·면을 하나씩 골라 필렛 / 가변 반경 | Fillet (edges/faces) | Bevel | ⬜ (뷰포트 모서리 선택 필요) |
+| 화면에서 모서리를 하나씩 골라 필렛·모따기 | Fillet (edges) | Bevel | ✅ |
+| 가변 반경 필렛 · 면 필렛 | Variable / Face Fillet | — | ⬜ |
 | 면 이동·삭제·오프셋 | Move/Delete Face | — | ⬜ |
 | 여러 바디 · 바디 분할 | Multibody / Split | Separate | ⬜ |
 
@@ -63,7 +64,8 @@
 |------|------|
 | 기준 평면 3개, 원점 | ✅ |
 | 오프셋 평면, 각도 평면 (기준 평면을 u·v 축 둘레로) | ✅ |
-| 세 점·면 기준 평면, 축, 점, 좌표계 | ⬜ |
+| 화면에서 고른 아무 평면에 스케치 (이름 없는 면 = 고정 위치 평면) | ✅ |
+| 세 점 기준 평면, 축, 점, 좌표계 | ⬜ |
 
 ## 4. 보기 · 분석
 
@@ -79,7 +81,7 @@
 | 출력 전 검사 (바닥·떠 있음·크기·얇음·겹침) | — / 3D Print Toolbox | ✅ |
 | 원근/직교 투영 전환 | Perspective / Numpad 5 | ✅ |
 | 간섭 검사 · 구배 분석 · 두께 분석 | Interference / Draft / Thickness | ⬜ |
-| 측정: 면·모서리 선택, 각도, 반지름 | Measure | ⬜ |
+| 측정: 화면에서 면·모서리 골라 길이·지름·거리·각도 | Measure | ✅ |
 
 ## 5. 파일
 
