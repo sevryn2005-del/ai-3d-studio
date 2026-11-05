@@ -73,7 +73,7 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
             <button data-testid={`len-${ref}`} onClick={() => add('length', [ref], Math.round(len * 100) / 100 || 1)} title="지금 길이로 길이 구속">
               길이
             </button>
-            <input
+            {!polygon.spline && <input
               className="bulge-input"
               aria-label={`e${k} 호 볼록 정도`}
               title="변을 호로: 볼록 정도 (0 = 직선, ±1 = 반원, 부호 = 방향)"
@@ -89,11 +89,20 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
                 const v = Number((e.target as HTMLInputElement).value);
                 if (Number.isFinite(v)) submitNow({ type: 'set_arc', sketch: sketch.id, entity: polygon.id, edge: k, bulge: Math.max(-1, Math.min(1, v)) });
               }}
-            />
+            />}
           </div>
         );
       })}
-      <CornerFields sketch={sketch} entity={polygon} />
+      <label className="check" title="점들을 지나는 매끈한 곡선 (켜면 꼭짓점 처리·호 변은 지워집니다)">
+        <input
+          type="checkbox"
+          checked={!!polygon.spline}
+          onChange={(e) => submitNow({ type: 'set_spline', sketch: sketch.id, entity: polygon.id, spline: e.target.checked })}
+          data-testid={`spline-${polygon.id}`}
+        />
+        스플라인 (점을 지나는 매끈한 곡선)
+      </label>
+      {!polygon.spline && <CornerFields sketch={sketch} entity={polygon} />}
     </>
   );
 }

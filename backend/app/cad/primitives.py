@@ -148,18 +148,26 @@ def world_solid(obj: CadObject) -> cq.Shape:
 _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"}
 
 
+def _segment_edge(sg) -> cq.Edge:
+    """윤곽 조각 → 모서리 (z = 0): 직선, 정확한 원호, 정확한 3차 베지어 — occtGeometry.segmentEdge 와 같음"""
+    a, b = cq.Vector(*sg[1], 0), cq.Vector(*sg[2], 0)
+    if sg[0] == "line":
+        return cq.Edge.makeLine(a, b)
+    if sg[0] == "arc":
+        return cq.Edge.makeThreePointArc(a, cq.Vector(*sg[7], 0), b)
+    return cq.Edge.makeBezier([a, cq.Vector(*sg[3], 0), cq.Vector(*sg[4], 0), b])
+
+
 def profile_workplane(p: dict) -> cq.Workplane:
     """평면 좌표(u, v) 단면 윤곽 (대기 윤곽 하나). 꼭짓점 처리는 정확한 원호 (curves.py 와 같은 점)"""
     if p["type"] == "region":
         from app.cad.sections import REGION_UNSUPPORTED
 
         raise GeometryError(REGION_UNSUPPORTED)
-    if p["type"] == "polygon" and (p.get("corners") or p.get("arcs")):
-        segs = corner_segments(p["points"], p.get("corners"), True, p.get("arcs"))
-        w = cq.Workplane("XY").moveTo(*segs[0][1])
-        for sg in segs:
-            w = w.lineTo(*sg[2]) if sg[0] == "line" else w.threePointArc(sg[7], sg[2])
-        return w.close()
+    if p["type"] == "polygon" and (p.get("corners") or p.get("arcs") or p.get("spline")):
+        segs = corner_segments(p["points"], p.get("corners"), True, p.get("arcs"), bool(p.get("spline")))
+        edges = [_segment_edge(sg) for sg in segs]
+        return cq.Workplane("XY").add(cq.Wire.assembleEdges(edges)).toPending()
     if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
         return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
     # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
@@ -323,15 +331,14 @@ def sweep_solid(obj: SweepObject, index: dict[str, CadObject], sketches: dict[st
         raise GeometryError(f"'{obj.name}': 경로 스케치의 평면을 찾을 수 없습니다")
     # 정확한 스윕 (브라우저 정밀 엔진 pipeSweep 과 같은 배치): 경로 = 직선 + 정확한 원호, B(경로 평면 법선) 고정, 꺾인 곳 마이터
     ent = next(e for e in pk.entities if e.id == obj.sweep.path)
-    segs = corner_segments(ent.points, ent.corners, False, ent.arcs) if ent.type == "path" else [("line", tuple(ent.points[0]), tuple(ent.points[1]))]
-    edges = []
-    for sg in segs:
-        a, b2 = cq.Vector(*sg[1], 0), cq.Vector(*sg[2], 0)
-        edges.append(cq.Edge.makeLine(a, b2) if sg[0] == "line" else cq.Edge.makeThreePointArc(a, cq.Vector(*sg[7], 0), b2))
-    spine = _rigid(cq.Wire.assembleEdges(edges), m)
+    segs = (corner_segments(ent.points, ent.corners, False, ent.arcs, bool(ent.spline)) if ent.type == "path"
+            else [("line", tuple(ent.points[0]), tuple(ent.points[1]))])
+    spine = _rigid(cq.Wire.assembleEdges([_segment_edge(sg) for sg in segs]), m)
     s0 = segs[0]
     if s0[0] == "line":
         t2 = (s0[2][0] - s0[1][0], s0[2][1] - s0[1][1])
+    elif s0[0] == "bezier":
+        t2 = (s0[3][0] - s0[1][0], s0[3][1] - s0[1][1])
     else:
         r = (s0[1][0] - s0[3][0], s0[1][1] - s0[3][1])
         t2 = (-r[1], r[0]) if s0[5] else (r[1], -r[0])

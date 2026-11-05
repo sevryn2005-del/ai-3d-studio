@@ -221,6 +221,7 @@ class PolygonEntity(Strict):
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
     corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
     arcs: Arcs | None = Field(default=None, exclude_if=lambda v: v is None)
+    spline: Literal[True] | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PathEntity(Strict):
@@ -231,6 +232,7 @@ class PathEntity(Strict):
     points: Annotated[list[Point2], Field(min_length=2, max_length=Limits.MAX_POLYGON_POINTS)]
     corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
     arcs: Arcs | None = Field(default=None, exclude_if=lambda v: v is None)
+    spline: Literal[True] | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class LineEntity(Strict):
@@ -363,7 +365,7 @@ def revolve_profile_error(p: dict) -> str | None:
     if p["type"] == "region":  # 합치는 단면들만 본다 (빼기는 줄이기만 한다)
         return next((e for it in p["items"] if it["op"] == "add" and (e := revolve_profile_error(it["profile"]))), None)
     if p["type"] == "polygon":
-        min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True, p.get("arcs")))
+        min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True, p.get("arcs"), bool(p.get("spline"))))
     elif p["type"] == "circle":
         min_u = p["center"][0] - p["diameter"] / 2
     elif p["type"] == "slot":
@@ -375,9 +377,9 @@ def revolve_profile_error(p: dict) -> str | None:
     return None
 
 
-def _polygon_profile(points, corners, z, plane, arcs=None) -> dict:
+def _polygon_profile(points, corners, z, plane, arcs=None, spline=None) -> dict:
     """다각형 단면 (sketch.ts polygonProfile 과 같음): 중심·크기 = 꼭짓점 처리·호 변 뒤 윤곽의 바운딩 박스"""
-    outline = rounded_points(points, corners, True, arcs)
+    outline = rounded_points(points, corners, True, arcs, bool(spline))
     xs = [p[0] for p in outline]
     ys = [p[1] for p in outline]
     out = {"type": "polygon", "points": [tuple(p) for p in points], "center": ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
@@ -386,6 +388,8 @@ def _polygon_profile(points, corners, z, plane, arcs=None) -> dict:
         out["corners"] = [c.model_dump() if hasattr(c, "model_dump") else c for c in corners]
     if arcs:
         out["arcs"] = [a.model_dump() if hasattr(a, "model_dump") else a for a in arcs]
+    if spline:
+        out["spline"] = True
     return out
 
 
@@ -394,7 +398,9 @@ def open_line_points(sketch: Sketch, entity_id: str) -> list | None:
     e = next((x for x in sketch.entities if x.id == entity_id), None)
     if e is None or e.type not in ("line", "path"):
         return None
-    return rounded_points(e.points, e.corners if e.type == "path" else None, False, e.arcs if e.type == "path" else None)
+    if e.type == "path":
+        return rounded_points(e.points, e.corners, False, e.arcs, bool(e.spline))
+    return rounded_points(e.points, None, False)
 
 
 def profile_of(sketch: Sketch, ref) -> dict | None:
@@ -463,7 +469,7 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
         return {"type": "region", "items": items, "center": ((u0 + u1) / 2, (v0 + v1) / 2), "width": u1 - u0, "height": v1 - v0,
                 "z": z, "plane": sketch.plane}
     if e.type == "polygon":
-        return _polygon_profile(e.points, e.corners, z, sketch.plane, e.arcs)
+        return _polygon_profile(e.points, e.corners, z, sketch.plane, e.arcs, e.spline)
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
@@ -865,7 +871,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[15]
+    schemaVersion: Literal[16]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -989,6 +995,15 @@ class SetArc(Strict):
     entity: ObjectId
     edge: Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]
     bulge: Annotated[float, _num(-1, 1)]
+
+
+class SetSpline(Strict):
+    """스플라인 켜기·끄기 (형식 v16): 다각형·경로의 점들을 지나는 매끈한 곡선"""
+
+    type: Literal["set_spline"]
+    sketch: ObjectId
+    entity: ObjectId
+    spline: StrictBool
 
 
 class AddRegion(Strict):
@@ -1396,6 +1411,7 @@ CadCommand = Annotated[
         ConvertToPolygon,
         AddRegion,
         SetRegion,
+        SetSpline,
         AddSlot,
         SetEntityAngle,
         OffsetEntity,
@@ -1465,6 +1481,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     ConvertToPolygon,
     AddRegion,
     SetRegion,
+    SetSpline,
     AddSlot,
     SetEntityAngle,
     OffsetEntity,

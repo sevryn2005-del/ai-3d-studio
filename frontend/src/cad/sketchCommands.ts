@@ -16,7 +16,7 @@ const SKETCH_TYPES = [
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
   'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
-  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon', 'add_region', 'set_region',
+  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon', 'add_region', 'set_region', 'set_spline',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -58,7 +58,7 @@ function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, aff
   if (!solved.ok) return fail(solved.error);
   for (const e of solved.sketch.entities) {
     if (e.type !== 'polygon' && e.type !== 'path') continue;
-    const err = e.type === 'polygon' ? (polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs)) : (openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs));
+    const err = e.type === 'polygon' ? (polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs, e.spline)) : (openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs, e.spline));
     if (err) return fail(`${e.id}: ${err}`);
   }
   // 회전 피처가 쓰는 프로파일은 회전축(u = 0)을 넘으면 안 된다
@@ -326,7 +326,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const kept = (e.corners ?? []).filter((c) => !ks.includes(c.k));
       const added: Corner[] = cmd.size > 0 ? ks.map((k) => ({ k, type: cmd.corner, size: cmd.size })) : [];
       const corners = [...kept, ...added].sort((a, b) => a.k - b.k);
-      const err = cornerError(e.points, corners, closed, e.arcs);
+      const err = cornerError(e.points, corners, closed, e.arcs, e.spline);
       if (err) return fail(err);
       const { corners: _old, ...rest } = e;
       void _old;
@@ -344,11 +344,26 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const edges = closed ? e.points.length : e.points.length - 1;
       if (cmd.edge >= edges) return fail(`변 e${cmd.edge} 이(가) 없습니다 (변은 e0~e${edges - 1})`);
       const arcs = [...(e.arcs ?? []).filter((a) => a.k !== cmd.edge), ...(Math.abs(cmd.bulge) > 1e-9 ? [{ k: cmd.edge, bulge: cmd.bulge }] : [])].sort((a, b) => a.k - b.k);
-      const err = cornerError(e.points, e.corners, closed, arcs);
+      const err = cornerError(e.points, e.corners, closed, arcs, e.spline);
       if (err) return fail(err);
       const { arcs: _old, ...rest } = e;
       void _old;
       const next = arcs.length ? { ...rest, arcs } : rest;
+      return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
+    }
+
+    case 'set_spline': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e || (e.type !== 'polygon' && e.type !== 'path')) return fail(`'${sketch.name}'에 다각형·경로 ${cmd.entity} 이(가) 없습니다 (스플라인은 다각형·경로에)`);
+      // 켜면 꼭짓점 처리·호 변은 지운다 (곡선이 점들을 매끈하게 지나므로)
+      const { corners: _c, arcs: _a, spline: _s, ...rest } = e;
+      void _c;
+      void _a;
+      void _s;
+      const next = cmd.spline ? { ...rest, spline: true as const } : { ...e, spline: undefined };
+      if (!cmd.spline) delete (next as { spline?: true }).spline;
       return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
     }
 
@@ -457,7 +472,8 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         const err = pts ? polygonError(pts) : '안쪽 오프셋이 너무 큽니다';
         if (!pts || err) return fail(`오프셋 결과: ${err}`);
         // 꼭짓점 처리는 같은 크기로 옮긴다 (들어가지 않으면 뺀다)
-        entity = { id, type: 'polygon', points: pts, ...(e.corners?.length && !cornerError(pts, e.corners, true) ? { corners: e.corners } : {}) };
+        // 스플라인은 점을 띄운 근사 (곡선 자체의 정확한 오프셋은 아님)
+        entity = { id, type: 'polygon', points: pts, ...(e.corners?.length && !cornerError(pts, e.corners, true) ? { corners: e.corners } : {}), ...(e.spline ? { spline: true as const } : {}) };
       } else return fail('구성선·경로·영역은 오프셋할 수 없습니다');
       return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, entity], dimensions: [...sketch.dimensions, ...dims] }), cmd, sketch.id);
     }

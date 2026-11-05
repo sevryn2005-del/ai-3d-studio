@@ -52,7 +52,7 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
     const pts: number[] = [];
     if (entity.type === 'polygon' || entity.type === 'path') {
       // 꼭짓점 처리(필렛·모따기)를 반영한 윤곽. 경로는 열린 선 → 끝에서 처음으로 잇지 않도록 되돌아가는 점을 붙인다
-      const outline = roundedPoints(entity.points, entity.corners, entity.type === 'polygon', undefined, entity.arcs);
+      const outline = roundedPoints(entity.points, entity.corners, entity.type === 'polygon', undefined, entity.arcs, entity.spline);
       const all = entity.type === 'path' ? [...outline, ...outline.slice(1, -1).reverse()] : outline;
       for (const [x, y] of all) pts.push(x, y, z);
     } else if (entity.type === 'line') {

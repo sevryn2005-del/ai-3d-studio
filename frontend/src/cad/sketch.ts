@@ -28,7 +28,7 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
 export type BaseProfile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
-  | { type: 'polygon'; points: Point2[]; corners?: Corner[]; arcs?: Arc[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
+  | { type: 'polygon'; points: Point2[]; corners?: Corner[]; arcs?: Arc[]; spline?: true; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
 /**
  * 영역 단면 (형식 v15): 단면들을 순서대로 합치고(add) 뺀 것. center·width·height = 합친(add) 단면들의 바운딩 박스
@@ -95,7 +95,7 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
     const y1 = Math.max(...adds.map((b) => b.center[1] + b.height / 2));
     return { type: 'region', items: items as RegionProfile['items'], center: [(x0 + x1) / 2, (y0 + y1) / 2], width: x1 - x0, height: y1 - y0, z, plane };
   }
-  if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane, e.arcs);
+  if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane, e.arcs, e.spline);
   if (e.type === 'rectangle') {
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
@@ -135,8 +135,8 @@ export function regionUsers(sketch: Sketch, entityId: ObjectId): ObjectId[] {
  * 다각형 단면. center·width·height = (꼭짓점 처리 후 윤곽의) 바운딩 박스 — 크기 표시·구멍 위치 기본값·단면 기준점.
  * 형상은 points(+ corners) 그대로
  */
-function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: number, plane: SketchPlane, arcs?: Arc[]): Profile {
-  const outline = roundedPoints(points, corners, true, undefined, arcs);
+function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: number, plane: SketchPlane, arcs?: Arc[], spline?: true): Profile {
+  const outline = roundedPoints(points, corners, true, undefined, arcs, spline);
   const xs = outline.map((p) => p[0]);
   const ys = outline.map((p) => p[1]);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -145,6 +145,7 @@ function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: numb
     points,
     ...(corners?.length ? { corners } : {}),
     ...(arcs?.length ? { arcs } : {}),
+    ...(spline ? { spline } : {}),
     center: [(x0 + x1) / 2, (y0 + y1) / 2],
     width: x1 - x0,
     height: y1 - y0,
@@ -157,7 +158,7 @@ function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: numb
 export function openLinePoints(sketch: Sketch, entityId: ObjectId): Point2[] | null {
   const e = sketch.entities.find((x) => x.id === entityId);
   if (!e || (e.type !== 'line' && e.type !== 'path')) return null;
-  return e.type === 'path' ? roundedPoints(e.points, e.corners, false, undefined, e.arcs) : roundedPoints(e.points, undefined, false);
+  return e.type === 'path' ? roundedPoints(e.points, e.corners, false, undefined, e.arcs, e.spline) : roundedPoints(e.points, undefined, false);
 }
 
 /**
@@ -190,11 +191,11 @@ export function sketchErrors(sketch: Sketch): string[] {
   }
   for (const e of sketch.entities) {
     if (e.type === 'polygon') {
-      const err = polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs);
+      const err = polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs, e.spline);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
     if (e.type === 'path') {
-      const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs);
+      const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs, e.spline);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
     if (e.type === 'region') {
@@ -260,7 +261,7 @@ export function revolveProfileError(p: Profile): string | null {
   if (p.type === 'region') return p.items.filter((it) => it.op === 'add').map((it) => revolveProfileError(it.profile)).find((e) => e) ?? null;
   const minU =
     p.type === 'polygon'
-      ? Math.min(...roundedPoints(p.points, p.corners, true, undefined, p.arcs).map((q) => q[0]))
+      ? Math.min(...roundedPoints(p.points, p.corners, true, undefined, p.arcs, p.spline).map((q) => q[0]))
       : p.type === 'circle'
         ? p.center[0] - p.diameter / 2
         : p.type === 'slot'

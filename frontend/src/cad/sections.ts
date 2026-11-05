@@ -14,7 +14,7 @@ export const REGION_UNSUPPORTED = '영역 단면은 돌출·회전에만 쓸 수
 export function outline(p: Profile): Point2[] {
   if (p.type === 'region') throw new Error(REGION_UNSUPPORTED);
   let pts: Point2[];
-  if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true, undefined, p.arcs);
+  if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true, undefined, p.arcs, p.spline);
   else if (p.type === 'rectangle') {
     const [cx, cy] = p.center;
     const [w, h] = [p.width / 2, p.height / 2];

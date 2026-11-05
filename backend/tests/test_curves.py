@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from app.ai.validator import validate_commands
 from app.cad.commands import ModelDefinition
 from app.cad.constraints import residuals
@@ -48,7 +50,7 @@ def test_sweep_bend_too_sharp():
 
 
 def model(sketches, objects=()):
-    return ModelDefinition.model_validate({"schemaVersion": 15, "units": "mm", "sketches": sketches, "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 16, "units": "mm", "sketches": sketches, "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -187,3 +189,34 @@ def test_region_rules_and_ai_validator():
     assert any("must be op 'add'" in e for e in errs)
     assert any("'zz' is not a closed element" in e for e in errs)
     assert any("regions only work" in e for e in errs)
+
+
+# ---- 형식 v16: 스플라인 (frontend curves.test.ts 와 같은 값) ----------------------------------------
+
+
+def test_spline_segments_pass_through_points_and_errors():
+    from app.cad.curves import bezier_point, spline_segments
+
+    pts = [(0, 0), (20, 10), (40, 0)]
+    segs = spline_segments(pts, False)
+    assert len(segs) == 2 and segs[0][1] == (0, 0) and segs[1][2] == (40, 0)
+    # 첫 구간 조절점: c1 = P0 + (P1 − (2P0 − P1))/6 = (20/3, 10/3)
+    assert segs[0][3] == pytest.approx((20 / 3, 10 / 3))
+    assert bezier_point(segs[0], 1) == pytest.approx((20, 10))
+    assert len(spline_segments(SQUARE, True)) == 4
+    assert "스플라인" in corner_error(SQUARE, [{"k": 0, "type": "fillet", "size": 1}], True, None, True)
+    assert corner_error(SQUARE, None, True, None, True) is None
+    closed = rounded_points(SQUARE, None, True, None, True)
+    assert len(closed) == 4 * 24 and area(closed) == pytest.approx(546.3196, abs=1e-3)  # 꼭짓점을 지나며 바깥으로 부푼다 (TS 와 같은 값)
+
+
+def test_ai_validator_v16():
+    m = model([])
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_path", "sketch": "s", "id": "pa", "points": [[0, 0], [10, 5], [20, 0]]},
+        {"type": "set_spline", "sketch": "s", "entity": "pa", "spline": True},
+        {"type": "add_circle", "sketch": "s", "id": "c", "center": [0, 0], "diameter": 4},
+        {"type": "set_spline", "sketch": "s", "entity": "c", "spline": True},
+    ], m)
+    assert len(errs) == 1 and "'c' is not a polygon or path" in errs[0]

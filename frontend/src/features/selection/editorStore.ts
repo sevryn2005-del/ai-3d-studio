@@ -8,7 +8,7 @@ import { DEFAULT_SNAP, type SnapSettings } from '../../cad/transformUtils';
 
 export type TransformMode = 'translate' | 'rotate';
 /** 뷰포트 직접 그리기 도구 (null = 선택·이동 모드) */
-export type DrawTool = 'rectangle' | 'circle' | 'polygon' | 'path' | 'arc' | null;
+export type DrawTool = 'rectangle' | 'circle' | 'polygon' | 'path' | 'arc' | 'spline' | null;
 /**
  * 마우스 방식
  * - solidworks: 가운데 버튼 드래그 = 회전, Ctrl + 가운데 = 이동, Shift + 가운데 = 확대/축소, 휠 = 확대/축소, 왼쪽 = 선택

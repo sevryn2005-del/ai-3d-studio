@@ -40,7 +40,7 @@ export function SketchDrawTool() {
     setDrag(null);
     setPoly([]);
   }, [tool, sketch?.id]);
-  const multi = tool === 'polygon' || tool === 'path' || tool === 'arc';
+  const multi = tool === 'polygon' || tool === 'path' || tool === 'arc' || tool === 'spline';
   const finishArc = (from: Point2, to: Point2, through: Point2) => {
     setPoly([]);
     const store = useSceneStore.getState();
@@ -51,18 +51,19 @@ export function SketchDrawTool() {
       if (bulgeThrough(from, to, through)?.clamped) store.reportError('반원보다 큰 호는 반원으로 그렸습니다 (호를 두 개로 나눠 그리세요)');
     } else store.reportError('호를 만들 수 없습니다 (세 점이 한 직선 위에 있거나 너무 짧습니다)');
   };
-  const finishPolygon = (points: Point2[]) => {
+  /** 다각형·경로 끝내기. 스플라인 도구: 첫 점을 다시 누르면 닫힌 스플라인, Enter·마지막 점 다시 누르면 열린 스플라인 */
+  const finishPolygon = (points: Point2[], closed = tool === 'polygon') => {
     setPoly([]);
     const store = useSceneStore.getState();
-    const type = tool === 'path' ? 'path' : 'polygon';
-    const cmds = drawShapeCommands(store.history.present.model, store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null, { type, points });
+    const type = closed ? 'polygon' : 'path';
+    const cmds = drawShapeCommands(store.history.present.model, store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null, { type, points, spline: tool === 'spline' });
     if (cmds) store.dispatchBatch(cmds);
     else store.reportError(type === 'path' ? '경로를 만들 수 없습니다 (같은 점이 겹치거나 되돌아갑니다)' : '다각형을 만들 수 없습니다 (변이 교차하거나 넓이가 없습니다)');
   };
   useEffect(() => {
     if (!multi) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && polyRef.current.length >= (tool === 'path' ? 2 : 3)) {
+      if (e.key === 'Enter' && polyRef.current.length >= (tool === 'polygon' ? 3 : 2)) {
         e.preventDefault();
         finishPolygon(polyRef.current);
       }
@@ -104,6 +105,8 @@ export function SketchDrawTool() {
       // 다각형: 첫 점을 다시 누르면 닫힘. 경로: 마지막 점을 다시 누르면 끝 (열린 선)
       if (tool === 'polygon' && pts.length >= 3 && near(first)) return finishPolygon(pts);
       if (tool === 'path' && pts.length >= 2 && near(last)) return finishPolygon(pts);
+      if (tool === 'spline' && pts.length >= 3 && near(first)) return finishPolygon(pts, true);
+      if (tool === 'spline' && pts.length >= 2 && near(last)) return finishPolygon(pts, false);
       if (!last || last[0] !== p[0] || last[1] !== p[1]) setPoly([...pts, p]);
       return;
     }

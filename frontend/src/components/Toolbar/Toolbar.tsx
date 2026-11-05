@@ -55,7 +55,7 @@ export function Toolbar() {
   const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
   const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
-  const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path' | 'arc') => editor.setDrawTool(drawTool === t ? null : t);
+  const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path' | 'arc' | 'spline') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
     <header className="toolbar">
@@ -151,6 +151,7 @@ export function Toolbar() {
             <Cmd icon="line" label="구성선" title="선택한 스케치에 구성선(형상 없는 기준선) 추가 — 각도·평행 구속 기준" onClick={quickLine} testId="cmd-line" />
             <Cmd icon="polygon" label="다각형" shortcut="P" title="다각형 그리기 (P): 클릭으로 꼭짓점, 첫 점을 다시 클릭하거나 Enter 로 닫기" pressed={drawTool === 'polygon'} onClick={() => draw('polygon')} />
             <Cmd icon="arc" label="호" title="호 그리기: 시작점 → 끝점 → 호가 지날 점 (경로 + 호 변으로 만들어져 스윕·리브에 쓰고, 볼록 정도를 고칠 수 있음)" pressed={drawTool === 'arc'} onClick={() => draw('arc')} testId="cmd-arc" />
+            <Cmd icon="spline" label="스플라인" title="스플라인 그리기: 클릭한 점들을 매끈하게 지나는 곡선 — 첫 점을 다시 누르면 닫힌 곡선(돌출용), Enter 면 열린 곡선(스윕 경로)" pressed={drawTool === 'spline'} onClick={() => draw('spline')} testId="cmd-spline" />
             <Cmd icon="path" label="경로" title="경로(열린 선) 그리기: 클릭으로 점, 마지막 점을 다시 클릭하거나 Enter 로 끝 — 스윕·리브 중심선" pressed={drawTool === 'path'} onClick={() => draw('path')} testId="cmd-path" />
             <span className="sep" />
             <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>

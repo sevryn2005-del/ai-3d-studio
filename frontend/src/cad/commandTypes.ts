@@ -206,6 +206,8 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
     corners,
     arcs,
+    /** 형식 v16: 점들을 지나는 매끈한 스플라인 (cad/curves.ts splineSegments). 꼭짓점 처리·호 변과 함께 쓰지 않는다 */
+    spline: z.literal(true).optional(),
   }),
   /**
    * 경로 (형식 v10): 열린 꺾은선. 스윕 중심선·리브(얇은 돌출) 선. 꼭짓점 `ID.pk`, 변 `ID.ek` (pk → p(k+1), 닫히지 않음).
@@ -217,6 +219,8 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     points: z.array(Point2Schema).min(2).max(LIMITS.maxPolygonPoints),
     corners,
     arcs,
+    /** 형식 v16: 점들을 지나는 매끈한 스플라인 (cad/curves.ts splineSegments). 꼭짓점 처리·호 변과 함께 쓰지 않는다 */
+    spline: z.literal(true).optional(),
   }),
   /**
    * 구성선 (형식 v7): 형상을 만들지 않는 보조 직선. 끝점 `ID.p0`·`ID.p1`, 변 `ID.e0` 으로 구속에 쓴다
@@ -609,7 +613,7 @@ export const DrawingSettingsSchema = z.strictObject({
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
 
-export const MODEL_SCHEMA_VERSION = 15;
+export const MODEL_SCHEMA_VERSION = 16;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -842,6 +846,9 @@ export const SetArcCommandSchema = z.strictObject({
 export const AddRegionCommandSchema = z.strictObject({ type: z.literal('add_region'), sketch: ObjectIdSchema, id: ObjectIdSchema.optional(), items: RegionItemsSchema });
 /** 영역 구성 바꾸기 */
 export const SetRegionCommandSchema = z.strictObject({ type: z.literal('set_region'), sketch: ObjectIdSchema, entity: ObjectIdSchema, items: RegionItemsSchema });
+
+/** 스플라인 켜기·끄기 (형식 v16): 다각형·경로의 점들을 지나는 매끈한 곡선으로. 켜면 꼭짓점 처리·호 변은 지운다 */
+export const SetSplineCommandSchema = z.strictObject({ type: z.literal('set_spline'), sketch: ObjectIdSchema, entity: ObjectIdSchema, spline: z.boolean() });
 
 /** 사각형을 같은 모양의 다각형으로 바꾼다 (꼭짓점 이동·필렛·호를 쓰려고). 중심 구속은 지워진다 */
 export const ConvertToPolygonCommandSchema = z.strictObject({ type: z.literal('convert_to_polygon'), sketch: ObjectIdSchema, entity: ObjectIdSchema });
@@ -1156,6 +1163,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   ConvertToPolygonCommandSchema,
   AddRegionCommandSchema,
   SetRegionCommandSchema,
+  SetSplineCommandSchema,
   AddSlotCommandSchema,
   SetEntityAngleCommandSchema,
   OffsetEntityCommandSchema,

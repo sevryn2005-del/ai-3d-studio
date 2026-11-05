@@ -187,9 +187,9 @@ def constraint_errors(sk: Sketch) -> list[str]:
     """스케치의 다각형·구속 문제 목록 (validation.sketch_errors 에서 사용)."""
     errors: list[str] = []
     for e in sk.entities:
-        if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True, e.arcs)):
+        if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True, e.arcs, bool(e.spline))):
             errors.append(f"{sk.id}: {e.id} {err}")
-        if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False, e.arcs)):
+        if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False, e.arcs, bool(e.spline))):
             errors.append(f"{sk.id}: {e.id} {err}")
         if e.type == "region" and (err := region_error(sk, e.items, e.id)):
             errors.append(f"{sk.id}: {e.id} {err}")

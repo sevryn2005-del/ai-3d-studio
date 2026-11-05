@@ -41,6 +41,7 @@ describe('shared/schemas 동기화', () => {
       'convert_to_polygon',
       'add_region',
       'set_region',
+      'set_spline',
       'add_slot',
       'set_entity_angle',
       'offset_entity',

@@ -92,7 +92,43 @@ def _bulges(arcs) -> dict[int, float]:
     return {_arc_k(x): _arc_bulge(x) for x in (arcs or []) if abs(_arc_bulge(x)) > 1e-9}
 
 
-def corner_segments(points, corners, closed: bool, arcs=None) -> list[tuple]:
+BEZIER_DIVISIONS = 24  # curves.ts BEZIER_DIVISIONS 와 같음
+
+
+def bezier_point(s, t: float) -> Pt:
+    """3차 베지어 ('bezier', a, b, c1, c2) 위의 점"""
+    _, a, b, c1, c2 = s
+    u = 1 - t
+    k0, k1, k2, k3 = u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t
+    return (k0 * a[0] + k1 * c1[0] + k2 * c2[0] + k3 * b[0], k0 * a[1] + k1 * c1[1] + k2 * c2[1] + k3 * b[1])
+
+
+def spline_segments(points, closed: bool) -> list[tuple]:
+    """점들을 지나는 스플라인 (균일 Catmull-Rom → 베지어, curves.ts splineSegments 와 같음)"""
+    pts = [tuple(p) for p in points]
+    n = len(pts)
+
+    def P(i):
+        if closed:
+            return pts[i % n]
+        if i < 0:
+            return (2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1])
+        if i > n - 1:
+            return (2 * pts[n - 1][0] - pts[n - 2][0], 2 * pts[n - 1][1] - pts[n - 2][1])
+        return pts[i]
+
+    segs = []
+    for i in range(n if closed else n - 1):
+        p0, p1, p2, p3 = P(i - 1), P(i), P(i + 1), P(i + 2)
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        segs.append(("bezier", p1, p2, c1, c2))
+    return segs
+
+
+def corner_segments(points, corners, closed: bool, arcs=None, spline: bool = False) -> list[tuple]:
+    if spline:
+        return spline_segments(points, closed)
     pts = [tuple(p) for p in points]
     n = len(pts)
     by_k = {_corner_k(c): c for c in (corners or [])}
@@ -116,7 +152,9 @@ def corner_segments(points, corners, closed: bool, arcs=None) -> list[tuple]:
     return segs
 
 
-def corner_error(points, corners, closed: bool, arcs=None) -> str | None:
+def corner_error(points, corners, closed: bool, arcs=None, spline: bool = False) -> str | None:
+    if spline and (corners or _bulges(arcs)):
+        return "스플라인에는 꼭짓점 처리·호 변을 쓸 수 없습니다 (스플라인을 끄고 쓰세요)"
     pts = [tuple(p) for p in points]
     n = len(pts)
     arc_edges = set(_bulges(arcs))
@@ -153,7 +191,9 @@ def sample_segments(segs, closed: bool, step: float = OUTLINE_STEP) -> list[Pt]:
     out: list[Pt] = []
     for s in segs:
         out.append(s[1])
-        if s[0] == "arc":
+        if s[0] == "bezier":
+            out.extend(bezier_point(s, i / BEZIER_DIVISIONS) for i in range(1, BEZIER_DIVISIONS))
+        elif s[0] == "arc":
             _, a, _b, c, r, ccw, sweep, _mid = s
             n = arc_divisions(sweep, step)
             a0 = math.atan2(a[1] - c[1], a[0] - c[0])
@@ -166,10 +206,10 @@ def sample_segments(segs, closed: bool, step: float = OUTLINE_STEP) -> list[Pt]:
     return out
 
 
-def rounded_points(points, corners, closed: bool, arcs=None) -> list[Pt]:
-    if not corners and not _bulges(arcs):
+def rounded_points(points, corners, closed: bool, arcs=None, spline: bool = False) -> list[Pt]:
+    if not spline and not corners and not _bulges(arcs):
         return [(p[0], p[1]) for p in points]
-    return sample_segments(corner_segments(points, corners, closed, arcs), closed)
+    return sample_segments(corner_segments(points, corners, closed, arcs, spline), closed)
 
 
 def thin_polygon(pts, t: float) -> list[Pt]:

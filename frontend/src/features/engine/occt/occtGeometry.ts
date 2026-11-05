@@ -71,7 +71,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 15, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 16, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -190,22 +190,29 @@ function profileShape(c: Ctx, p: Profile, name: string): TopoDS_Shape {
   return s;
 }
 
+/** 윤곽 조각 → 모서리 (평면 z = 0): 직선, 정확한 원호(축 ±Z), 정확한 3차 베지어 */
+function segmentEdge(c: Ctx, sg: Segment): TopoDS_Edge {
+  const a = pnt(c, sg.a[0], sg.a[1], 0);
+  const b = pnt(c, sg.b[0], sg.b[1], 0);
+  if (sg.type === 'line') return c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge());
+  if (sg.type === 'arc') {
+    const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [sg.c[0], sg.c[1], 0], [0, 0, sg.ccw ? 1 : -1]), sg.r));
+    return c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge());
+  }
+  const poles = c.gc.k(new c.oc.NCollection_Array1_gp_Pnt(1, 4));
+  [sg.a, sg.c1, sg.c2, sg.b].forEach((q, i) => poles.SetValue(i + 1, pnt(c, q[0], q[1], 0)));
+  const bz = c.gc.k(new c.oc.Geom_BezierCurve(poles));
+  return c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(bz as never)).Edge());
+}
+
 /** 단면 윤곽선 (정확한 원·호) */
 function profileWire(c: Ctx, p: Profile): ReturnType<typeof polygonWire> {
   if (p.type === 'region') throw new GeometryError(REGION_UNSUPPORTED);
   if (p.type === 'polygon') {
-    if (!p.corners?.length && !p.arcs?.length) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
-    // 꼭짓점 처리: 직선 + 정확한 원호 (호 방향은 원 축 ±Z 로)
+    if (!p.corners?.length && !p.arcs?.length && !p.spline) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
+    // 꼭짓점 처리·호 변·스플라인: 직선 + 정확한 원호 + 정확한 베지어
     const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
-    for (const sg of cornerSegments(p.points, p.corners, true, p.arcs)) {
-      const a = pnt(c, sg.a[0], sg.a[1], 0);
-      const b = pnt(c, sg.b[0], sg.b[1], 0);
-      if (sg.type === 'line') mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge()));
-      else {
-        const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [sg.c[0], sg.c[1], 0], [0, 0, sg.ccw ? 1 : -1]), sg.r));
-        mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge()));
-      }
-    }
+    for (const sg of cornerSegments(p.points, p.corners, true, p.arcs, p.spline)) mw.Add(segmentEdge(c, sg));
     return c.gc.k(mw.Wire());
   }
   const [cx, cy] = p.center;
@@ -313,22 +320,18 @@ function thruSections(c: Ctx, wires: ReturnType<typeof polygonWire>[], name: str
  * 메시 엔진의 sweepRings 와 같은 형상
  */
 function pipeSweep(c: Ctx, p: Profile, path: Extract<Sketch['entities'][number], { type: 'path' | 'line' }>, m: Matrix4, name: string): TopoDS_Shape {
-  const segs: Segment[] = path.type === 'path' ? cornerSegments(path.points, path.corners, false, path.arcs) : [{ type: 'line', a: path.points[0], b: path.points[1] }];
+  const segs: Segment[] = path.type === 'path' ? cornerSegments(path.points, path.corners, false, path.arcs, path.spline) : [{ type: 'line', a: path.points[0], b: path.points[1] }];
   const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
-  for (const sg of segs) {
-    const a = pnt(c, sg.a[0], sg.a[1], 0);
-    const b = pnt(c, sg.b[0], sg.b[1], 0);
-    if (sg.type === 'line') mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge()));
-    else {
-      const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [sg.c[0], sg.c[1], 0], [0, 0, sg.ccw ? 1 : -1]), sg.r));
-      mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge()));
-    }
-  }
+  for (const sg of segs) mw.Add(segmentEdge(c, sg));
   const spine = c.oc.TopoDS.Wire(transformed(c, c.gc.k(mw.Wire()), m, name));
   // 시작점·시작 방향 (평면 좌표 → 객체 로컬)
   const s0 = segs[0]!;
   const t2: [number, number] =
-    s0.type === 'line' ? [s0.b[0] - s0.a[0], s0.b[1] - s0.a[1]] : s0.ccw ? [-(s0.a[1] - s0.c[1]), s0.a[0] - s0.c[0]] : [s0.a[1] - s0.c[1], -(s0.a[0] - s0.c[0])];
+    s0.type === 'line'
+      ? [s0.b[0] - s0.a[0], s0.b[1] - s0.a[1]]
+      : s0.type === 'bezier'
+        ? [s0.c1[0] - s0.a[0], s0.c1[1] - s0.a[1]]
+        : s0.ccw ? [-(s0.a[1] - s0.c[1]), s0.a[0] - s0.c[0]] : [s0.a[1] - s0.c[1], -(s0.a[0] - s0.c[0])];
   const P0 = new Vector3(s0.a[0], s0.a[1], 0).applyMatrix4(m);
   const T0 = new Vector3(t2[0], t2[1], 0).transformDirection(m).normalize();
   const B = new Vector3().setFromMatrixColumn(m, 2).normalize();

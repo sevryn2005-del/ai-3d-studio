@@ -129,8 +129,8 @@ export function throughHoleCommands(
 export type DrawnShape =
   | { type: 'rectangle'; from: Point2; to: Point2 }
   | { type: 'circle'; center: Point2; radius: number }
-  | { type: 'polygon'; points: Point2[] }
-  | { type: 'path'; points: Point2[] }
+  | { type: 'polygon'; points: Point2[]; spline?: boolean }
+  | { type: 'path'; points: Point2[]; spline?: boolean }
   /** 세 점 호 (형식 v13 경로 + 호 변): 시작 → 끝, through = 호 위의 점 */
   | { type: 'arc'; from: Point2; to: Point2; through: Point2 };
 
@@ -180,5 +180,8 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
     if (diameter < MIN_DRAWN_SIZE) return null;
     add = { type: 'add_circle', sketch: sid, id: entityId('c'), center: [round(shape.center[0]), round(shape.center[1])], diameter };
   }
-  return existing ? [add] : [{ type: 'create_sketch', id: sid }, add];
+  const cmds: CadCommand[] = [add];
+  // 스플라인 그리기: 같은 묶음에서 스플라인으로 (실행 취소 1번)
+  if ((shape.type === 'polygon' || shape.type === 'path') && shape.spline) cmds.push({ type: 'set_spline', sketch: sid, entity: (add as { id: string }).id, spline: true });
+  return existing ? cmds : [{ type: 'create_sketch', id: sid }, ...cmds];
 }

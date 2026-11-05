@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 15
+      "const": 16
     },
     "units": {
       "type": "string",
@@ -395,6 +395,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "spline": {
+                      "type": "boolean",
+                      "const": true
                     }
                   },
                   "required": [
@@ -493,6 +497,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "spline": {
+                      "type": "boolean",
+                      "const": true
                     }
                   },
                   "required": [

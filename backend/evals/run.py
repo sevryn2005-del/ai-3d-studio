@@ -42,7 +42,7 @@ def case_model(case: dict[str, Any]) -> ModelDefinition:
         objs = []
     elif isinstance(objs, str) and objs.startswith("fixture:"):
         return ModelDefinition.model_validate(json.loads((FIXTURES / objs.removeprefix("fixture:")).read_text(encoding="utf-8")))
-    return ModelDefinition.model_validate({"schemaVersion": 15, "units": "mm", "sketches": [], "objects": objs})
+    return ModelDefinition.model_validate({"schemaVersion": 16, "units": "mm", "sketches": [], "objects": objs})
 
 
 # ---- 채점 ------------------------------------------------------------------------

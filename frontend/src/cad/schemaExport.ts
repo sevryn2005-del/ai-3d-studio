@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { CadCommandSchema, LIMITS, ModelDefinitionSchema, SetParamsParamsSchema, emptyModel } from './commandTypes';
 import { encodeMesh } from './meshData';
 import { executeCommand } from './commandExecutor';
+import { bezierPoint, splineSegments } from './curves';
 
 const SCHEMA_BASE_URL = 'https://ai-3d-studio.local/schemas/';
 
@@ -242,6 +243,25 @@ const box = (id: string, w: number, d: number, h: number, position?: number[]) =
  * 형식 v6 피처 (쉘·구멍·패턴·대칭·억제). 두 엔진 모두 닫힌 메시·같은 부피(해석값)여야 한다:
  * 브라우저 features.test.ts, 서버 test_features.py. roots = 계산되는(억제 안 된) 최상위 객체 수
  */
+/** 스플라인 기준값: 베지어를 촘촘히(구간당 4000) 나눠 잰 넓이·길이 (엔진 표본보다 훨씬 정확) */
+function denseSpline(points: [number, number][], closed: boolean) {
+  const pts = splineSegments(points, closed).flatMap((sg) =>
+    sg.type === 'bezier' ? Array.from({ length: 4000 }, (_, i) => bezierPoint(sg, i / 4000)) : [],
+  );
+  if (!closed) pts.push(points[points.length - 1]!);
+  let area = 0;
+  let length = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!;
+    const q = pts[(i + 1) % pts.length]!;
+    area += p[0] * q[1] - q[0] * p[1];
+    if (closed || i + 1 < pts.length) length += Math.hypot(q[0] - p[0], q[1] - p[1]);
+  }
+  return { area: Math.abs(area) / 2, length };
+}
+const SPLINE_LOOP: [number, number][] = [[-10, -10], [10, -10], [10, 10], [-10, 10]];
+const SPLINE_PATH: [number, number][] = [[0, 0], [20, 10], [40, 0], [60, 10]];
+
 export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: number; commands: unknown[]; bbox?: number[][] }> = {
   'shell-box-open-top': { volume: 24000 - 36 * 26 * 18, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['top'] }] },
   'shell-box-closed': { volume: 24000 - 36 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2 }] },
@@ -513,6 +533,31 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'add_rectangle', sketch: 's', id: 'b', center: [10, 5], width: 4, height: 4 },
       { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'a', op: 'add' }, { entity: 'b', op: 'subtract' }] },
       { type: 'revolve', id: 'v', sketch: 's', profile: 'g' },
+    ],
+  },
+  'spline-closed-extrude': {
+    // 형식 v16 닫힌 스플라인 (정사각형 네 점을 지나는 매끈한 곡선), 높이 5 — 기준 넓이는 촘촘한 표본
+    volume: denseSpline(SPLINE_LOOP, true).area * 5,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: SPLINE_LOOP },
+      { type: 'set_spline', sketch: 's', entity: 'p', spline: true },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 5 },
+    ],
+  },
+  'spline-path-sweep': {
+    // 사각형 4×2 를 열린 스플라인 경로로: 부피 = 단면 넓이 × 곡선 길이 (굽힘 반지름이 단면보다 큼).
+    // 단면은 모든 엔진에서 정확한 사각형 → 경로(스플라인) 차이만 검사
+    volume: 8 * denseSpline(SPLINE_PATH, false).length,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 'sp', plane: { type: 'YZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 'sp', id: 'c', center: [0, 0], width: 4, height: 2 },
+      { type: 'create_sketch', id: 'pp', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 'pp', id: 'pa', points: SPLINE_PATH },
+      { type: 'set_spline', sketch: 'pp', entity: 'pa', spline: true },
+      { type: 'sweep', id: 'w', sketch: 'sp', profile: 'c', pathSketch: 'pp', path: 'pa' },
     ],
   },
   'rib-l-path': {

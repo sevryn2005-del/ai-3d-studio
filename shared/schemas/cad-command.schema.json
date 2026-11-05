@@ -1244,6 +1244,33 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "set_spline"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "spline": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "entity",
+        "spline"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "add_slot"
         },
         "sketch": {
@@ -2509,6 +2536,10 @@
                                 ],
                                 "additionalProperties": false
                               }
+                            },
+                            "spline": {
+                              "type": "boolean",
+                              "const": true
                             }
                           },
                           "required": [
@@ -2607,6 +2638,10 @@
                                 ],
                                 "additionalProperties": false
                               }
+                            },
+                            "spline": {
+                              "type": "boolean",
+                              "const": true
                             }
                           },
                           "required": [

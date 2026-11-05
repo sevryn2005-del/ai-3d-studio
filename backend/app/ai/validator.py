@@ -236,6 +236,9 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     edges = n if sketches[c["sketch"]][c["entity"]] == "polygon" else n - 1
                     if c["edge"] >= edges:
                         errors.append(f"commands[{i}].edge: '{c['entity']}' has edges e0..e{edges - 1}")
+        elif t == "set_spline":
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) not in ("polygon", "path"):
+                errors.append(f"commands[{i}].entity: '{c['entity']}' is not a polygon or path of sketch '{c['sketch']}' (splines are polygons or paths)")
         elif t in ("add_region", "set_region"):
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]

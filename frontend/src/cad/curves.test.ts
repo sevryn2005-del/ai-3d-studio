@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Point2 } from './commandTypes';
 import { emptyModel, type ModelDefinition } from './commandTypes';
 import { executeCommand } from './commandExecutor';
-import { bulgeArc, bulgeThrough, cornerError, cornerSegments, roundedPoints, sweepError, thinPolygon } from './curves';
+import { bezierPoint, bulgeArc, bulgeThrough, cornerError, cornerSegments, roundedPoints, splineSegments, sweepError, thinPolygon } from './curves';
 import { drawShapeCommands } from './sketchActions';
 import { resolveProfile, revolveProfileError } from './sketch';
 import { signedArea } from './sections';
@@ -207,5 +207,47 @@ describe('형식 v15 세 점 호·영역 단면', () => {
     const p = resolveProfile(m.sketches[0]!, 'g')!;
     expect(p).toMatchObject({ type: 'region', center: [7.5, 0], width: 55, height: 20 });
     expect(revolveProfileError(p)).toMatch('회전축');
+  });
+});
+
+describe('형식 v16 스플라인 (서버 tests/test_curves.py 와 같은 값)', () => {
+  it('점을 지나는 베지어 구간, 조절점, 닫힌 곡선 넓이', () => {
+    const segs = splineSegments([[0, 0], [20, 10], [40, 0]], false);
+    expect(segs).toHaveLength(2);
+    const s0 = segs[0]!;
+    if (s0.type !== 'bezier') throw new Error();
+    expect(s0.c1[0]).toBeCloseTo(20 / 3, 12);
+    expect(s0.c1[1]).toBeCloseTo(10 / 3, 12);
+    expect(bezierPoint(s0, 1)).toEqual([20, 10]);
+    const closed = roundedPoints(SQUARE, undefined, true, undefined, undefined, true);
+    expect(closed).toHaveLength(4 * 24);
+    expect(area(closed)).toBeCloseTo(546.3196, 3);
+    expect(cornerError(SQUARE, [{ k: 0, type: 'fillet', size: 1 }], true, undefined, true)).toMatch('스플라인');
+  });
+
+  const base = run([
+    { type: 'create_sketch', id: 's', plane: XY },
+    { type: 'add_polygon', sketch: 's', id: 'p', points: SQUARE },
+    { type: 'set_corner', sketch: 's', entity: 'p', corner: 'fillet', size: 2 },
+    { type: 'add_circle', sketch: 's', id: 'c', center: [50, 0], diameter: 4 },
+  ]);
+  const ent = (m: ModelDefinition, id: string) => m.sketches[0]!.entities.find((e) => e.id === id) as Record<string, unknown>;
+
+  it('set_spline: 켜면 꼭짓점 처리를 지우고, 끄면 꺾은선, 원은 거부, 켠 뒤 필렛 거부', () => {
+    const on = run([{ type: 'set_spline', sketch: 's', entity: 'p', spline: true }], base);
+    expect(ent(on, 'p')).toEqual({ id: 'p', type: 'polygon', points: SQUARE, spline: true });
+    expect(err(on, { type: 'set_corner', sketch: 's', entity: 'p', corner: 'fillet', size: 1 })).toMatch('스플라인');
+    expect(err(on, { type: 'set_arc', sketch: 's', entity: 'p', edge: 0, bulge: 0.5 })).toMatch('스플라인');
+    const off = run([{ type: 'set_spline', sketch: 's', entity: 'p', spline: false }], on);
+    expect(ent(off, 'p')).not.toHaveProperty('spline');
+    expect(err(base, { type: 'set_spline', sketch: 's', entity: 'c', spline: true })).toMatch('다각형·경로');
+    expect(validateGraph(on)).toEqual([]);
+  });
+
+  it('스플라인 그리기: 닫힘 → 다각형 + set_spline, 열림 → 경로 + set_spline (한 묶음)', () => {
+    const closed = drawShapeCommands(emptyModel(), null, { type: 'polygon', points: [[0, 0], [10, 0], [5, 8]], spline: true })!;
+    expect(closed.map((c) => (c as { type: string }).type)).toEqual(['create_sketch', 'add_polygon', 'set_spline']);
+    const open = drawShapeCommands(emptyModel(), null, { type: 'path', points: [[0, 0], [10, 5], [20, 0]], spline: true })!;
+    expect(run(open).sketches[0]!.entities[0]).toMatchObject({ type: 'path', spline: true });
   });
 });

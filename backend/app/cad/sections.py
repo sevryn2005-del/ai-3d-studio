@@ -39,7 +39,7 @@ def outline(p: dict) -> list[tuple[float, float]]:
 
         raise GeometryError(REGION_UNSUPPORTED)
     if t == "polygon":
-        pts = rounded_points(p["points"], p.get("corners"), True, p.get("arcs"))
+        pts = rounded_points(p["points"], p.get("corners"), True, p.get("arcs"), bool(p.get("spline")))
     elif t == "rectangle":
         cx, cy = p["center"]
         w, h = p["width"] / 2, p["height"] / 2

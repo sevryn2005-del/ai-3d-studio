@@ -7,6 +7,9 @@
  * - 얇은 단면(thinPolygon): 열린 선을 양쪽으로 두께/2 씩 띄운 닫힌 다각형 (꺾인 곳은 모서리를 연장해 만남).
  * - 스윕 고리(sweepRings): 단면(바운딩 박스 중심 기준 u·v)을 경로 시작점에 경로 방향과 수직으로 세우고, 꺾인 곳은 이등분면(마이터)으로 잇는다.
  *   경로는 스케치 평면 위에 있으므로 단면의 v 축 = 경로 평면의 법선(고정), u 축 = 그 평면 안에서 경로에 수직.
+ * - 스플라인(형식 v16, spline): 점들을 지나는 균일 Catmull-Rom 곡선을 구간마다 3차 베지어로 (c1 = Pi + (Pi+1 − Pi−1)/6,
+ *   c2 = Pi+1 − (Pi+2 − Pi)/6). 열린 스플라인의 양 끝 밖 가상 점 = 2·끝점 − 이웃 점. 정밀 엔진은 정확한 베지어,
+ *   메시 엔진은 구간마다 BEZIER_DIVISIONS 등분. 스플라인에는 꼭짓점 처리·호 변을 쓰지 않는다.
  */
 import type { Point2 } from './commandTypes';
 
@@ -25,7 +28,44 @@ export interface Arc {
 
 export type Segment =
   | { type: 'line'; a: Point2; b: Point2 }
-  | { type: 'arc'; a: Point2; b: Point2; c: Point2; r: number; ccw: boolean; sweep: number; mid: Point2 };
+  | { type: 'arc'; a: Point2; b: Point2; c: Point2; r: number; ccw: boolean; sweep: number; mid: Point2 }
+  | { type: 'bezier'; a: Point2; b: Point2; c1: Point2; c2: Point2 };
+
+/** 스플라인 구간 하나를 나누는 수 (메시 엔진·윤곽 표본, 서버 curves.py 와 같음) */
+export const BEZIER_DIVISIONS = 24;
+
+/** 3차 베지어 위의 점 (t: 0~1) */
+export function bezierPoint(s: { a: Point2; b: Point2; c1: Point2; c2: Point2 }, t: number): Point2 {
+  const u = 1 - t;
+  const k0 = u * u * u;
+  const k1 = 3 * u * u * t;
+  const k2 = 3 * u * t * t;
+  const k3 = t * t * t;
+  return [k0 * s.a[0] + k1 * s.c1[0] + k2 * s.c2[0] + k3 * s.b[0], k0 * s.a[1] + k1 * s.c1[1] + k2 * s.c2[1] + k3 * s.b[1]];
+}
+
+/** 점들을 지나는 스플라인 (균일 Catmull-Rom → 베지어 구간) */
+export function splineSegments(points: Point2[], closed: boolean): Segment[] {
+  const n = points.length;
+  const P = (i: number): Point2 => {
+    if (closed) return points[((i % n) + n) % n]!;
+    if (i < 0) return [2 * points[0]![0] - points[1]![0], 2 * points[0]![1] - points[1]![1]];
+    if (i > n - 1) return [2 * points[n - 1]![0] - points[n - 2]![0], 2 * points[n - 1]![1] - points[n - 2]![1]];
+    return points[i]!;
+  };
+  const segs: Segment[] = [];
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const [p0, p1, p2, p3] = [P(i - 1), P(i), P(i + 1), P(i + 2)];
+    segs.push({
+      type: 'bezier',
+      a: p1,
+      b: p2,
+      c1: [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6],
+      c2: [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6],
+    });
+  }
+  return segs;
+}
 
 /** 윤곽 표본(로프트·헬릭스·스윕 단면, 리브 중심선): 호를 π/32 이하 각도로 나눈다 (두 엔진 공통) */
 export const OUTLINE_STEP = Math.PI / 32;
@@ -109,7 +149,8 @@ export function bulgeThrough(a: Point2, b: Point2, p: Point2): { bulge: number; 
 }
 
 /** 꼭짓점 처리·호 변을 적용한 윤곽 조각 (닫힘: 마지막 조각이 처음으로 돌아온다) */
-export function cornerSegments(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[]): Segment[] {
+export function cornerSegments(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[], spline?: boolean): Segment[] {
+  if (spline) return splineSegments(points, closed);
   const n = points.length;
   const byK = new Map((corners ?? []).map((c) => [c.k, c]));
   const cuts = points.map((v, k) => {
@@ -131,8 +172,9 @@ export function cornerSegments(points: Point2[], corners: Corner[] | undefined, 
 }
 
 /** 꼭짓점 처리가 들어가지 않으면 사용자용 메시지 (변 하나에 양 끝 처리 길이의 합이 변 길이를 넘음) */
-export function cornerError(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[]): string | null {
+export function cornerError(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[], spline?: boolean): string | null {
   const n = points.length;
+  if (spline && (corners?.length || arcs?.some((a) => Math.abs(a.bulge) > 1e-9))) return '스플라인에는 꼭짓점 처리·호 변을 쓸 수 없습니다 (스플라인을 끄고 쓰세요)';
   const arcEdges = new Set((arcs ?? []).filter((x) => Math.abs(x.bulge) > 1e-9).map((x) => x.k));
   for (const a of arcs ?? []) if (a.k >= (closed ? n : n - 1)) return `변 e${a.k} 이(가) 없습니다`;
   if (!corners?.length) return null;
@@ -169,7 +211,9 @@ export function sampleSegments(segs: Segment[], closed: boolean, step: (r: numbe
   const out: Point2[] = [];
   for (const s of segs) {
     out.push(s.a);
-    if (s.type === 'arc') {
+    if (s.type === 'bezier') {
+      for (let i = 1; i < BEZIER_DIVISIONS; i++) out.push(bezierPoint(s, i / BEZIER_DIVISIONS));
+    } else if (s.type === 'arc') {
       const n = arcDivisions(s.sweep, step(s.r));
       const a0 = Math.atan2(s.a[1] - s.c[1], s.a[0] - s.c[0]);
       const dir = s.ccw ? 1 : -1;
@@ -184,9 +228,9 @@ export function sampleSegments(segs: Segment[], closed: boolean, step: (r: numbe
 }
 
 /** 꼭짓점 처리·호 변을 적용한 점 목록 (윤곽 표본) */
-export function roundedPoints(points: Point2[], corners: Corner[] | undefined, closed: boolean, step?: (r: number) => number, arcs?: Arc[]): Point2[] {
-  if (!corners?.length && !arcs?.some((a) => Math.abs(a.bulge) > 1e-9)) return points.map((p) => [p[0], p[1]]);
-  return sampleSegments(cornerSegments(points, corners, closed, arcs), closed, step);
+export function roundedPoints(points: Point2[], corners: Corner[] | undefined, closed: boolean, step?: (r: number) => number, arcs?: Arc[], spline?: boolean): Point2[] {
+  if (!spline && !corners?.length && !arcs?.some((a) => Math.abs(a.bulge) > 1e-9)) return points.map((p) => [p[0], p[1]]);
+  return sampleSegments(cornerSegments(points, corners, closed, arcs, spline), closed, step);
 }
 
 /** 열린 선을 두께 t 로 띄운 닫힌 다각형 (꺾인 곳 = 모서리 연장) */
