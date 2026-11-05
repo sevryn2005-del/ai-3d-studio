@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from app.cad.commands import ModelDefinition
 from app.cad.exporter import FORMATS, NamedShape, export_shapes
+from app.cad.mesh import encode_mesh, tessellate
 from app.cad.primitives import GeometryError, apply_transform, build_solid
 from app.cad.validation import active_top_level_ids
-from app.cad.mesh import encode_mesh, tessellate
 
 USER_ERRORS = (GeometryError,)
 
@@ -118,7 +119,14 @@ def topology(payload: dict[str, Any]) -> dict[str, Any]:
     import numpy as np
     from OCP.BRep import BRep_Tool
     from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
-    from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Plane, GeomAbs_Sphere
+    from OCP.GeomAbs import (
+        GeomAbs_Circle,
+        GeomAbs_Cone,
+        GeomAbs_Cylinder,
+        GeomAbs_Line,
+        GeomAbs_Plane,
+        GeomAbs_Sphere,
+    )
 
     from app.cad.mesh import DISPLAY_ANGULAR_TOLERANCE, DISPLAY_LINEAR_TOLERANCE
 
@@ -128,8 +136,8 @@ def topology(payload: dict[str, Any]) -> dict[str, Any]:
     if obj is None:
         raise GeometryError(f"존재하지 않는 객체입니다: {payload['id']}")
     shape = apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform)
-    b64 = lambda a, t: base64.b64encode(np.asarray(a, dtype=t).tobytes()).decode("ascii")  # noqa: E731
-    xyz = lambda p: [p.X(), p.Y(), p.Z()]  # noqa: E731
+    b64 = lambda a, t: base64.b64encode(np.asarray(a, dtype=t).tobytes()).decode("ascii")
+    xyz = lambda p: [p.X(), p.Y(), p.Z()]
     faces = []
     for f in shape.Faces():
         a = BRepAdaptor_Surface(f.wrapped, True)

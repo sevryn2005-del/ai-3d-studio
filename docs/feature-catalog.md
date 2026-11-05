@@ -27,7 +27,7 @@
 | 크기 조정 (균일·축별 배율) | Scale | Scale | ✅ |
 | 헬릭스 스윕 (스프링·코일) | Swept along Helix | Screw modifier | ✅ |
 | 스윕 (경로 = 스케치 꺾은선, 둥근 꺾임, 마이터 이음) | Swept Boss/Cut | Curve bevel | ✅ (3D 곡선 경로·비틀기 없음) |
-| 로프트 (단면 2~10개, 직선 연결) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선 없음) |
+| 로프트 (단면 2~10개, 직선 연결, 정밀 엔진은 정확한 곡선 단면) | Lofted Boss | Skin/Bridge | ✅ (안내 곡선·곡선 연결 없음) |
 | 구배 (빼기 각, 옆면 전체) | Draft | — | ✅ (정밀 엔진) |
 | 리브 · 얇은 피처 (열린 선을 두께로 돌출) | Rib / Thin Feature | Solidify | ✅ (깊이 직접 지정) |
 | 나사산: 수나사(원통에 감기)·암나사(구멍 벽에 홈, ISO 보통 피치) | Thread | Screw modifier | ✅ |

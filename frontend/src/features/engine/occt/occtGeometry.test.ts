@@ -121,3 +121,28 @@ describe('정밀 엔진(OCCT): 화면 선택용 위상', () => {
     expect(occtLocalProps(oc, f, f.objects.find((o) => o.id === 'f')!).volume).toBeCloseTo(Math.PI * 16 * 9 - 0.5 * 2 * Math.PI * (4 - 1 / 3), 3);
   });
 });
+
+describe('정밀 엔진(OCCT): 매끈한 로프트·스윕 (단면을 다각형으로 쪼개지 않음)', () => {
+  it('원 두 개 로프트 = 원뿔대 옆면 하나 + 마개 둘, 원 파이프 스윕 = 관 면 둘 + 마개 둘', () => {
+    const loft = build([
+      { type: 'create_sketch', id: 'a', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_circle', sketch: 'a', id: 'c', center: [0, 0], diameter: 20 },
+      { type: 'create_sketch', id: 'b', plane: { type: 'XY', offset: 15 } },
+      { type: 'add_circle', sketch: 'b', id: 'c', center: [0, 0], diameter: 10 },
+      { type: 'loft', id: 'l', sections: [{ sketch: 'a', profile: 'c' }, { sketch: 'b', profile: 'c' }] },
+    ]);
+    const lt = occtTopology(oc, loft, loft.objects[0]!);
+    expect(lt.faces).toHaveLength(3);
+    expect(occtLocalProps(oc, loft, loft.objects[0]!).volume).toBeCloseTo((Math.PI * 15 / 3) * (100 + 25 + 50), 6); // 원뿔대 정확값
+    const pipe = build([
+      { type: 'create_sketch', id: 'sp', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_circle', sketch: 'sp', id: 'c', center: [0, 0], diameter: 4 },
+      { type: 'create_sketch', id: 'pp', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 'pp', id: 'pa', points: [[0, 0], [30, 0], [30, 20]] },
+      { type: 'sweep', id: 'w', sketch: 'sp', profile: 'c', pathSketch: 'pp', path: 'pa' },
+    ]);
+    const w = pipe.objects.find((o) => o.id === 'w')!;
+    expect(occtTopology(oc, pipe, w).faces).toHaveLength(4);
+    expect(occtLocalProps(oc, pipe, w).volume).toBeCloseTo(Math.PI * 4 * 50, 6);
+  });
+});

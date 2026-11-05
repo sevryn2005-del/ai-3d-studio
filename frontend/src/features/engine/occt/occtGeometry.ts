@@ -16,10 +16,10 @@ import type { OpenCascadeInstance, TopoDS_Edge, TopoDS_Face, TopoDS_Shape } from
 import { Matrix4, Vector3 } from 'three';
 import type { CadObject, FeatureEdges, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects } from '../../../cad/modelGraph';
-import { openLinePoints, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
-import { cornerSegments, sweepError, sweepRings } from '../../../cad/curves';
+import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { cornerSegments, sweepError, type Segment } from '../../../cad/curves';
 import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
-import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
+import { helixError, helixProfilePoints, helixRings, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
@@ -168,8 +168,13 @@ function faceOf(c: Ctx, wire: ReturnType<typeof polygonWire>): TopoDS_Face {
 
 /** 평면 좌표(u, v) 단면 — CadQuery rect·circle·polyline·slot2D 와 같은 윤곽 */
 function profileFace(c: Ctx, p: Profile): TopoDS_Face {
+  return faceOf(c, profileWire(c, p));
+}
+
+/** 단면 윤곽선 (정확한 원·호) */
+function profileWire(c: Ctx, p: Profile): ReturnType<typeof polygonWire> {
   if (p.type === 'polygon') {
-    if (!p.corners?.length) return faceOf(c, polygonWire(c, p.points.map(([u, v]) => [u, v, 0])));
+    if (!p.corners?.length) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
     // 꼭짓점 처리: 직선 + 정확한 원호 (호 방향은 원 축 ±Z 로)
     const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
     for (const sg of cornerSegments(p.points, p.corners, true)) {
@@ -181,19 +186,19 @@ function profileFace(c: Ctx, p: Profile): TopoDS_Face {
         mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge()));
       }
     }
-    return faceOf(c, c.gc.k(mw.Wire()));
+    return c.gc.k(mw.Wire());
   }
   const [cx, cy] = p.center;
   if (p.type === 'rectangle') {
     const w = p.width / 2;
     const h = p.height / 2;
-    return faceOf(c, polygonWire(c, [[cx - w, cy - h, 0], [cx + w, cy - h, 0], [cx + w, cy + h, 0], [cx - w, cy + h, 0]]));
+    return polygonWire(c, [[cx - w, cy - h, 0], [cx + w, cy - h, 0], [cx + w, cy + h, 0], [cx - w, cy + h, 0]]);
   }
   if (p.type === 'circle') {
     const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [cx, cy, 0]), p.diameter / 2));
     const edge = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ)).Edge());
     const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire(edge));
-    return faceOf(c, c.gc.k(mw.Wire()));
+    return c.gc.k(mw.Wire());
   }
   // 슬롯: 두 직선 + 두 반원(반시계). 반원 중심 거리 = length, 폭 = width
   const a = (p.angle * Math.PI) / 180;
@@ -214,7 +219,7 @@ function profileFace(c: Ctx, p: Profile): TopoDS_Face {
   arc(L, -r, r);
   line(L, r, -L, r);
   arc(-L, r, -r);
-  return faceOf(c, c.gc.k(mw.Wire()));
+  return c.gc.k(mw.Wire());
 }
 
 function prism(c: Ctx, s: TopoDS_Shape, dz: number): TopoDS_Shape {
@@ -265,6 +270,65 @@ function ringSolid(c: Ctx, rings: [number, number, number][][], name: string): T
     throw new GeometryError(`'${name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)`);
   }
   return volumeOf(c.oc, s) < 0 ? c.gc.k(s.Reversed()) : s;
+}
+
+/** 정확한 단면 선들을 직선(룰드) 면으로 잇기 — 로프트 */
+function thruSections(c: Ctx, wires: ReturnType<typeof polygonWire>[], name: string): TopoDS_Shape {
+  const ts = c.gc.k(new c.oc.BRepOffsetAPI_ThruSections(true, true, 1e-6));
+  for (const w of wires) ts.AddWire(w);
+  let s: TopoDS_Shape;
+  try {
+    ts.Build(progress(c));
+    if (!ts.IsDone()) throw new Error('loft');
+    s = c.gc.k(ts.Shape());
+  } catch {
+    throw new GeometryError(`'${name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)`);
+  }
+  return volumeOf(c.oc, s) < 0 ? c.gc.k(s.Reversed()) : s;
+}
+
+/**
+ * 스윕 (정확한 곡면): 경로 = 직선 + 정확한 원호, 단면 = 정확한 윤곽. 단면을 경로 시작점에 경로와 수직으로 세우고
+ * (u = 경로 평면 안의 수직 방향, v = 경로 평면 법선 B) B 를 고정한 채 쓸어 간다. 꺾인 곳은 마이터(RightCorner) —
+ * 메시 엔진의 sweepRings 와 같은 형상
+ */
+function pipeSweep(c: Ctx, p: Profile, path: Extract<Sketch['entities'][number], { type: 'path' | 'line' }>, m: Matrix4, name: string): TopoDS_Shape {
+  const segs: Segment[] = path.type === 'path' ? cornerSegments(path.points, path.corners, false) : [{ type: 'line', a: path.points[0], b: path.points[1] }];
+  const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
+  for (const sg of segs) {
+    const a = pnt(c, sg.a[0], sg.a[1], 0);
+    const b = pnt(c, sg.b[0], sg.b[1], 0);
+    if (sg.type === 'line') mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge()));
+    else {
+      const circ = c.gc.k(new c.oc.gp_Circ(axis2(c, [sg.c[0], sg.c[1], 0], [0, 0, sg.ccw ? 1 : -1]), sg.r));
+      mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(circ, a, b)).Edge()));
+    }
+  }
+  const spine = c.oc.TopoDS.Wire(transformed(c, c.gc.k(mw.Wire()), m, name));
+  // 시작점·시작 방향 (평면 좌표 → 객체 로컬)
+  const s0 = segs[0]!;
+  const t2: [number, number] =
+    s0.type === 'line' ? [s0.b[0] - s0.a[0], s0.b[1] - s0.a[1]] : s0.ccw ? [-(s0.a[1] - s0.c[1]), s0.a[0] - s0.c[0]] : [s0.a[1] - s0.c[1], -(s0.a[0] - s0.c[0])];
+  const P0 = new Vector3(s0.a[0], s0.a[1], 0).applyMatrix4(m);
+  const T0 = new Vector3(t2[0], t2[1], 0).transformDirection(m).normalize();
+  const B = new Vector3().setFromMatrixColumn(m, 2).normalize();
+  const N0 = B.clone().cross(T0);
+  const [cx, cy] = profileBounds(p).center;
+  const place = new Matrix4().makeBasis(N0, B, T0).setPosition(P0).multiply(new Matrix4().makeTranslation(-cx, -cy, 0));
+  const profile = c.oc.TopoDS.Wire(transformed(c, profileWire(c, p), place, name));
+  try {
+    const ps = c.gc.k(new c.oc.BRepOffsetAPI_MakePipeShell(spine));
+    ps.SetMode(dir(c, B.x, B.y, B.z));
+    ps.SetTransitionMode('BRepBuilderAPI_RightCorner' as never);
+    ps.Add(profile, false, false);
+    ps.Build(progress(c));
+    if (!ps.IsDone() || !ps.MakeSolid()) throw new Error('pipe');
+    const s = c.gc.k(ps.Shape());
+    if (!isValid(c, s)) throw new Error('invalid');
+    return volumeOf(c.oc, s) < 0 ? c.gc.k(s.Reversed()) : s;
+  } catch {
+    throw new GeometryError(`'${name}': 스윕 결과 형상을 만들 수 없습니다 (경로가 자기 자신과 겹치거나 단면이 꼬였습니다)`);
+  }
 }
 
 /** 삼각형 메시를 꿰매 솔리드로 — 서버 mesh_import.mesh_solid 와 같음 */
@@ -368,15 +432,24 @@ export function shapeTopology(oc: OC, s: TopoDS_Shape, tol = DISPLAY_TOLERANCE):
         origin = v3(gc.k(props.CentreOfMass()));
         const n = v3(gc.k(gc.k(gc.k(a.Plane()).Axis()).Direction()));
         dir = reversed ? [-n[0], -n[1], -n[2]] : n; // 바깥 법선
-      } else if (t === 'GeomAbs_Cylinder' || t === 'GeomAbs_Cone') {
-        kind = t === 'GeomAbs_Cylinder' ? 'cylinder' : 'cone';
-        // 이 빌드의 타입 선언에는 Cone() 반환형이 빠져 있다 (실제로는 gp_Cone)
-        type Axial = { Axis(): { Location(): { X(): number; Y(): number; Z(): number }; Direction(): { X(): number; Y(): number; Z(): number } }; Radius?(): number; RefRadius?(): number };
-        const surf = gc.k((t === 'GeomAbs_Cylinder' ? a.Cylinder() : (a as unknown as { Cone(): unknown }).Cone()) as unknown as Axial);
-        const ax = gc.k(surf.Axis());
+      } else if (t === 'GeomAbs_Cylinder') {
+        kind = 'cylinder';
+        const cyl = gc.k(a.Cylinder());
+        const ax = gc.k(cyl.Axis());
         origin = v3(gc.k(ax.Location()));
         dir = v3(gc.k(ax.Direction()));
-        radius = surf.Radius ? surf.Radius() : (surf.RefRadius?.() ?? 0);
+        radius = cyl.Radius();
+      } else if (t === 'GeomAbs_Cone') {
+        // 이 빌드는 gp_Cone 을 넘겨주지 못한다 → 경계의 원 모서리 축으로 원뿔 축을 정한다
+        for (const e of explore(c, f, 'TopAbs_EDGE', (x) => oc.TopoDS.Edge(x))) {
+          const ca = gc.k(new oc.BRepAdaptor_Curve(e));
+          if ((ca.GetType() as unknown as string) !== 'GeomAbs_Circle') continue;
+          const ax = gc.k(gc.k(ca.Circle()).Axis());
+          kind = 'cone';
+          origin = v3(gc.k(ax.Location()));
+          dir = v3(gc.k(ax.Direction()));
+          break;
+        }
       } else if (t === 'GeomAbs_Sphere') {
         kind = 'sphere';
         const sp = gc.k(a.Sphere());
@@ -686,11 +759,8 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
         if (!p || !m) throw new GeometryError(`'${obj.name}': 단면 ${s.sketch}·${s.profile} 을(를) 찾을 수 없습니다`);
         return { p, m };
       });
-      const n = loftSegments(profs.map((x) => x.p), SECTION_TOLERANCE);
-      const rings = profs.map(({ p, m }) =>
-        sectionPoints(p, n).map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(m).toArray() as [number, number, number]),
-      );
-      return ringSolid(c, rings, obj.name);
+      // 정확한 단면 곡선(원·호)을 직선 면으로 잇는다 (메시 엔진은 같은 단면을 점으로 나눈 고리)
+      return thruSections(c, profs.map(({ p, m }) => c.oc.TopoDS.Wire(transformed(c, profileWire(c, p), m, obj.name))), obj.name);
     }
     case 'sweep': {
       const sk = c.sketches.get(obj.sweep.sketch);
@@ -703,9 +773,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       if (err) throw new GeometryError(`'${obj.name}': ${err}`);
       const m = sketchLocalMatrix(modelOf(c), obj.id, obj.sweep.pathSketch);
       if (!m) throw new GeometryError(`'${obj.name}': 경로 스케치의 평면을 찾을 수 없습니다`);
-      const path3 = path.map(([u, v]) => new Vector3(u, v, 0).applyMatrix4(m).toArray() as [number, number, number]);
-      const B = new Vector3().setFromMatrixColumn(m, 2).normalize().toArray() as [number, number, number];
-      return ringSolid(c, sweepRings(prof, path3, B), obj.name);
+      return pipeSweep(c, p, pk!.entities.find((e) => e.id === obj.sweep.path) as Extract<Sketch['entities'][number], { type: 'path' | 'line' }>, m, obj.name);
     }
     case 'mesh': {
       const m = decodeMesh(obj.mesh);

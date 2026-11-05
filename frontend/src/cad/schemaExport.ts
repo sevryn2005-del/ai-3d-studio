@@ -464,16 +464,16 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
     ],
   },
   'sweep-l-pipe-sharp': {
-    // 원 Ø4 를 꺾은 경로(30 + 20)로: 부피 = 단면 넓이 × 중심선 길이 (마이터 이음).
-    // 단면은 세 엔진 모두 같은 40각형 (sections.loftSegments, 허용 오차 0.01) → 넓이 = πr² × (40/2π)·sin(2π/40)
-    volume: PI * 4 * ((40 / (2 * PI)) * Math.sin((2 * PI) / 40)) * 50,
+    // 원 Ø20 을 꺾은 경로(60 + 40)로: 부피 = 단면 넓이 × 중심선 길이 (마이터 이음).
+    // 정밀 엔진은 정확한 원, 메시 엔진은 88각형(허용 오차 0.01 → 넓이 오차 0.09%)
+    volume: PI * 100 * 100,
     roots: 1,
-    bbox: [[0, -2, -2], [32, 20, 2]],
+    bbox: [[0, -10, -10], [70, 40, 10]],
     commands: [
       { type: 'create_sketch', id: 'sp', plane: { type: 'XZ', offset: 0 } },
-      { type: 'add_circle', sketch: 'sp', id: 'c', center: [0, 0], diameter: 4 },
+      { type: 'add_circle', sketch: 'sp', id: 'c', center: [0, 0], diameter: 20 },
       { type: 'create_sketch', id: 'pp', plane: { type: 'XY', offset: 0 } },
-      { type: 'add_path', sketch: 'pp', id: 'pa', points: [[0, 0], [30, 0], [30, 20]] },
+      { type: 'add_path', sketch: 'pp', id: 'pa', points: [[0, 0], [60, 0], [60, 40]] },
       { type: 'sweep', id: 'w', sketch: 'sp', profile: 'c', pathSketch: 'pp', path: 'pa' },
     ],
   },

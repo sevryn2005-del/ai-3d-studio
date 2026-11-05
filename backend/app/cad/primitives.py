@@ -16,43 +16,53 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import cadquery as cq
-from OCP.BRepBuilderAPI import BRepBuilderAPI_GTransform, BRepBuilderAPI_Transform
-from OCP.gp import gp_GTrsf, gp_Trsf
+import numpy as np
+from OCP.BRepBuilderAPI import (
+    BRepBuilderAPI_GTransform,
+    BRepBuilderAPI_RightCorner,
+    BRepBuilderAPI_Transform,
+)
+from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell
+from OCP.gp import gp_Dir, gp_GTrsf, gp_Trsf
 
 from app.cad.commands import (
-    ExtrudeObject,
-    RevolveObject,
-    revolve_profile_error,
-    sketch_feature_ref,
-    Sketch,
-    resolve_profile,
-    profile_of,
-    open_line_points,
     BooleanObject,
     BoxObject,
     CadObject,
     ConeObject,
     CylinderObject,
-    SphereObject,
-    Transform,
-    HoleObject,
-    PatternObject,
+    DraftObject,
+    ExtrudeObject,
+    FilletObject,
     HelixObject,
+    HoleObject,
     LoftObject,
     MeshObject,
-    FilletObject,
-    DraftObject,
+    PatternObject,
+    RevolveObject,
+    Sketch,
+    SphereObject,
     StepObject,
     SweepObject,
+    Transform,
+    open_line_points,
+    profile_of,
+    resolve_profile,
+    revolve_profile_error,
+    sketch_feature_ref,
 )
+from app.cad.curves import corner_segments, sweep_error
 from app.cad.features import is_suppressed, pattern_matrices
 from app.cad.frames import extrude_local_matrix, sketch_local_matrix
 from app.cad.mesh_import import mesh_solid
 from app.cad.precise import draft, edge_feature, read_step
-from app.cad.sections import helix_error, helix_profile_points, helix_rings, loft_segments, section_points, sweep_profile_points
-from app.cad.curves import corner_segments, sweep_error, sweep_rings
-
-import numpy as np
+from app.cad.sections import bounds as section_bounds
+from app.cad.sections import (
+    helix_error,
+    helix_profile_points,
+    helix_rings,
+    sweep_profile_points,
+)
 
 # 헬릭스·로프트 단면 분할 = 출력 허용 오차 (브라우저 엔진은 표시 0.05 / 출력 0.01)
 HELIX_TOLERANCE = 0.01
@@ -136,6 +146,29 @@ def world_solid(obj: CadObject) -> cq.Shape:
 _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"}
 
 
+def profile_workplane(p: dict) -> cq.Workplane:
+    """평면 좌표(u, v) 단면 윤곽 (대기 윤곽 하나). 꼭짓점 처리는 정확한 원호 (curves.py 와 같은 점)"""
+    if p["type"] == "polygon" and p.get("corners"):
+        segs = corner_segments(p["points"], p["corners"], True)
+        w = cq.Workplane("XY").moveTo(*segs[0][1])
+        for sg in segs:
+            w = w.lineTo(*sg[2]) if sg[0] == "line" else w.threePointArc(sg[7], sg[2])
+        return w.close()
+    if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
+        return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
+    # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
+    w = cq.Workplane("XY").pushPoints([tuple(p["center"])])
+    if p["type"] == "slot":  # slot2D 길이 = 끝에서 끝 (= 반원 중심 거리 + 폭)
+        return w.slot2D(p["length"] + p["width"], p["width"], p["angle"])
+    return w.rect(p["width"], p["height"]) if p["type"] == "rectangle" else w.circle(p["diameter"] / 2)
+
+
+def profile_wire(p: dict) -> cq.Wire:
+    w = profile_workplane(p)
+    wires = [o for o in w.vals() if isinstance(o, cq.Wire)] or w.ctx.pendingWires
+    return wires[0]
+
+
 def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
     """스케치 피처 (객체 로컬 좌표). 평면 좌표에서 단면을 돌출(또는 v 축 둘레 회전)한 뒤 frames.extrude_local_matrix 로 옮긴다
     — 기준 평면·면 평면 모두 브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 행렬.
@@ -151,19 +184,7 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
         raise GeometryError(f"'{obj.name}': 스케치를 붙인 면을 찾을 수 없습니다")
     def profile_wp() -> cq.Workplane:
         # 작업 평면의 대기 윤곽은 돌출 한 번에 소모되므로, 쓸 때마다 새로 만든다
-        if p["type"] == "polygon" and p.get("corners"):  # 꼭짓점 처리: 직선 + 정확한 원호 (curves.py 와 같은 점)
-            segs = corner_segments(p["points"], p["corners"], True)
-            w = cq.Workplane("XY").moveTo(*segs[0][1])
-            for sg in segs:
-                w = w.lineTo(*sg[2]) if sg[0] == "line" else w.threePointArc(sg[7], sg[2])
-            return w.close()
-        if p["type"] == "polygon":  # 꼭짓점 좌표 그대로 (구속 해석기가 푼 값)
-            return cq.Workplane("XY").polyline([tuple(q) for q in p["points"]]).close()
-        # center() 는 작업 평면 원점을 옮겨 회전축까지 움직이므로 pushPoints 로 단면만 옮긴다
-        w = cq.Workplane("XY").pushPoints([tuple(p["center"])])
-        if p["type"] == "slot":  # slot2D 길이 = 끝에서 끝 (= 반원 중심 거리 + 폭)
-            return w.slot2D(p["length"] + p["width"], p["width"], p["angle"])
-        return w.rect(p["width"], p["height"]) if p["type"] == "rectangle" else w.circle(p["diameter"] / 2)
+        return profile_workplane(p)
 
     wp = profile_wp()
     if isinstance(obj, RevolveObject):
@@ -236,12 +257,15 @@ def loft_solid(obj: LoftObject, index: dict[str, CadObject], sketches: dict[str,
         if p is None or m is None:
             raise GeometryError(f"'{obj.name}': 단면 {s.sketch}·{s.profile} 을(를) 찾을 수 없습니다")
         profs.append((p, m))
-    n = loft_segments([p for p, _ in profs], HELIX_TOLERANCE)
-    rings = []
-    for p, m in profs:
-        pts = np.array([[u, v, 0.0, 1.0] for u, v in section_points(p, n)])
-        rings.append([tuple(q[:3]) for q in (m @ pts.T).T])
-    return _ring_solid(rings, obj.name)
+    # 정확한 단면 곡선(원·호)을 직선 면으로 잇는다 — 브라우저 정밀 엔진 thruSections 와 같음
+    wires = [_rigid(profile_wire(p), m) for p, m in profs]
+    try:
+        solid = cq.Solid.makeLoft(wires, ruled=True)
+    except Exception as e:
+        raise GeometryError(f"'{obj.name}': 단면을 이을 수 없습니다 (단면이 겹치거나 꼬였습니다)") from e
+    if solid.Volume() < 0:
+        solid = cq.Shape.cast(solid.wrapped.Reversed())
+    return solid
 
 
 def sweep_solid(obj: SweepObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
@@ -259,9 +283,47 @@ def sweep_solid(obj: SweepObject, index: dict[str, CadObject], sketches: dict[st
     m = sketch_local_matrix(model, obj.id, obj.sweep.pathSketch)  # type: ignore[arg-type]
     if m is None:
         raise GeometryError(f"'{obj.name}': 경로 스케치의 평면을 찾을 수 없습니다")
-    path3 = [tuple((m @ np.array([u, v, 0.0, 1.0]))[:3]) for u, v in path]
+    # 정확한 스윕 (브라우저 정밀 엔진 pipeSweep 과 같은 배치): 경로 = 직선 + 정확한 원호, B(경로 평면 법선) 고정, 꺾인 곳 마이터
+    ent = next(e for e in pk.entities if e.id == obj.sweep.path)
+    segs = corner_segments(ent.points, ent.corners, False) if ent.type == "path" else [("line", tuple(ent.points[0]), tuple(ent.points[1]))]
+    edges = []
+    for sg in segs:
+        a, b2 = cq.Vector(*sg[1], 0), cq.Vector(*sg[2], 0)
+        edges.append(cq.Edge.makeLine(a, b2) if sg[0] == "line" else cq.Edge.makeThreePointArc(a, cq.Vector(*sg[7], 0), b2))
+    spine = _rigid(cq.Wire.assembleEdges(edges), m)
+    s0 = segs[0]
+    if s0[0] == "line":
+        t2 = (s0[2][0] - s0[1][0], s0[2][1] - s0[1][1])
+    else:
+        r = (s0[1][0] - s0[3][0], s0[1][1] - s0[3][1])
+        t2 = (-r[1], r[0]) if s0[5] else (r[1], -r[0])
+    p0 = (m @ np.array([s0[1][0], s0[1][1], 0.0, 1.0]))[:3]
+    t0 = m[:3, :3] @ np.array([t2[0], t2[1], 0.0])
+    t0 = t0 / np.linalg.norm(t0)
     b = m[:3, 2] / np.linalg.norm(m[:3, 2])
-    return _ring_solid(sweep_rings(prof, path3, tuple(b)), obj.name)
+    n0 = np.cross(b, t0)
+    (cx, cy), _, _ = section_bounds(p)
+    place = np.eye(4)
+    place[:3, 0], place[:3, 1], place[:3, 2], place[:3, 3] = n0, b, t0, p0
+    place = place @ np.array([[1, 0, 0, -cx], [0, 1, 0, -cy], [0, 0, 1, 0], [0, 0, 0, 1]], float)
+    profile = _rigid(profile_wire(p), place)
+    # cq.Solid.sweep 는 이 경우 잘못된 솔리드를 만든다 (실험으로 확인) → OCCT 를 직접 (브라우저 pipeSweep 과 같은 호출)
+    try:
+        builder = BRepOffsetAPI_MakePipeShell(spine.wrapped)
+        builder.SetMode(gp_Dir(*b))
+        builder.SetTransitionMode(BRepBuilderAPI_RightCorner)
+        builder.Add(profile.wrapped, False, False)
+        builder.Build()
+        if not builder.IsDone() or not builder.MakeSolid():
+            raise RuntimeError("pipe")
+        solid = cq.Shape.cast(builder.Shape())
+    except Exception as e:
+        raise GeometryError(f"'{obj.name}': 스윕 결과 형상을 만들 수 없습니다 (경로가 자기 자신과 겹치거나 단면이 꼬였습니다)") from e
+    if not solid.isValid():
+        raise GeometryError(f"'{obj.name}': 스윕 결과 형상이 올바르지 않습니다")
+    if solid.Volume() < 0:
+        solid = cq.Shape.cast(solid.wrapped.Reversed())
+    return solid
 
 
 def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str, Sketch] | None = None) -> cq.Shape:
