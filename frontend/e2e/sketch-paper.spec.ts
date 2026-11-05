@@ -212,3 +212,63 @@ test('스케치 대칭 복사·직선 패턴 (속성 패널), 실행 취소 1번
   await page.keyboard.press('Control+z'); // 패턴 전체가 한 번에
   await expect.poll(centers).toEqual([[15, 5], [-15, 5]]);
 });
+
+test('잘라내기·연장: 사각형을 지나는 경로의 가운데 조각 지우기 → 끝을 원까지 늘이기', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-design').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-start-sketch').click();
+  await page.locator('[data-plane="XY"]').click();
+  await page.getByRole('tab', { name: '스케치' }).click();
+  await page.waitForTimeout(500);
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  const drag = async (from: [number, number], to: [number, number]) => {
+    const a = await at(...from);
+    const b = await at(...to);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    await page.mouse.up();
+  };
+  const click = async (x: number, y: number) => {
+    const p = await at(x, y);
+    await page.mouse.click(p.x, p.y);
+  };
+  await page.getByRole('button', { name: /^사각형/ }).click();
+  await drag([-10, -5], [10, 5]);
+  await page.getByRole('button', { name: /^원/ }).first().click();
+  await drag([30, 8], [35, 8]); // 지름 10 원, 중심 (30, 8) — x = 25..35
+  await page.getByRole('button', { name: /^경로/ }).click();
+  await click(-20, 8.3);
+  await click(20, 8.3);
+  await page.keyboard.press('Enter');
+  const paths = async () =>
+    (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities.filter((e) => e.type === 'path').length;
+  expect(await paths()).toBe(1);
+  // 경로가 사각형 윗변(y = 5) 위에 있으니, 대신 사각형 안쪽을 지나는 세로 경로로 확인
+  await click(0, -20);
+  await click(0, 20);
+  await page.keyboard.press('Enter');
+  expect(await paths()).toBe(2);
+
+  await page.getByTestId('cmd-trim').click();
+  const mid = await at(0.2, 0);
+  await page.mouse.move(mid.x, mid.y, { steps: 3 });
+  await expect(page.locator('[data-testid="viewport-hint"]')).toContainText('지울 조각');
+  await page.mouse.click(mid.x, mid.y); // 사각형 안 조각 (y = −5..5) 지움 → 세로 경로가 두 조각
+  await expect.poll(paths).toBe(3);
+
+  await page.getByTestId('cmd-extend').click();
+  await click(20, 8.3); // 가로 경로 오른쪽 끝 → 원 왼쪽(x = 25)까지
+  const rightEnd = async () => {
+    const e = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities;
+    const horizontal = e.find((x) => x.type === 'path' && x.points!.every((p) => Math.abs(p[1]! - 8.3) < 0.5))!;
+    return Math.max(...horizontal.points!.map((p) => p[0]!));
+  };
+  await expect.poll(rightEnd).toBeCloseTo(25 + 5 - Math.sqrt(25 - 0.3 * 0.3) , 1); // 원 왼쪽 가장자리 (y = 8.3 높이)
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z'); // 연장 취소
+  await page.keyboard.press('Control+z'); // 잘라내기 취소
+  await expect.poll(paths).toBe(2);
+});

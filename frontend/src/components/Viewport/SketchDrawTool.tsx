@@ -224,7 +224,7 @@ export function SketchDrawTool() {
     };
   }, [tool]);
 
-  if (!tool) return null;
+  if (!tool || tool === 'trim' || tool === 'extend') return null;
 
   const step = drawStep(view);
   const tol = view.mmPerPx * SNAP_PX;

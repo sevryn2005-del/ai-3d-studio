@@ -57,7 +57,7 @@ export function Toolbar() {
   const workspace = useSceneStore((s) => s.history.present.model.workspace);
   const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
-  const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline') => editor.setDrawTool(drawTool === t ? null : t);
+  const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline' | 'trim' | 'extend') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
     <header className="toolbar">
@@ -170,6 +170,9 @@ export function Toolbar() {
             <Cmd icon="arc" label="호" title="호 그리기: 시작점 → 끝점 → 호가 지날 점 (경로 + 호 변으로 만들어져 스윕·리브에 쓰고, 볼록 정도를 고칠 수 있음)" pressed={drawTool === 'arc'} onClick={() => draw('arc')} testId="cmd-arc" />
             <Cmd icon="spline" label="스플라인" title="스플라인 그리기: 클릭한 점들을 매끈하게 지나는 곡선 — 첫 점을 다시 누르면 닫힌 곡선(돌출용), Enter 면 열린 곡선(스윕 경로)" pressed={drawTool === 'spline'} onClick={() => draw('spline')} testId="cmd-spline" />
             <Cmd icon="path" label="경로" title="경로(열린 선) 그리기: 클릭으로 점, 마지막 점을 다시 클릭하거나 Enter 로 끝 — 스윕·리브 중심선" pressed={drawTool === 'path'} onClick={() => draw('path')} testId="cmd-path" />
+            <span className="sep" />
+            <Cmd icon="trim" label="잘라내기" title="잘라내기: 구성선·경로에서 누른 조각(교차점 사이)을 지웁니다" pressed={drawTool === 'trim'} onClick={() => draw('trim')} testId="cmd-trim" />
+            <Cmd icon="extend" label="연장" title="연장: 구성선·경로 끝을 눌러 가장 가까운 다른 요소까지 늘입니다" pressed={drawTool === 'extend'} onClick={() => draw('extend')} testId="cmd-extend" />
             <span className="sep" />
             <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
           </>
