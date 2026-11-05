@@ -178,7 +178,32 @@ def topology(payload: dict[str, Any]) -> dict[str, Any]:
     return {"faces": faces, "edges": edges}
 
 
+def drawing(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """{model, views} → 도면 보기 (보이는 최상위 객체, 숨김·억제 제외) — 브라우저 occtDrawing 과 같은 내용"""
+    from app.cad.drawing import VIEWS, project
+
+    model = ModelDefinition.model_validate(payload["model"])
+    index = {o.id: o for o in model.objects}
+    sketches = {sk.id: sk for sk in model.sketches}
+    views = [v for v in payload.get("views", []) if v in VIEWS]
+    shapes = []
+    for oid in active_top_level_ids(model):
+        obj = index[oid]
+        if obj.hidden:
+            continue
+        try:
+            shapes.append(apply_transform(build_solid(obj, index, sketches), obj.transform).wrapped)
+        except GeometryError:
+            raise
+        except Exception as e:
+            raise GeometryError(f"'{obj.name}' 형상을 만들 수 없습니다") from e
+    if not shapes:
+        raise GeometryError("도면에 그릴 객체가 없습니다")
+    return project(shapes, views)
+
+
 JOBS: dict[str, Callable[[Any], Any]] = {
+    "drawing": drawing,
     "topology": topology,
     "interference": interference,
     "evaluate": evaluate,

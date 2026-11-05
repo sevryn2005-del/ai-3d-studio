@@ -57,6 +57,24 @@ export const TopologySchema = z.object({
 export const topologyModel = (model: ModelDefinition, id: string, signal?: AbortSignal) =>
   apiPost('/model/topology', { model, id }, TopologySchema, signal, 70_000);
 
+const P2Schema = z.tuple([z.number(), z.number()]);
+export const DrawingSchema = z.object({
+  ok: z.boolean(),
+  issues: z.array(IssueSchema),
+  views: z.array(
+    z.object({
+      name: z.enum(['front', 'top', 'right', 'iso']),
+      visible: z.array(z.array(z.number())),
+      hidden: z.array(z.array(z.number())),
+      circles: z.array(z.object({ center: P2Schema, radius: z.number(), full: z.boolean(), visible: z.boolean() })),
+      bounds: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    }),
+  ),
+});
+/** 도면 투상 (숨은선 제거) */
+export const drawingModel = (model: ModelDefinition, views: readonly string[], signal?: AbortSignal) =>
+  apiPost('/model/drawing', { model, views }, DrawingSchema, signal, 70_000);
+
 /** 간섭 검사 (조립품): 서로 파고드는 최상위 객체 쌍 */
 export const interferenceModel = (model: ModelDefinition, signal?: AbortSignal) =>
   apiPost('/model/interference', model, InterferenceSchema, signal, 70_000);

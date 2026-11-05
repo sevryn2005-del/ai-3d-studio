@@ -642,6 +642,51 @@ export const ASSEMBLY_COMMANDS: unknown[] = [
   { type: 'add_mate', id: 'm_picked', mate: 'parallel', refs: [{ object: 'base', kind: 'face', origin: [0, 0, 10], dir: [0, 0, 1] }, 'pin.axis'] },
 ];
 
+/**
+ * 도면 투상 (숨은선 제거) 공유 픽스처: 브라우저 OCCT(occtDrawing.test.ts)·서버(test_drawing.py)가 같은 값을 낸다.
+ * 보기마다 보이는 선·숨은선 길이 합(mm, 원은 π/48 표본), 보이는 선 범위, 정면으로 보이는 원 반지름.
+ */
+type DrawingExpect = { visible?: number; hidden?: number; bounds: number[]; circles?: number[] };
+export const DRAWING_CASES: Record<string, { commands: unknown[]; views: Record<string, DrawingExpect> }> = {
+  'block-blind-hole': {
+    // 40×20×10 블록 윗면에 지름 6 깊이 5 막힌 구멍: 정면·우측면 숨은선 = 구멍 양옆 5 × 2 + 바닥 6
+    commands: [
+      { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 },
+      { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 5 },
+    ],
+    views: {
+      front: { visible: 100, hidden: 16, bounds: [-20, 0, 20, 10] },
+      top: { visible: 120 + 6 * Math.PI, hidden: 0, bounds: [-20, -10, 20, 10], circles: [3] },
+      right: { visible: 60, hidden: 16, bounds: [-10, 0, 10, 10] },
+      // 등각: 오른쪽 = (x + y)/√2, 위 = (−x + y + 2z)/√6
+      iso: { bounds: [-30 / Math.SQRT2, -30 / Math.sqrt(6), 30 / Math.SQRT2, 50 / Math.sqrt(6)] },
+    },
+  },
+  'cylinder-outline': {
+    // 원통 R5 × 20: 정면 = 윤곽선(실루엣) 둘 + 위·아래 원이 선으로, 평면 = 원 하나 (아래 원은 겹쳐서 지워짐)
+    commands: [{ type: 'create_cylinder', id: 'c', radius: 5, height: 20 }],
+    views: {
+      front: { visible: 60, hidden: 0, bounds: [-5, 0, 5, 20] },
+      top: { visible: 10 * Math.PI, hidden: 0, bounds: [-5, -5, 5, 5], circles: [5] },
+    },
+  },
+  'object-behind-object': {
+    // 앞 블록 20³ 뒤에 블록 10³: 정면에서 뒤 블록은 숨은선 (바닥선은 앞 블록 바닥과 겹쳐 지워짐 → 10 × 3)
+    commands: [
+      { type: 'create_box', id: 'a', width: 20, depth: 20, height: 20 },
+      { type: 'create_box', id: 'b', width: 10, depth: 10, height: 10, position: [0, 30, 0] },
+    ],
+    views: {
+      front: { visible: 80, hidden: 30, bounds: [-10, 0, 10, 20] },
+      top: { visible: 80 + 40, hidden: 0, bounds: [-10, -10, 10, 35] },
+    },
+  },
+};
+
+export function buildDrawingFixture() {
+  return Object.fromEntries(Object.entries(DRAWING_CASES).map(([name, c]) => [name, { views: c.views, model: buildSketchPlateFixture(c.commands) }]));
+}
+
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */
 export function generateSchemas(samples: FixtureSamples): Record<string, string> {
   return {
@@ -654,6 +699,7 @@ export function generateSchemas(samples: FixtureSamples): Record<string, string>
     'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
     'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(samples), null, 2) + '\n',
     'examples/model-assembly.json': JSON.stringify(buildSketchPlateFixture(ASSEMBLY_COMMANDS), null, 2) + '\n',
+    'examples/drawing-cases.json': JSON.stringify(buildDrawingFixture(), null, 2) + '\n',
     'cad-command.schema.json': toSchema(
       CadCommandSchema,
       'cad-command.schema.json',

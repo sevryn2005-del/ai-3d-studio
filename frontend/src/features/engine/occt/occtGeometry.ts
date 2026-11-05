@@ -914,23 +914,28 @@ export function occtLocalProps(oc: OC, model: ModelDefinition, obj: CadObject): 
 }
 
 /** 최상위 객체를 월드 좌표로 STEP(AP214) 파일로 — 서버 exporter.to_step 과 같은 내용 */
+/** 보이는(억제·숨김 제외 여부는 hidden 인자) 최상위 객체의 월드 B-rep 형상. 형상은 gc 가 해제한다 */
+export function occtWorldShapes(oc: OC, model: ModelDefinition, gc: Gc, skipHidden = false): { id: string; name: string; shape: TopoDS_Shape }[] {
+  const c = ctxOf(oc, model, gc);
+  return topLevelObjects(model)
+    .filter((o) => !isSuppressed(o, c.index) && !(skipHidden && o.hidden))
+    .map((o) => {
+      try {
+        return { id: o.id, name: o.name, shape: transformed(c, localShape(c, o), toMatrix(o.transform), o.name) };
+      } catch (e) {
+        throw asGeometryError(e, o.name);
+      }
+    });
+}
+
 export function occtStep(oc: OC, model: ModelDefinition): Uint8Array {
   const gc = new Gc();
   const path = `/export-${Date.now()}.step`;
   try {
-    const c = ctxOf(oc, model, gc);
-    const objs = topLevelObjects(model).filter((o) => !isSuppressed(o, c.index));
-    if (objs.length === 0) throw new GeometryError('내보낼 객체가 없습니다');
+    const shapes = occtWorldShapes(oc, model, gc);
+    if (shapes.length === 0) throw new GeometryError('내보낼 객체가 없습니다');
     const w = gc.k(new oc.STEPControl_Writer());
-    for (const o of objs) {
-      let s: TopoDS_Shape;
-      try {
-        s = transformed(c, localShape(c, o), toMatrix(o.transform), o.name);
-      } catch (e) {
-        throw asGeometryError(e, o.name);
-      }
-      w.Transfer(s, 'STEPControl_AsIs' as never, true, gc.k(new oc.Message_ProgressRange()));
-    }
+    for (const { shape } of shapes) w.Transfer(shape, 'STEPControl_AsIs' as never, true, gc.k(new oc.Message_ProgressRange()));
     if ((w.Write(path) as unknown as string) !== 'IFSelect_RetDone') throw new GeometryError('STEP 파일을 쓸 수 없습니다');
     return oc.FS.readFile(path) as Uint8Array;
   } finally {

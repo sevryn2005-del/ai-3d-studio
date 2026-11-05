@@ -1,0 +1,254 @@
+{
+  "block-blind-hole": {
+    "views": {
+      "front": {
+        "visible": 100,
+        "hidden": 16,
+        "bounds": [
+          -20,
+          0,
+          20,
+          10
+        ]
+      },
+      "top": {
+        "visible": 138.84955592153875,
+        "hidden": 0,
+        "bounds": [
+          -20,
+          -10,
+          20,
+          10
+        ],
+        "circles": [
+          3
+        ]
+      },
+      "right": {
+        "visible": 60,
+        "hidden": 16,
+        "bounds": [
+          -10,
+          0,
+          10,
+          10
+        ]
+      },
+      "iso": {
+        "bounds": [
+          -21.213203435596423,
+          -12.247448713915892,
+          21.213203435596423,
+          20.412414523193153
+        ]
+      }
+    },
+    "model": {
+      "schemaVersion": 13,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "b",
+          "name": "박스 1",
+          "params": {
+            "width": 40,
+            "depth": 20,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "h",
+          "name": "구멍 Ø6",
+          "kind": "hole",
+          "params": {
+            "diameter": 6,
+            "depth": 5,
+            "cboreDiameter": 0,
+            "cboreDepth": 0,
+            "csinkDiameter": 0
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              5
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "cut_1",
+          "name": "박스 1 구멍",
+          "kind": "boolean",
+          "boolean": {
+            "operation": "cut",
+            "base": "b",
+            "tools": [
+              "h"
+            ]
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "cylinder-outline": {
+    "views": {
+      "front": {
+        "visible": 60,
+        "hidden": 0,
+        "bounds": [
+          -5,
+          0,
+          5,
+          20
+        ]
+      },
+      "top": {
+        "visible": 31.41592653589793,
+        "hidden": 0,
+        "bounds": [
+          -5,
+          -5,
+          5,
+          5
+        ],
+        "circles": [
+          5
+        ]
+      }
+    },
+    "model": {
+      "schemaVersion": 13,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "c",
+          "name": "원통 1",
+          "params": {
+            "radius": 5,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "cylinder"
+        }
+      ]
+    }
+  },
+  "object-behind-object": {
+    "views": {
+      "front": {
+        "visible": 80,
+        "hidden": 30,
+        "bounds": [
+          -10,
+          0,
+          10,
+          20
+        ]
+      },
+      "top": {
+        "visible": 120,
+        "hidden": 0,
+        "bounds": [
+          -10,
+          -10,
+          10,
+          35
+        ]
+      }
+    },
+    "model": {
+      "schemaVersion": 13,
+      "units": "mm",
+      "sketches": [],
+      "objects": [
+        {
+          "id": "a",
+          "name": "박스 1",
+          "params": {
+            "width": 20,
+            "depth": 20,
+            "height": 20
+          },
+          "transform": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        },
+        {
+          "id": "b",
+          "name": "박스 2",
+          "params": {
+            "width": 10,
+            "depth": 10,
+            "height": 10
+          },
+          "transform": {
+            "position": [
+              0,
+              30,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "kind": "box"
+        }
+      ]
+    }
+  }
+}

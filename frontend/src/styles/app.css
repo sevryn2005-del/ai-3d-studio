@@ -366,3 +366,23 @@ label.check.small { font-size: 12px; }
 .measure-entity-panel { left: auto; right: 10px; top: 110px; }
 .bulge-input { width: 52px; }
 .corner-vertices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+
+/* 도면 창: 뷰포트를 덮는 종이 미리보기 + 왼쪽 옵션 */
+.drawing-window { position: absolute; inset: 0; z-index: 20; display: flex; background: var(--bg); }
+.drawing-options { width: 240px; flex: none; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); border-right: 1px solid var(--border); overflow: auto; }
+.drawing-field { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.drawing-field span { color: var(--muted); font-size: 12px; }
+.drawing-options .check { display: flex; align-items: center; gap: 6px; }
+.drawing-views { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.drawing-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.drawing-options .warn { color: #e5a03b; margin: 0; }
+.drawing-paper { flex: 1; min-width: 0; overflow: auto; padding: 16px; display: flex; align-items: flex-start; justify-content: center; }
+.drawing-paper[data-busy='true'] .drawing-sheet { opacity: 0.6; }
+.drawing-sheet { width: 100%; max-width: 1100px; box-shadow: 0 2px 16px rgba(0, 0, 0, 0.45); background: #fff; line-height: 0; }
+.drawing-sheet svg { width: 100%; height: auto; display: block; }
+.drawing-message { color: var(--muted); }
+@media print {
+  body * { visibility: hidden !important; }
+  .drawing-print, .drawing-print * { visibility: visible !important; }
+  .drawing-print { position: fixed; left: 0; top: 0; box-shadow: none; max-width: none; width: auto; }
+}

@@ -54,6 +54,12 @@ ModelDefinition → 파일. 모든 최상위 객체를 월드 좌표로 배치. 
 | step | `model/step` | mm | 정확한 B-rep (곡면 근사 없음) |
 | glb | `model/gltf-binary` | **m, Y-up** (glTF 규칙) | 노드 이름 = 객체 이름 |
 
+### `POST /api/model/drawing`
+도면 투상 (숨은선 제거, OCCT HLR — 브라우저 정밀 엔진 `occtDrawing.ts` 와 같은 규칙).
+요청: `{ "model": ModelDefinition, "views": ["front", "top", "right", "iso"] }`
+응답: `{ "ok": true, "issues": [], "views": [{ "name", "visible": [[x0, y0, x1, y1, …]], "hidden": [...], "circles": [{ "center", "radius", "full", "visible" }], "bounds": [xmin, ymin, xmax, ymax] }] }`
+좌표는 보기 평면 mm (x 오른쪽, y 위). 숨김·억제 객체는 빠지고, 숨은선은 보이는 선·다른 숨은선과 겹친 부분을 지운다.
+
 ## 로컬 서버 보호
 모든 요청: Host 가 루프백 이름(`127.0.0.1`, `localhost`, `::1`)이 아니면 `421`, Origin 이 다른 사이트면 `403`.
 `/api` 의 POST 는 `Content-Type: application/json` 만 허용 (`415`).

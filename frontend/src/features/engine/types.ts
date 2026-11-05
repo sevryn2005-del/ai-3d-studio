@@ -45,6 +45,8 @@ export interface CadEngine {
   interference(model: ModelDefinition, signal?: AbortSignal): Promise<InterferencePair[]>;
   /** 화면 선택용 위상 (형식 v12): 객체 하나의 B-rep 면·모서리 (객체 변환 적용 = 부모 좌표계). 계산 실패는 EngineError */
   topology(model: ModelDefinition, objectId: string, signal?: AbortSignal): Promise<Topology>;
+  /** 도면 투상 (숨은선 제거): 보이는 최상위 객체를 보기마다 투상한 선. 계산 실패는 EngineError */
+  drawing(model: ModelDefinition, views: readonly DrawingViewName[], signal?: AbortSignal): Promise<DrawingView[]>;
 }
 
 type V3 = [number, number, number];
@@ -82,3 +84,26 @@ export interface InterferencePair {
 export const INTERFERENCE_MIN_VOLUME = 1e-3;
 
 export class EngineError extends Error {}
+
+/**
+ * 도면 보기 (features/drawing/views.ts 가 방향 정의 — 서버 app/cad/drawing.py 와 같은 표).
+ * 3각법(KS·ISO E): 정면 = −Y 쪽에서, 평면 = 위(+Z)에서, 우측면 = +X 쪽에서, 등각 = (1, −1, 1) 쪽에서 본다.
+ */
+export type DrawingViewName = 'front' | 'top' | 'right' | 'iso';
+/** 투상한 원 (정면으로 보이는 원·원호: 지름 치수용). 보기 평면 좌표 mm */
+export interface DrawingCircle {
+  center: [number, number];
+  radius: number;
+  /** 온전한 원 (호가 아니라) */
+  full: boolean;
+  visible: boolean;
+}
+/** 보기 하나: 꺾은선 [x0, y0, x1, y1, …] (보기 평면 좌표 mm, x 오른쪽 · y 위). 보이는 선·숨은선 */
+export interface DrawingView {
+  name: DrawingViewName;
+  visible: number[][];
+  hidden: number[][];
+  circles: DrawingCircle[];
+  /** 보이는 선의 범위 [xmin, ymin, xmax, ymax] (선이 없으면 0) */
+  bounds: [number, number, number, number];
+}

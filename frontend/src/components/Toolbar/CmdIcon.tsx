@@ -24,6 +24,7 @@ const PATHS: Record<string, string> = {
   mate: 'M3 10h8v8H3zM13 6h8v8h-8zM11 14h2',
   interference: 'M8 8a6 6 0 1 0 .01 0M16 8a6 6 0 1 0 .01 0',
   bom: 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5',
+  drawing: 'M3 4h18v16H3zM6 7h6v4H6zM6 13h6v4H6zM14 13h4v4h-4zM14 7l4 4',
   sweep: 'M4 18c4 0 6-12 16-12M2 16h4v4H2zM18 4h4v4h-4z',
   rib: 'M3 20h18M8 20V8h2v12M14 20V8h2v12M8 8h8',
   path: 'M3 18l6-8 5 4 7-9M3 18h.01M21 5h.01',

@@ -15,6 +15,7 @@ import { MouseScheme } from './MouseScheme';
 import { ConfirmationCorner, PendingPreview, PlanePicker } from './FeatureFlow';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { AssemblyPanels } from './AssemblyPanels';
+import { DrawingPanel } from '../Drawing/DrawingPanel';
 import { PickBar, PickOverlay } from './PickOverlay';
 import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
@@ -98,6 +99,7 @@ export function Viewport() {
       <AssemblyPanels />
       <PickBar />
       <MeasureEntityPanel />
+      <DrawingPanel />
       <div className="viewport-hint" data-testid="viewport-hint">
         {drawTool
           ? `${drawTool === 'polygon' ? '클릭: 다각형 꼭짓점 (첫 점 클릭·Enter 로 닫기)' : drawTool === 'path' ? '클릭: 경로 점 (마지막 점 다시 클릭·Enter 로 끝)' : `드래그: ${drawTool === 'rectangle' ? '사각형 (모서리 → 모서리)' : '원 (중심 → 반지름)'} 그리기`} · ${navHint(mouseScheme, true)} · Esc: 그리기 끝내기`

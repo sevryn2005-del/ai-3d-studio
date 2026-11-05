@@ -172,3 +172,29 @@ def model_topology(
     except CadEngineError as e:
         return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()]}
     return {"ok": True, "issues": [], **topo}
+
+
+DRAWING_VIEWS = ("front", "top", "right", "iso")
+
+
+@router.post("/model/drawing")
+def model_drawing(
+    pool: Annotated[WorkerPool, Depends(get_cad_pool)],
+    payload: Any = Body(...),
+) -> dict[str, Any]:
+    """도면 투상 (숨은선 제거): {model, views} → {ok, views: [{name, visible, hidden, circles, bounds}]}"""
+    try:
+        model = ModelDefinition.model_validate(payload.get("model") if isinstance(payload, dict) else None)
+    except ValidationError as e:
+        return {"ok": False, "issues": [i.model_dump() for i in issues_from_validation_error(e)], "views": []}
+    views = payload.get("views") or list(DRAWING_VIEWS)
+    if not isinstance(views, list) or any(v not in DRAWING_VIEWS for v in views) or len(views) > len(DRAWING_VIEWS):
+        return {"ok": False, "issues": [Issue(path="views", message="보기는 front·top·right·iso 중에서 고릅니다").model_dump()], "views": []}
+    issues = [i for i in check_model(model) if i.severity == "error"]
+    if issues:
+        return {"ok": False, "issues": [i.model_dump() for i in issues], "views": []}
+    try:
+        out = pool.run("drawing", {"model": model.model_dump(mode="json"), "views": views}, timeout=INTERFERENCE_TIMEOUT_S)
+    except CadEngineError as e:
+        return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()], "views": []}
+    return {"ok": True, "issues": [], "views": out}

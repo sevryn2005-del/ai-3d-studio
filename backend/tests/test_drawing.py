@@ -1,0 +1,63 @@
+"""도면 투상 (숨은선 제거): 공유 픽스처 drawing-cases.json — 브라우저 occtDrawing.test.ts 와 같은 값."""
+
+from __future__ import annotations
+
+import copy
+import math
+
+import pytest
+
+from app.cad.drawing import clean_hidden, dedupe_circles
+from app.cad.jobs import drawing
+
+from .conftest import load_json
+
+CASES = load_json("examples/drawing-cases.json")
+
+
+def length(lines) -> float:
+    return sum(math.hypot(line[i] - line[i - 2], line[i + 1] - line[i - 1]) for line in lines for i in range(2, len(line) - 1, 2))
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_shared_drawing_cases(name):
+    case = CASES[name]
+    views = drawing({"model": case["model"], "views": list(case["views"])})
+    for v in views:
+        e = case["views"][v["name"]]
+        if "visible" in e:
+            assert length(v["visible"]) == pytest.approx(e["visible"], abs=0.05)
+        if "hidden" in e:
+            assert length(v["hidden"]) == pytest.approx(e["hidden"], abs=0.05)
+        assert v["bounds"] == pytest.approx(e["bounds"], abs=1e-4)
+        if "circles" in e:
+            assert [c["radius"] for c in v["circles"] if c["full"] and c["visible"]] == e["circles"]
+
+
+def test_hidden_object_skipped_and_empty_rejected():
+    model = copy.deepcopy(CASES["object-behind-object"]["model"])
+    for o in model["objects"]:
+        if o["id"] == "b":
+            o["hidden"] = True
+    assert length(drawing({"model": model, "views": ["front"]})[0]["hidden"]) == pytest.approx(0)
+    model["objects"] = []
+    with pytest.raises(Exception, match="그릴 객체가 없습니다"):
+        drawing({"model": model, "views": ["front"]})
+
+
+def test_clean_hidden_rules():
+    visible = [[0, 0, 10, 0]]
+    # 보이는 선과 겹친 부분은 지우고, 같은 숨은선은 한 번만
+    assert clean_hidden(visible, [[5, 0, 15, 0], [5, 0, 15, 0]]) == [[10, 0, 15, 0]]
+    # 다른 직선 위는 그대로, 꺾은선은 이어진 채로
+    assert clean_hidden(visible, [[0, 1, 5, 1, 5, 6]]) == [[0, 1, 5, 1, 5, 6]]
+    half = {"center": [0, 0], "radius": 2, "full": False, "visible": False}
+    assert dedupe_circles([half, {**half, "visible": True}]) == [{**half, "full": True, "visible": True}]
+
+
+def test_api_drawing(client):
+    case = CASES["block-blind-hole"]
+    r = client.post("/api/model/drawing", json={"model": case["model"], "views": ["top"]}).json()
+    assert r["ok"] and [v["name"] for v in r["views"]] == ["top"]
+    bad = client.post("/api/model/drawing", json={"model": case["model"], "views": ["side"]}).json()
+    assert not bad["ok"] and "front" in bad["issues"][0]["message"]

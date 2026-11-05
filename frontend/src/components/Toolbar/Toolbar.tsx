@@ -6,6 +6,7 @@ import { CmdIcon, type IconName } from './CmdIcon';
 import { ExportMenu } from './ExportMenu';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { startMeasurePick, startSketchOnFace } from '../Viewport/PickFlows';
+import { useDrawingStore } from '../Drawing/DrawingPanel';
 import {
   importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
@@ -52,6 +53,7 @@ export function Toolbar() {
   const projection = useEditorStore((s) => s.projection);
   const editor = useEditorStore.getState();
   const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
+  const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
   const draw = (t: 'rectangle' | 'circle' | 'polygon' | 'path') => editor.setDrawTool(drawTool === t ? null : t);
 
@@ -161,6 +163,12 @@ export function Toolbar() {
             <Cmd icon="bom" label="부품표" title="부품 목록·수량 (같은 형상은 묶어 셈), CSV 저장" onClick={() => assembly('bom')} testId="cmd-bom" pressed={assemblyPanel === 'bom'} />
           </>
         )}
+        {tab === 'drawing' && (
+          <>
+            <Cmd icon="drawing" label="도면 만들기" title="현재 모델로 3각법 도면(정면·평면·우측면·등각) — 숨은선·자동 치수·표제란, SVG·DXF·인쇄(PDF)" onClick={() => useDrawingStore.getState().setOpen(true)} testId="cmd-drawing" pressed={drawingOpen} />
+            <span className="cmd-hint">도면은 모델에서 자동으로 만들어지고, 모델을 고치면 따라 바뀝니다</span>
+          </>
+        )}
         {tab === 'view' && (
           <>
             {VIEWS.map((v) => (
@@ -193,11 +201,12 @@ const DISPLAY_MODES = [
   { id: 'xray', label: '투명', icon: 'xray', title: '반투명 (안쪽 구조 보기, 블렌더 X-ray)' },
 ] as const;
 
-type Tab = 'feature' | 'sketch' | 'assembly' | 'view';
+type Tab = 'feature' | 'sketch' | 'assembly' | 'drawing' | 'view';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'feature', label: '피처' },
   { id: 'sketch', label: '스케치' },
   { id: 'assembly', label: '조립품' },
+  { id: 'drawing', label: '도면' },
   { id: 'view', label: '보기' },
 ];
 const VIEWS = [

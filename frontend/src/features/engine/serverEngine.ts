@@ -1,5 +1,5 @@
 /** 서버 CAD 엔진: 기존 FastAPI + CadQuery 백엔드를 그대로 사용한다. */
-import { evaluateModel, exportModel, interferenceModel, topologyModel } from '../../api/backend';
+import { drawingModel, evaluateModel, exportModel, interferenceModel, topologyModel } from '../../api/backend';
 import { fromBase64 } from '../../cad/meshData';
 import { EngineError } from './types';
 import { decodeRenderMeshArrays } from '../backend/renderMesh';
@@ -30,6 +30,12 @@ export const serverEngine: CadEngine = {
     const r = await interferenceModel(model, signal);
     if (!r.ok) throw new EngineError(r.issues[0]?.message ?? '간섭 검사를 할 수 없습니다');
     return r.pairs;
+  },
+
+  async drawing(model, views, signal) {
+    const r = await drawingModel(model, views, signal);
+    if (!r.ok) throw new EngineError(r.issues[0]?.message ?? '도면을 만들 수 없습니다');
+    return r.views;
   },
 
   async topology(model, id, signal) {
