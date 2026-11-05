@@ -1366,6 +1366,14 @@ class MeshEditFill(Strict):
     verts: Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]
 
 
+class MeshEditBevel(Strict):
+    """Ctrl+B 베벨 (고른 점 사이 선 모따기)"""
+
+    op: Literal["bevel"]
+    verts: Annotated[list[PolyIndex], Field(min_length=2, max_length=MAX_POLY_VERTS)]
+    width: Annotated[float, _num(0.0001, Limits.MAX_DIMENSION)]
+
+
 class MeshEditSetVerts(Strict):
     """점 위치 바꾸기 (스컬프트 한 획)"""
 
@@ -1375,7 +1383,7 @@ class MeshEditSetVerts(Strict):
 
 
 MeshEdit = Annotated[
-    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditSetVerts],
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBevel, MeshEditSetVerts],
     Field(discriminator="op"),
 ]
 

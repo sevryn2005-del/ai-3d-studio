@@ -21,7 +21,7 @@ export interface SculptSettings {
   symmetryX: boolean;
 }
 export type SelectMode = 'vert' | 'edge' | 'face';
-export type ModalKind = 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset';
+export type ModalKind = 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset' | 'bevel';
 export type Axis = 'x' | 'y' | 'z';
 
 export interface ModalState {

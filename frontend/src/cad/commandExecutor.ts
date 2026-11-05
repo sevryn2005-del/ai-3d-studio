@@ -47,6 +47,7 @@ import {
   type PolyMesh,
   type V3,
   deleteElements,
+  edges,
   extrudeFaces,
   fillFace,
   insetFaces,
@@ -57,6 +58,7 @@ import {
   subdivideFaces,
   transformVerts,
 } from './polymesh';
+import { bevelEdges } from './polymeshSelect';
 import { MAX_EVALUATED_FACES, estimateFaces, evaluateModifiers } from './polymeshModifiers';
 import { helixError, helixProfilePoints } from './sections';
 import { profileOf, resolveProfile } from './sketch';
@@ -567,6 +569,12 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       if (new Set(e.verts).size !== e.verts.length) return '같은 점을 두 번 골랐습니다';
       return fillFace(m, e.verts);
+    case 'bevel': {
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      const sel = new Set(e.verts);
+      const r = bevelEdges(m, edges(m).filter(([a, b]) => sel.has(a) && sel.has(b)), e.width);
+      return typeof r === 'string' ? r : r.mesh;
+    }
     case 'set_verts': {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       if (e.positions.length !== e.verts.length) return '점 번호와 좌표 개수가 다릅니다';

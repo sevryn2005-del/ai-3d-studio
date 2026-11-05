@@ -1091,6 +1091,8 @@ export const MeshEditSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('merge'), verts: vertIds.min(2) }),
   /** F: 고른 점들로 면 */
   z.strictObject({ op: z.literal('fill'), verts: vertIds.min(3).max(256) }),
+  /** Ctrl+B 베벨: 고른 점들 사이 선(양 끝이 모두 고른 선)을 width 만큼 모따기 */
+  z.strictObject({ op: z.literal('bevel'), verts: vertIds.min(2), width: z.number().min(0.0001).max(LIMITS.maxDimension) }),
   /** 점 위치 바꾸기 (스컬프트 한 획): 고른 점들을 새 좌표로 (객체 로컬, mm) */
   z.strictObject({
     op: z.literal('set_verts'),

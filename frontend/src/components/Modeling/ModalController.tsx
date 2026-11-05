@@ -6,7 +6,8 @@ import { useSceneStore } from '../../cad/sceneStore';
 import { centroid, extrudeFaces, faceNormal, insetFaces, transformVerts, type V3 } from '../../cad/polymesh';
 import { formatMm } from '../../cad/units';
 import { useModelingStore, type ModelingPreview } from '../../features/modeling/modelingStore';
-import { activeObject, selectedFaceIds } from '../../features/modeling/modelingOps';
+import { activeObject, selectedEdges, selectedFaceIds } from '../../features/modeling/modelingOps';
+import { bevelEdges } from '../../cad/polymeshSelect';
 import {
   AXIS_VEC, dirToWorld, grabDelta, localMatrix, modalLabel, movedTransform, parseTyped, screenAngle, screenScale, toWorld, worldMatrix,
 } from '../../features/modeling/modalMath';
@@ -34,6 +35,7 @@ export function ModalController() {
     const mesh = obj.kind === 'polymesh' ? obj.polymesh : null;
     const sel = st0.selVerts;
     const faces = editing && mesh ? selectedFaceIds(mesh) : [];
+    const edgeSel = editing && mesh ? selectedEdges(mesh) : [];
 
     const pivot: V3 = editing && mesh ? toWorld(centroid(mesh, sel), t) : [...t.position];
     // 화면 → 월드: 피벗을 지나고 화면과 나란한 평면 위의 점
@@ -81,6 +83,16 @@ export function ModalController() {
           objectId: obj.id, mesh: r.mesh, afterSel: r.sel, label: modalLabel('extrude', null, shown ?? `${formatMm(dist)}mm`),
           command: { type: 'mesh_edit', target: obj.id, edit: { op: 'extrude', faces, offset } },
         };
+      } else if (modal.kind === 'bevel' && mesh) {
+        const w = Math.max(0.01, typed ?? round(Math.hypot(...mouseDelta), 0.01));
+        const r = bevelEdges(mesh, edgeSel, w);
+        preview =
+          typeof r === 'string'
+            ? { objectId: obj.id, label: r, command: null }
+            : {
+                objectId: obj.id, mesh: r.mesh, afterSel: r.sel, label: modalLabel('bevel', null, shown ?? `${formatMm(w)}mm`),
+                command: { type: 'mesh_edit', target: obj.id, edit: { op: 'bevel', verts: sel, width: w } },
+              };
       } else if (modal.kind === 'inset' && mesh) {
         const th = Math.max(0.01, typed ?? round(Math.hypot(...mouseDelta), 0.01));
         const r = insetFaces(mesh, faces, th);

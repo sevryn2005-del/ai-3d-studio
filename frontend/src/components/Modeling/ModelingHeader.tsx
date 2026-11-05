@@ -23,7 +23,7 @@ export function ModelingHeader() {
   const editor = useEditorStore.getState();
   const projection = useEditorStore((s) => s.projection);
   const [addOpen, setAddOpen] = useState(false);
-  const modal = (k: 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset') => {
+  const modal = (k: 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset' | 'bevel') => {
     if (canStartModal(k)) st.startModal(k);
   };
 
@@ -78,6 +78,7 @@ export function ModelingHeader() {
           <button onClick={() => modal('extrude')} title="면 돌출 (E)" data-testid="op-extrude">돌출 E</button>
           <button onClick={() => modal('inset')} title="면 인셋 (I)" data-testid="op-inset">인셋 I</button>
           <button onClick={loopCutSelected} title="고른 선을 가로지르는 고리 (Ctrl+R)" data-testid="op-loopcut">루프 컷</button>
+          <button onClick={() => modal('bevel')} title="고른 선 모따기 (Ctrl+B) — 마우스로 폭, 숫자 입력" data-testid="op-bevel">베벨</button>
           <button onClick={subdivideSelected} title="고른 면 세분 (W)">세분</button>
           <button onClick={mergeSelected} title="가운데로 병합 (M)">병합 M</button>
           <button onClick={fillSelected} title="고른 점으로 면 만들기 (F)">면 F</button>

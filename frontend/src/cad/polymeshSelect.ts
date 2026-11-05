@@ -1,0 +1,181 @@
+/**
+ * 편집 모드 선택·베벨 (블렌더 Alt+클릭 루프 선택, Ctrl+L 연결 선택, Ctrl+± 넓히기·좁히기, Ctrl+B 베벨) — 순수 함수.
+ */
+import { compact, edges, type PolyMesh, type V3 } from './polymesh';
+
+const ekey = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a: V3, s: number): V3 => [a[0] * s, a[1] * s, a[2] * s];
+const unit = (a: V3): V3 => {
+  const l = Math.hypot(...a);
+  return l > 1e-12 ? mul(a, 1 / l) : [0, 0, 0];
+};
+const r6 = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+
+/** 점 이웃 (선으로 이어진 점) */
+export function vertexNeighbors(m: PolyMesh): number[][] {
+  const s = m.verts.map(() => new Set<number>());
+  for (const [a, b] of edges(m)) {
+    s[a]!.add(b);
+    s[b]!.add(a);
+  }
+  return s.map((x) => [...x]);
+}
+
+/**
+ * 점 v 둘레 면 고리: 면마다 (면 번호, 앞 점, 뒤 점). 면 i 의 "나가는 선" (v → next) 을 면 i+1 이 "들어오는 선"으로 공유한다.
+ * 열린 가장자리라 고리가 닫히지 않으면 null
+ */
+export function faceRing(m: PolyMesh, v: number): { f: number; prev: number; next: number }[] | null {
+  const corners = new Map<number, { f: number; prev: number; next: number }>(); // 들어오는 선의 앞 점 → 모서리
+  m.faces.forEach((face, f) => {
+    const k = face.indexOf(v);
+    if (k < 0) return;
+    corners.set(face[(k - 1 + face.length) % face.length]!, { f, prev: face[(k - 1 + face.length) % face.length]!, next: face[(k + 1) % face.length]! });
+  });
+  if (!corners.size) return null;
+  const first = corners.values().next().value!;
+  const ring = [first];
+  let cur = first;
+  for (let guard = 0; guard < corners.size; guard++) {
+    const nxt = corners.get(cur.next);
+    if (!nxt) return null;
+    if (nxt === first) return ring.length === corners.size ? ring : null;
+    ring.push(nxt);
+    cur = nxt;
+  }
+  return null;
+}
+
+/** 루프 선택 (Alt+클릭): 선 (a, b) 에서 점마다 "맞은편 선"(점 4개 짜리 사각형 고리)으로 양쪽 끝까지 */
+export function edgeLoop(m: PolyMesh, a: number, b: number): number[] {
+  const walk = (from: number, to: number): { path: number[]; closed: boolean } => {
+    const path: number[] = [];
+    const seen = new Set([from, to]);
+    let [p, c] = [from, to];
+    for (let guard = 0; guard < m.verts.length; guard++) {
+      const ring = faceRing(m, c);
+      if (!ring || ring.length !== 4 || ring.some((r) => m.faces[r.f]!.length !== 4)) break;
+      const i = ring.findIndex((r) => r.next === p);
+      if (i < 0) break;
+      const n = ring[(i + 2) % 4]!.next;
+      if (n === from) return { path, closed: true }; // 한 바퀴 돌아옴
+      if (seen.has(n)) break;
+      seen.add(n);
+      path.push(n);
+      [p, c] = [c, n];
+    }
+    return { path, closed: false };
+  };
+  const forward = walk(a, b);
+  if (forward.closed) return [a, b, ...forward.path];
+  const backward = walk(b, a).path;
+  return [...backward.reverse(), a, b, ...forward.path];
+}
+
+/** 연결 선택 (Ctrl+L): 고른 점과 선으로 이어진 모든 점 */
+export function selectLinked(m: PolyMesh, sel: number[]): number[] {
+  const nb = vertexNeighbors(m);
+  const seen = new Set(sel);
+  const stack = [...sel];
+  while (stack.length) for (const n of nb[stack.pop()!]!) if (!seen.has(n)) (seen.add(n), stack.push(n));
+  return [...seen];
+}
+
+/** 선택 넓히기 (Ctrl+숫자패드 +) / 좁히기 (Ctrl+숫자패드 −) */
+export function growSelection(m: PolyMesh, sel: number[], shrink = false): number[] {
+  const nb = vertexNeighbors(m);
+  const s = new Set(sel);
+  if (shrink) return sel.filter((v) => nb[v]!.every((n) => s.has(n)));
+  const out = new Set(sel);
+  for (const v of sel) for (const n of nb[v]!) out.add(n);
+  return [...out];
+}
+
+/**
+ * 베벨 (Ctrl+B, 1단계 = 모따기): 고른 선(양 끝 점이 모두 고른 선)을 width 만큼 깎아 새 면으로.
+ * 점 v 둘레를 베벨 선으로 나눈 "부채"마다 새 점: 부채 면이 1개면 두 선 방향 합, 2개 이상이면 첫·끝 사이 선 위 (그 사이 면은 v 유지).
+ * 세 개 이상의 부채가 만나는 점(예: 큐브 모서리 전부)은 구멍을 다각형 면으로 메운다.
+ * 닫힌(모든 선에 면 2개) 부분만 된다. 돌려주는 sel = 새로 생긴 베벨 면의 점
+ */
+export function bevelEdges(m: PolyMesh, edgeList: [number, number][], width: number): { mesh: PolyMesh; sel: number[] } | string {
+  if (!edgeList.length) return '베벨: 선을 고르세요 (2 = 선 선택 모드)';
+  const bev = new Set(edgeList.map(([a, b]) => ekey(a, b)));
+  const faceCount = new Map<string, number>();
+  for (const f of m.faces) f.forEach((a, i) => faceCount.set(ekey(a, f[(i + 1) % f.length]!), (faceCount.get(ekey(a, f[(i + 1) % f.length]!)) ?? 0) + 1));
+  for (const k of bev) if (faceCount.get(k) !== 2) return '베벨: 면 두 개 사이의 선만 깎을 수 있습니다 (열린 가장자리 제외)';
+
+  const verts: V3[] = [...m.verts];
+  const newVert = (p: V3) => {
+    verts.push([r6(p[0]), r6(p[1]), r6(p[2])]);
+    return verts.length - 1;
+  };
+  const corner = new Map<string, number[]>(); // "면:점" → 그 모서리를 대신할 점들
+  const extraFaces: number[][] = [];
+  const touched = new Set(edgeList.flat());
+  for (const v of touched) {
+    const ring = faceRing(m, v);
+    if (!ring) return '베벨: 열린 가장자리의 점은 아직 베벨할 수 없습니다';
+    const P = m.verts[v]!;
+    const isBev = ring.map((r) => bev.has(ekey(v, r.next))); // 면 i 의 나가는 선 = 면 i 와 i+1 사이
+    const start = isBev.findIndex(Boolean);
+    if (start < 0) continue;
+    // 베벨 선 다음부터 부채로 나눈다
+    const fans: (typeof ring)[] = [];
+    let cur: typeof ring = [];
+    for (let s = 1; s <= ring.length; s++) {
+      const i = (start + s) % ring.length;
+      cur.push(ring[i]!);
+      if (isBev[i]) {
+        fans.push(cur);
+        cur = [];
+      }
+    }
+    const chains: number[][] = [];
+    for (const fan of fans) {
+      const k = fan.length;
+      const g1 = fan[0]!;
+      const gk = fan[k - 1]!;
+      let chain: number[];
+      if (k === 1) {
+        const id = newVert(add(P, mul(add(unit(sub(m.verts[g1.prev]!, P)), unit(sub(m.verts[g1.next]!, P))), width)));
+        corner.set(`${g1.f}:${v}`, [id]);
+        chain = [id];
+      } else {
+        const A = newVert(add(P, mul(unit(sub(m.verts[g1.next]!, P)), width)));
+        const B = k === 2 ? A : newVert(add(P, mul(unit(sub(m.verts[gk.prev]!, P)), width)));
+        corner.set(`${g1.f}:${v}`, [A]);
+        corner.set(`${gk.f}:${v}`, [B]);
+        if (k === 2) chain = [A];
+        else if (k === 3) {
+          corner.set(`${fan[1]!.f}:${v}`, [A, B]);
+          chain = [A, B];
+        } else {
+          corner.set(`${fan[1]!.f}:${v}`, [A, v]);
+          corner.set(`${fan[k - 2]!.f}:${v}`, [v, B]);
+          chain = [A, v, B];
+        }
+      }
+      chains.push(chain);
+    }
+    // 부채 셋 이상 = 가운데 구멍: 반대 방향으로 메운다
+    const seq = chains.flat().filter((x, i, arr) => x !== arr[(i - 1 + arr.length) % arr.length]);
+    if (seq.length >= 3) extraFaces.push([...seq].reverse());
+  }
+  const at = (f: number, x: number) => corner.get(`${f}:${x}`) ?? [x];
+  const faces = m.faces.map((face, f) => face.flatMap((x) => at(f, x)));
+  const sel = new Set<number>();
+  for (const [u, v] of edgeList) {
+    const fL = m.faces.findIndex((face) => face.some((x, i) => x === v && face[(i + 1) % face.length] === u));
+    const fR = m.faces.findIndex((face) => face.some((x, i) => x === u && face[(i + 1) % face.length] === v));
+    const quad = [at(fL, u)[0]!, at(fL, v).at(-1)!, at(fR, v)[0]!, at(fR, u).at(-1)!];
+    quad.forEach((q) => sel.add(q));
+    faces.push(quad);
+  }
+  faces.push(...extraFaces);
+  const out = compact({ verts, faces });
+  // compact 로 번호가 바뀌므로 새 베벨 면 점은 좌표로 다시 찾는다
+  const selPos = new Set([...sel].map((i) => verts[i]!.join(',')));
+  return { mesh: out, sel: out.verts.flatMap((p, i) => (selPos.has(p.join(',')) ? [i] : [])) };
+}

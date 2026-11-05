@@ -159,3 +159,51 @@ test('스컬프트: 구에 그리기 브러시로 한 획 → 부풀어 오름, 
   await page.keyboard.press('Control+z'); // 획 1번 = 실행 취소 1번
   expect(await save()).toBeLessThanOrEqual(10.000001);
 });
+
+test('편집 모드: 선 클릭 → Ctrl+B 베벨 2mm → 면 7, Ctrl+L 연결 선택, 도넛 Alt+클릭 루프', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-cube').click();
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('2'); // 선 선택
+  await page.keyboard.press('Numpad7');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 0, -1]);
+  // 윗면 오른쪽 선 (x = 10) 가운데를 클릭
+  const e = await page.evaluate(() => window.__AI3D_DEV__!.project(10, 0, 20));
+  await page.mouse.click(e.x, e.y);
+  await expect(page.getByTestId('edit-selection')).toContainText('선 1');
+  await page.keyboard.press('Control+b');
+  await page.keyboard.type('2');
+  await expect(page.getByTestId('modeling-hint')).toContainText('베벨');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면7');
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
+  await expect(page.getByTestId('edit-selection')).toContainText('면 1/7'); // 새 베벨 면이 선택된 채
+  // Ctrl+L: 이어진 점 전부
+  await page.keyboard.press('Control+l');
+  await expect(page.getByTestId('edit-selection')).toContainText('점 10/10');
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+
+  // 도넛: 점 모드에서 Alt+클릭 = 한 바퀴 루프
+  await page.keyboard.press('Tab');
+  await page.getByTestId('add-menu-button').click();
+  await page.getByRole('menuitem', { name: '도넛' }).click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('1');
+  await page.keyboard.press('Numpad7');
+  await page.waitForTimeout(400);
+  const torus = await page.evaluate(() => window.__AI3D_DEV__!.scene());
+  const t = torus.objects.find((o) => o.id !== 'mesh_1')!;
+  const [tx, ty, tz] = t.position as [number, number, number];
+  // 바깥 둘레(반지름 10 + 3) 오른쪽 점과 위쪽 이웃 점 사이 선 근처
+  const q = await page.evaluate(([x, y, z]) => window.__AI3D_DEV__!.project(x!, y!, z!), [tx + 13 * Math.cos(Math.PI / 48), ty + 13 * Math.sin(Math.PI / 48), tz]);
+  await page.keyboard.down('Alt');
+  await page.mouse.click(q.x, q.y);
+  await page.keyboard.up('Alt');
+  await expect(page.getByTestId('edit-selection')).toContainText('점 48/');
+});

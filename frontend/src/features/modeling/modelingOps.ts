@@ -6,6 +6,7 @@ import type { CadObject, MeshEdit, ObjectId } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { edges, loopCut, selectedFaces, type MeshPrimitive, type PolyMesh, type PrimitiveParams } from '../../cad/polymesh';
 import { nextFreePosition } from '../../cad/placement';
+import { growSelection, selectLinked } from '../../cad/polymeshSelect';
 import { notify } from '../projects/projectActions';
 import { useModelingStore } from './modelingStore';
 
@@ -124,12 +125,12 @@ export function subdivideSelected() {
 }
 
 /** 모달 시작 전 확인: 편집 모드에서 G/R/S 는 점, E/I 는 면이 있어야 */
-export function canStartModal(kind: 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset'): boolean {
+export function canStartModal(kind: 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset' | 'bevel'): boolean {
   const st = useModelingStore.getState();
   if (st.mode === 'object') {
     const o = activeObject();
     if (!o) return false;
-    if (kind === 'extrude' || kind === 'inset') return false;
+    if (kind === 'extrude' || kind === 'inset' || kind === 'bevel') return false;
     if (kind === 'scale' && o.kind !== 'polymesh') {
       notify('오브젝트 크기(S)는 메시 객체만 됩니다 — 설계 부품은 설계 모드의 크기 조정을 쓰세요');
       return false;
@@ -138,6 +139,13 @@ export function canStartModal(kind: 'grab' | 'rotate' | 'scale' | 'extrude' | 'i
   }
   const t = editTarget();
   if (!t) return false;
+  if (kind === 'bevel') {
+    if (!selectedEdges(t.polymesh).length) {
+      notify('베벨: 선을 고르세요 (2 = 선 선택 모드, Alt+클릭 = 루프)');
+      return false;
+    }
+    return true;
+  }
   if (kind === 'extrude' || kind === 'inset') {
     if (!selectedFaceIds(t.polymesh).length) {
       notify(`${kind === 'extrude' ? '돌출' : '인셋'}: 면을 고르세요 (3 = 면 선택 모드)`);
@@ -177,4 +185,20 @@ export function densify() {
     { type: 'apply_modifier', target: t.id },
   ]);
   if (r.ok) notify(`점 ${editTarget()?.polymesh.verts.length.toLocaleString() ?? ''}개로 촘촘하게 했습니다`);
+}
+
+/** Ctrl+L: 고른 점과 이어진 조각 전체 */
+export function selectLinkedVerts() {
+  const t = editTarget();
+  const st = useModelingStore.getState();
+  if (!t || st.mode !== 'edit' || !st.selVerts.length) return;
+  st.setSel(selectLinked(t.polymesh, st.selVerts));
+}
+
+/** Ctrl+숫자패드 + / −: 선택 넓히기·좁히기 */
+export function growSelected(shrink = false) {
+  const t = editTarget();
+  const st = useModelingStore.getState();
+  if (!t || st.mode !== 'edit' || !st.selVerts.length) return;
+  st.setSel(growSelection(t.polymesh, st.selVerts, shrink));
 }

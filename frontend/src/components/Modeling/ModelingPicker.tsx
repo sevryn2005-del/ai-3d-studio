@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import { Mesh, Raycaster, Vector2, Vector3, type Object3D } from 'three';
 import { useSceneStore } from '../../cad/sceneStore';
 import { edges } from '../../cad/polymesh';
+import { edgeLoop } from '../../cad/polymeshSelect';
 import { useModelingStore } from '../../features/modeling/modelingStore';
 import { editTarget } from '../../features/modeling/modelingOps';
 import { cancelModal, confirmModal } from './ModalController';
@@ -88,14 +89,16 @@ export function ModelingPicker() {
         return !h || h.distance > dist - Math.max(1e-3, dist * 1e-4);
       };
       let picked: number[] = [];
-      if (st.selectMode === 'vert') {
+      // Alt+클릭은 점 모드에서도 선을 고른다 (루프 선택)
+      const pickMode = e.altKey && st.selectMode === 'vert' ? 'edge' : st.selectMode;
+      if (pickMode === 'vert') {
         const cands = screen
           .map((s, i) => ({ i, d: Math.hypot(s[0] - p[0], s[1] - p[1]) }))
           .filter((c) => c.d <= PICK_PX)
           .sort((a, b) => a.d - b.d);
         const c = cands.find((c) => visible(c.i)) ?? null;
         if (c) picked = [c.i];
-      } else if (st.selectMode === 'edge') {
+      } else if (pickMode === 'edge') {
         const cands = edges(m)
           .map(([a, b]) => ({ a, b, d: segDist(p, screen[a]!, screen[b]!) }))
           .filter((c) => c.d <= PICK_PX)
@@ -105,6 +108,21 @@ export function ModelingPicker() {
       } else if (surfaceHit && surfaceHit.faceIndex != null) {
         const fi = (meshObj.geometry.userData.triFace as number[])[surfaceHit.faceIndex];
         if (fi != null) picked = [...m.faces[fi]!];
+      }
+      // Alt+클릭: 그 선이 지나는 루프 (점·선 모드는 가장 가까운 선, 면 모드는 고른 면에서 커서에 가까운 선)
+      if (e.altKey && picked.length >= 2) {
+        let [a, b] = [picked[0]!, picked[1]!];
+        if (picked.length > 2) {
+          const ring = picked.map((v, i) => [v, picked[(i + 1) % picked.length]!] as const);
+          [a, b] = [...ring].sort((x, y) => segDist(p, screen[x[0]]!, screen[x[1]]!) - segDist(p, screen[y[0]]!, screen[y[1]]!))[0]!;
+        }
+        picked = edgeLoop(m, a, b);
+      } else if (e.altKey && picked.length === 1) {
+        // 점 모드: 커서에 가장 가까운 선
+        const near = edges(m)
+          .filter(([x, y]) => x === picked[0] || y === picked[0])
+          .sort((x, y) => segDist(p, screen[x[0]]!, screen[x[1]]!) - segDist(p, screen[y[0]]!, screen[y[1]]!))[0];
+        if (near) picked = edgeLoop(m, near[0], near[1]);
       }
       if (!e.shiftKey) return st.setSel(picked);
       if (!picked.length) return;

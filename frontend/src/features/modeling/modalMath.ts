@@ -109,7 +109,7 @@ export function screenScale(pivot: [number, number], from: [number, number], to:
   return d0 < 1 ? 1 : d1 / d0;
 }
 
-const MODAL_LABEL = { grab: '이동', rotate: '회전', scale: '크기', extrude: '돌출', inset: '인셋' } as const;
+const MODAL_LABEL = { grab: '이동', rotate: '회전', scale: '크기', extrude: '돌출', inset: '인셋', bevel: '베벨' } as const;
 
 /** 상태 표시줄 문구 (블렌더 헤더처럼 지금 값) */
 export function modalLabel(kind: keyof typeof MODAL_LABEL, axis: Axis | null, value: string): string {

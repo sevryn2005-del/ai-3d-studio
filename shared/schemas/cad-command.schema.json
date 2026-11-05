@@ -2700,6 +2700,36 @@
               "properties": {
                 "op": {
                   "type": "string",
+                  "const": "bevel"
+                },
+                "verts": {
+                  "minItems": 2,
+                  "maxItems": 50000,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "op",
+                "verts",
+                "width"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
                   "const": "set_verts"
                 },
                 "verts": {
