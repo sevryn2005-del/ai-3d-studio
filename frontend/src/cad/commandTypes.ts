@@ -188,6 +188,11 @@ const corners = z.array(CornerSchema).max(LIMITS.maxPolygonPoints).optional();
 export const ArcSchema = z.strictObject({ k: z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1), bulge: z.number().min(-1).max(1) });
 const arcs = z.array(ArcSchema).max(LIMITS.maxPolygonPoints).optional();
 
+export const RegionItemSchema = z.strictObject({ entity: ObjectIdSchema, op: z.enum(['add', 'subtract']) });
+export const MAX_REGION_ITEMS = 20;
+const RegionItemsSchema = z.array(RegionItemSchema).min(1).max(MAX_REGION_ITEMS);
+export type RegionItem = z.infer<typeof RegionItemSchema>;
+
 export const SketchEntitySchema = z.discriminatedUnion('type', [
   z.strictObject({ id: ObjectIdSchema, type: z.literal('rectangle'), center: Point2Schema }),
   z.strictObject({ id: ObjectIdSchema, type: z.literal('circle'), center: Point2Schema }),
@@ -223,6 +228,11 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
    * `ID.width` = 폭(반원 지름). 전체 길이 = length + width
    */
   z.strictObject({ id: ObjectIdSchema, type: z.literal('slot'), center: Point2Schema, angle: z.number().min(-360).max(360) }),
+  /**
+   * 영역 (형식 v15): 같은 스케치의 닫힌 요소(사각형·원·다각형·슬롯)를 순서대로 합치고(add) 빼서(subtract) 만든 단면.
+   * 첫 항목은 add. 구성 요소 치수를 고치면 영역도 따라 바뀐다 (잘라내기 대신 — 원본을 지우지 않는다). 돌출·회전에 쓴다
+   */
+  z.strictObject({ id: ObjectIdSchema, type: z.literal('region'), items: RegionItemsSchema }),
 ]);
 export type SketchEntity = z.infer<typeof SketchEntitySchema>;
 
@@ -599,7 +609,7 @@ export const DrawingSettingsSchema = z.strictObject({
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
 
-export const MODEL_SCHEMA_VERSION = 14;
+export const MODEL_SCHEMA_VERSION = 15;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -827,6 +837,11 @@ export const SetArcCommandSchema = z.strictObject({
   edge: z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1),
   bulge: z.number().min(-1).max(1),
 });
+
+/** 영역 단면 추가 (형식 v15): 닫힌 요소를 순서대로 합치고 빼기. 첫 항목은 add */
+export const AddRegionCommandSchema = z.strictObject({ type: z.literal('add_region'), sketch: ObjectIdSchema, id: ObjectIdSchema.optional(), items: RegionItemsSchema });
+/** 영역 구성 바꾸기 */
+export const SetRegionCommandSchema = z.strictObject({ type: z.literal('set_region'), sketch: ObjectIdSchema, entity: ObjectIdSchema, items: RegionItemsSchema });
 
 /** 사각형을 같은 모양의 다각형으로 바꾼다 (꼭짓점 이동·필렛·호를 쓰려고). 중심 구속은 지워진다 */
 export const ConvertToPolygonCommandSchema = z.strictObject({ type: z.literal('convert_to_polygon'), sketch: ObjectIdSchema, entity: ObjectIdSchema });
@@ -1139,6 +1154,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetCornerCommandSchema,
   SetArcCommandSchema,
   ConvertToPolygonCommandSchema,
+  AddRegionCommandSchema,
+  SetRegionCommandSchema,
   AddSlotCommandSchema,
   SetEntityAngleCommandSchema,
   OffsetEntityCommandSchema,

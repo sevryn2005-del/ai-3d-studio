@@ -56,7 +56,7 @@ export function sketchPoints(sketch: Sketch): Map<string, Point2> {
   const pts = new Map<string, Point2>();
   for (const e of sketch.entities) {
     if (e.type === 'polygon' || e.type === 'line' || e.type === 'path') e.points.forEach((p, k) => pts.set(`${e.id}.p${k}`, p));
-    else pts.set(`${e.id}.center`, e.center);
+    else if (e.type !== 'region') pts.set(`${e.id}.center`, e.center);
   }
   return pts;
 }
@@ -275,6 +275,7 @@ export function solveSketch(sketch: Sketch, pinned: ReadonlySet<string> = new Se
   const entities = sketch.entities.map((e): SketchEntity => {
     if (e.type === 'polygon' || e.type === 'path') return { ...e, points: e.points.map((_, k) => get(`${e.id}.p${k}`).map(round) as Point2) };
     if (e.type === 'line') return { ...e, points: [get(`${e.id}.p0`).map(round) as Point2, get(`${e.id}.p1`).map(round) as Point2] };
+    if (e.type === 'region') return e;
     return { ...e, center: get(`${e.id}.center`).map(round) as Point2 };
   });
   const solved: Sketch = { ...sketch, entities };

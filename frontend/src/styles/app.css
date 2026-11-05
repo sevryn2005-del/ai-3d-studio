@@ -386,3 +386,5 @@ label.check.small { font-size: 12px; }
   .drawing-print, .drawing-print * { visibility: visible !important; }
   .drawing-print { position: fixed; left: 0; top: 0; box-shadow: none; max-width: none; width: auto; }
 }
+.region-items { margin: 4px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.region-items li { display: flex; align-items: center; gap: 6px; }

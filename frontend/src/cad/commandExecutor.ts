@@ -124,7 +124,7 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (merged.object.kind === 'helix') {
         const sk = model.sketches.find((s) => s.id === (merged.object as { helix: { sketch: string } }).helix.sketch);
         const prof = sk ? resolveProfile(sk, merged.object.helix.profile) : null;
-        const err = prof ? helixError(helixProfilePoints(prof, 0.05), merged.object.params.pitch) : null;
+        const err = prof && prof.type !== 'region' ? helixError(helixProfilePoints(prof, 0.05), merged.object.params.pitch) : null;
         if (err) return fail(err);
       }
       // 공통 선택 필드(억제·숨김·색)와 쉘은 그대로 유지. 줄여서 쉘이 들어가지 않으면 거부

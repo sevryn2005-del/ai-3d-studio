@@ -85,6 +85,29 @@ export function bulgeArc(a: Point2, b: Point2, bulge: number): Segment {
   return { type: 'arc', a, b, c, r, ccw: bulge > 0, sweep: 4 * Math.atan(Math.abs(bulge)), mid };
 }
 
+/**
+ * 세 점 호: a → b 로 가며 p 를 지나는 호의 bulge (bulgeArc 와 같은 규칙: 양수 = 반시계 = a→b 오른쪽으로 볼록).
+ * 세 점이 한 직선 위면 null. 반원보다 큰 호는 반원(±1)으로 줄이고 clamped = true
+ */
+export function bulgeThrough(a: Point2, b: Point2, p: Point2): { bulge: number; clamped: boolean } | null {
+  const d = sub(b, a);
+  const cr = d[0] * (p[1] - a[1]) - d[1] * (p[0] - a[0]);
+  const chord = len(d);
+  if (chord < 1e-9 || Math.abs(cr) < 1e-9 * chord * chord) return null;
+  // 외접원 중심
+  const ax = a[0], ay = a[1], bx = b[0], by = b[1], px = p[0], py = p[1];
+  const D = 2 * (ax * (by - py) + bx * (py - ay) + px * (ay - by));
+  const ux = ((ax * ax + ay * ay) * (by - py) + (bx * bx + by * by) * (py - ay) + (px * px + py * py) * (ay - by)) / D;
+  const uy = ((ax * ax + ay * ay) * (px - bx) + (bx * bx + by * by) * (ax - px) + (px * px + py * py) * (bx - ax)) / D;
+  const ang = (q: Point2) => Math.atan2(q[1] - uy, q[0] - ux);
+  const ccwSweep = (((ang(b) - ang(a)) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const right = cr < 0; // p 가 a→b 의 오른쪽 → 반시계 호
+  const sweep = right ? ccwSweep : 2 * Math.PI - ccwSweep;
+  const clamped = sweep > Math.PI + 1e-9;
+  const bulge = Math.tan(Math.min(sweep, Math.PI) / 4) * (right ? 1 : -1);
+  return { bulge: Math.round(bulge * 1e6) / 1e6, clamped };
+}
+
 /** 꼭짓점 처리·호 변을 적용한 윤곽 조각 (닫힘: 마지막 조각이 처음으로 돌아온다) */
 export function cornerSegments(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[]): Segment[] {
   const n = points.length;

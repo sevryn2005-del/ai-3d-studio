@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 14
+      "const": 15
     },
     "units": {
       "type": "string",
@@ -605,6 +605,51 @@
                     "type",
                     "center",
                     "angle"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "region"
+                    },
+                    "items": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entity": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                          },
+                          "op": {
+                            "type": "string",
+                            "enum": [
+                              "add",
+                              "subtract"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "entity",
+                          "op"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "items"
                   ],
                   "additionalProperties": false
                 }

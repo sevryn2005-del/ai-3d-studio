@@ -4,9 +4,9 @@
 import type { CadCommand, CadObject, ModelDefinition, ObjectId, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
 import { idTaken, nextId, type ExecuteResult } from './commandExecutor';
-import { findSketch, openLinePoints, profileOf, resolveProfile, revolveProfileError, sketchRefs } from './sketch';
+import { findSketch, openLinePoints, profileOf, regionError, regionUsers, resolveProfile, revolveProfileError, sketchRefs } from './sketch';
 import { cornerError, openPathError, sweepError, type Corner } from './curves';
-import { helixError, helixProfilePoints, sweepProfilePoints } from './sections';
+import { helixError, helixProfilePoints, REGION_UNSUPPORTED, sweepProfilePoints } from './sections';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
 import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, polygonError, refKind, solveSketch } from './solver';
@@ -16,7 +16,7 @@ const SKETCH_TYPES = [
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
   'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
-  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon',
+  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon', 'add_region', 'set_region',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -166,6 +166,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       if (cmd.type === 'set_entity_center') {
         // 다각형은 바운딩 박스 중심이 center 가 되도록 통째로 옮긴다. 옮긴 점은 고정한 채 나머지 구속을 다시 푼다
         const entity = sketch.entities.find((e) => e.id === cmd.entity)!;
+        if (entity.type === 'region') return fail('영역은 구성 요소를 옮기면 따라 움직입니다 (영역 자체는 옮길 수 없음)');
         const pins = new Set<string>();
         let moved = entity;
         if (entity.type === 'polygon' || entity.type === 'line' || entity.type === 'path') {
@@ -189,6 +190,8 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       }
       const users = extrudeUsers(model, sketch.id, cmd.entity);
       if (users.length) return fail(`${cmd.entity} 을(를) 쓰는 돌출이 있어 삭제할 수 없습니다: ${users.join(', ')}`);
+      const regions = regionUsers(sketch, cmd.entity);
+      if (regions.length) return fail(`${cmd.entity} 을(를) 쓰는 영역이 있어 삭제할 수 없습니다: ${regions.join(', ')} (영역에서 먼저 빼세요)`);
       const next = {
         ...sketch,
         entities: sketch.entities.filter((e) => e.id !== cmd.entity),
@@ -257,6 +260,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
       const prof = resolveProfile(sketch, cmd.profile);
       if (!prof) return fail(`'${sketch.name}'에 쓸 수 있는 프로파일 ${cmd.profile} 이(가) 없습니다`);
+      if (prof.type === 'region') return fail(REGION_UNSUPPORTED);
       const err = helixError(helixProfilePoints(prof, 0.05), cmd.pitch);
       if (err) return fail(err);
       if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
@@ -277,7 +281,9 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       for (const s of cmd.sections) {
         const sk = findSketch(model, s.sketch);
         if (!sk) return fail(`존재하지 않는 스케치입니다: ${s.sketch}`);
-        if (!resolveProfile(sk, s.profile)) return fail(`'${sk.name}'에 쓸 수 있는 프로파일 ${s.profile} 이(가) 없습니다`);
+        const prof = resolveProfile(sk, s.profile);
+        if (!prof) return fail(`'${sk.name}'에 쓸 수 있는 프로파일 ${s.profile} 이(가) 없습니다`);
+        if (prof.type === 'region') return fail(REGION_UNSUPPORTED);
       }
       if (new Set(cmd.sections.map((s) => s.sketch)).size !== cmd.sections.length) return fail('로프트 단면은 서로 다른 스케치에 있어야 합니다');
       if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
@@ -346,6 +352,30 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
     }
 
+    case 'add_region':
+    case 'set_region': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      let id: string;
+      if (cmd.type === 'add_region') {
+        if (sketch.entities.length >= LIMITS.maxSketchEntities) return fail(`스케치 요소는 최대 ${LIMITS.maxSketchEntities}개까지 가능합니다`);
+        id = cmd.id ?? nextEntityId(sketch, 'region');
+        if (sketch.entities.some((e) => e.id === id)) return fail(`스케치에 이미 있는 요소 ID입니다: ${id}`);
+      } else {
+        const e = sketch.entities.find((x) => x.id === cmd.entity);
+        if (!e || e.type !== 'region') return fail(`'${sketch.name}'에 영역 ${cmd.entity} 이(가) 없습니다`);
+        id = e.id;
+      }
+      const err = regionError(sketch, cmd.items, id);
+      if (err) return fail(err);
+      const entity = { id, type: 'region' as const, items: cmd.items };
+      const next: Sketch = {
+        ...sketch,
+        entities: cmd.type === 'add_region' ? [...sketch.entities, entity] : sketch.entities.map((x) => (x.id === id ? entity : x)),
+      };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
+    }
+
     case 'convert_to_polygon': {
       const sketch = findSketch(model, cmd.sketch);
       if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
@@ -375,6 +405,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       if (!pathSketch) return fail(`존재하지 않는 스케치입니다: ${cmd.pathSketch}`);
       const prof = resolveProfile(sketch, cmd.profile);
       if (!prof) return fail(`'${sketch.name}'에 쓸 수 있는 단면 ${cmd.profile} 이(가) 없습니다`);
+      if (prof.type === 'region') return fail(REGION_UNSUPPORTED);
       const path = openLinePoints(pathSketch, cmd.path);
       if (!path) return fail(`'${pathSketch.name}'에 경로(열린 선) ${cmd.path} 이(가) 없습니다`);
       const err = sweepError(sweepProfilePoints(prof, 0.05), path);
@@ -427,7 +458,7 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         if (!pts || err) return fail(`오프셋 결과: ${err}`);
         // 꼭짓점 처리는 같은 크기로 옮긴다 (들어가지 않으면 뺀다)
         entity = { id, type: 'polygon', points: pts, ...(e.corners?.length && !cornerError(pts, e.corners, true) ? { corners: e.corners } : {}) };
-      } else return fail('구성선·경로는 오프셋할 수 없습니다');
+      } else return fail('구성선·경로·영역은 오프셋할 수 없습니다');
       return ok(replaceSketch(model, { ...sketch, entities: [...sketch.entities, entity], dimensions: [...sketch.dimensions, ...dims] }), cmd, sketch.id);
     }
 

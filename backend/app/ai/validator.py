@@ -66,7 +66,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         if not part:
             return "circle" if etype == "circle" else None
         if part == "center":
-            return None if etype in ("polygon", "line", "path") else "point"
+            return None if etype in ("polygon", "line", "path", "region") else "point"
         if etype not in ("polygon", "line", "path"):
             return None
         size = poly_sizes.get((sid, eid), 0)
@@ -196,8 +196,8 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         elif t == "offset_entity":
             if sketch_exists(i, c["sketch"]):
                 ents = sketches[c["sketch"]]
-                if c["entity"] not in ents or ents[c["entity"]] in ("line", "path"):
-                    errors.append(f"commands[{i}].entity: sketch '{c['sketch']}' has no closed element '{c['entity']}'")
+                if c["entity"] not in ents or ents[c["entity"]] in ("line", "path", "region"):
+                    errors.append(f"commands[{i}].entity: sketch '{c['sketch']}' has no closed element '{c['entity']}' (regions cannot be offset)")
                 else:
                     etype = ents[c["entity"]]
                     eid = c.get("id") or next_entity_id(ents, "rect" if etype == "rectangle" else etype)
@@ -207,8 +207,8 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         elif t in ("helix", "loft"):
             refs = [(c["sketch"], c["profile"])] if t == "helix" else [(s["sketch"], s["profile"]) for s in c["sections"]]
             for sid, pid in refs:
-                if sketch_exists(i, sid) and (pid not in sketches[sid] or sketches[sid][pid] in ("line", "path")):
-                    errors.append(f"commands[{i}]: sketch '{sid}' has no closed profile '{pid}'")
+                if sketch_exists(i, sid) and (pid not in sketches[sid] or sketches[sid][pid] in ("line", "path", "region")):
+                    errors.append(f"commands[{i}]: sketch '{sid}' has no closed profile '{pid}' (regions only work with extrude and revolve)")
             new_id = c.get("id")
             if new_id is not None:
                 if id_used(new_id):
@@ -236,6 +236,26 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     edges = n if sketches[c["sketch"]][c["entity"]] == "polygon" else n - 1
                     if c["edge"] >= edges:
                         errors.append(f"commands[{i}].edge: '{c['entity']}' has edges e0..e{edges - 1}")
+        elif t in ("add_region", "set_region"):
+            if sketch_exists(i, c["sketch"]):
+                ents = sketches[c["sketch"]]
+                if t == "add_region":
+                    eid = c.get("id") or next_entity_id(ents, "region")
+                    if eid in ents:
+                        errors.append(f"commands[{i}].id: sketch '{c['sketch']}' already has an element '{eid}'")
+                else:
+                    eid = c["entity"]
+                    if ents.get(eid) != "region":
+                        errors.append(f"commands[{i}].entity: '{eid}' is not a region of sketch '{c['sketch']}'")
+                if c["items"][0]["op"] != "add":
+                    errors.append(f"commands[{i}].items[0]: the first region item must be op 'add'")
+                for k, it in enumerate(c["items"]):
+                    if ents.get(it["entity"]) not in ("rectangle", "circle", "polygon", "slot"):
+                        errors.append(f"commands[{i}].items[{k}]: '{it['entity']}' is not a closed element (rectangle, circle, polygon, slot) "
+                                      f"of sketch '{c['sketch']}'")
+                if len({it["entity"] for it in c["items"]}) != len(c["items"]):
+                    errors.append(f"commands[{i}].items: an element appears twice")
+                ents[eid] = "region"
         elif t == "convert_to_polygon":
             if sketch_exists(i, c["sketch"]):
                 if sketches[c["sketch"]].get(c["entity"]) != "rectangle":
@@ -244,7 +264,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                     sketches[c["sketch"]][c["entity"]] = "polygon"
                     poly_sizes[(c["sketch"], c["entity"])] = 4
         elif t == "sweep":
-            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["profile"]) in (None, "line", "path"):
+            if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["profile"]) in (None, "line", "path", "region"):
                 errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no closed profile '{c['profile']}'")
             if sketch_exists(i, c["pathSketch"]) and sketches[c["pathSketch"]].get(c["path"]) not in ("line", "path"):
                 errors.append(f"commands[{i}].path: sketch '{c['pathSketch']}' has no path or line '{c['path']}' (add one with add_path)")

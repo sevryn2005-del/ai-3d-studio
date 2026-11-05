@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import math
 
+from app.cad.commands import Sketch, SketchConstraint, region_error
 from app.cad.curves import corner_error, open_path_error
-from app.cad.commands import Sketch, SketchConstraint
 
 CHECK_TOLERANCE = 1e-4
 
@@ -43,7 +43,7 @@ def sketch_points(sk: Sketch) -> dict[str, tuple[float, float]]:
         if e.type in ("polygon", "line", "path"):
             for k, p in enumerate(e.points):
                 pts[f"{e.id}.p{k}"] = (p[0], p[1])
-        else:
+        elif e.type != "region":
             pts[f"{e.id}.center"] = (e.center[0], e.center[1])
     return pts
 
@@ -190,6 +190,8 @@ def constraint_errors(sk: Sketch) -> list[str]:
         if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True, e.arcs)):
             errors.append(f"{sk.id}: {e.id} {err}")
         if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False, e.arcs)):
+            errors.append(f"{sk.id}: {e.id} {err}")
+        if e.type == "region" and (err := region_error(sk, e.items, e.id)):
             errors.append(f"{sk.id}: {e.id} {err}")
     seen: set[str] = set()
     for c in sk.constraints:

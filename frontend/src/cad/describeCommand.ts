@@ -126,6 +126,10 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 변경${cmd.value !== undefined ? ` → ${formatMm(cmd.value)}` : ''}${cmd.flip !== undefined ? ' (방향 뒤집기)' : ''}`;
     case 'delete_mate':
       return `메이트 ${cmd.mate} 삭제`;
+    case 'add_region':
+      return `${sketchName(cmd.sketch)}에 영역 단면 (${cmd.items.map((it) => `${it.op === 'add' ? '+' : '−'}${it.entity}`).join(' ')})`;
+    case 'set_region':
+      return `${sketchName(cmd.sketch)}의 영역 ${cmd.entity} 구성 (${cmd.items.map((it) => `${it.op === 'add' ? '+' : '−'}${it.entity}`).join(' ')})`;
     case 'set_drawing':
       return `도면 설정 (${cmd.drawing.paper}${cmd.drawing.section ? ', 단면도' : ''})`;
     case 'insert_part':

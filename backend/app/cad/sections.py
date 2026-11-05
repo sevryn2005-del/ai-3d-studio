@@ -29,8 +29,15 @@ def signed_area(pts) -> float:
     return sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts))) / 2
 
 
+REGION_UNSUPPORTED = "영역 단면은 돌출·회전에만 쓸 수 있습니다 (로프트·헬릭스·스윕은 사각형·원·다각형·슬롯 하나로)"
+
+
 def outline(p: dict) -> list[tuple[float, float]]:
     t = p["type"]
+    if t == "region":
+        from app.cad.primitives import GeometryError
+
+        raise GeometryError(REGION_UNSUPPORTED)
     if t == "polygon":
         pts = rounded_points(p["points"], p.get("corners"), True, p.get("arcs"))
     elif t == "rectangle":

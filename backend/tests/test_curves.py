@@ -48,7 +48,7 @@ def test_sweep_bend_too_sharp():
 
 
 def model(sketches, objects=()):
-    return ModelDefinition.model_validate({"schemaVersion": 14, "units": "mm", "sketches": sketches, "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 15, "units": "mm", "sketches": sketches, "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -145,3 +145,45 @@ def test_ai_validator_v13():
     assert any("convert_to_polygon" in e for e in errs)
     assert any("e0..e2" in e for e in errs)
     assert any("is not a rectangle" in e for e in errs)
+
+
+# ---- 형식 v15: 영역 단면 -------------------------------------------------------------------------
+
+
+def test_region_rules_and_ai_validator():
+    from app.cad.commands import resolve_profile
+
+    def sk(items):
+        return model([{"id": "s", "name": "s", "plane": XY, "constraints": [], "entities": [
+            {"id": "r", "type": "rectangle", "center": [0, 0]},
+            {"id": "c", "type": "circle", "center": [5, 0]},
+            {"id": "pa", "type": "path", "points": [[0, 0], [10, 0]]},
+            {"id": "g", "type": "region", "items": items}],
+            "dimensions": [{"id": "r.width", "entity": "r", "kind": "width", "value": 20},
+                           {"id": "r.height", "entity": "r", "kind": "height", "value": 10},
+                           {"id": "c.diameter", "entity": "c", "kind": "diameter", "value": 4}]}])
+    good = sk([{"entity": "r", "op": "add"}, {"entity": "c", "op": "subtract"}])
+    assert check_model(good) == []
+    p = resolve_profile(good.sketches[0], "g")
+    assert p["type"] == "region" and p["width"] == 20 and [it["op"] for it in p["items"]] == ["add", "subtract"]
+    for items, msg in [([{"entity": "c", "op": "subtract"}], "첫 요소"), ([{"entity": "r", "op": "add"}, {"entity": "pa", "op": "add"}], "닫힌 요소"),
+                       ([{"entity": "r", "op": "add"}, {"entity": "r", "op": "subtract"}], "두 번"), ([{"entity": "g", "op": "add"}], "자기 자신"),
+                       ([{"entity": "x", "op": "add"}], "없습니다")]:
+        assert any(msg in i.message for i in check_model(sk(items))), msg
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_rectangle", "sketch": "s", "id": "r", "center": [0, 0], "width": 40, "height": 20},
+        {"type": "add_circle", "sketch": "s", "id": "c", "center": [10, 0], "diameter": 6},
+        {"type": "add_region", "sketch": "s", "id": "g", "items": [{"entity": "r", "op": "add"}, {"entity": "c", "op": "subtract"}]},
+        {"type": "extrude", "sketch": "s", "profile": "g", "distance": 5},
+    ], model([]))
+    assert errs == []
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_rectangle", "sketch": "s", "id": "r", "center": [0, 0], "width": 40, "height": 20},
+        {"type": "add_region", "sketch": "s", "id": "g", "items": [{"entity": "r", "op": "subtract"}, {"entity": "zz", "op": "add"}]},
+        {"type": "helix", "sketch": "s", "profile": "g", "pitch": 5, "turns": 2},
+    ], model([]))
+    assert any("must be op 'add'" in e for e in errs)
+    assert any("'zz' is not a closed element" in e for e in errs)
+    assert any("regions only work" in e for e in errs)

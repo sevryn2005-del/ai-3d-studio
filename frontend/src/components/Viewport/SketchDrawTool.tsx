@@ -7,6 +7,7 @@ import { selectModel, selectSelectedSketch, useSceneStore } from '../../cad/scen
 import { drawShapeCommands, type DrawnShape } from '../../cad/sketchActions';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 import { formatMm } from '../../cad/units';
+import { bulgeArc, bulgeThrough, sampleSegments } from '../../cad/curves';
 import { selectSnap, useEditorStore } from '../../features/selection/editorStore';
 
 /**
@@ -39,7 +40,17 @@ export function SketchDrawTool() {
     setDrag(null);
     setPoly([]);
   }, [tool, sketch?.id]);
-  const multi = tool === 'polygon' || tool === 'path';
+  const multi = tool === 'polygon' || tool === 'path' || tool === 'arc';
+  const finishArc = (from: Point2, to: Point2, through: Point2) => {
+    setPoly([]);
+    const store = useSceneStore.getState();
+    const sid = store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null;
+    const cmds = drawShapeCommands(store.history.present.model, sid, { type: 'arc', from, to, through });
+    if (cmds) {
+      store.dispatchBatch(cmds);
+      if (bulgeThrough(from, to, through)?.clamped) store.reportError('반원보다 큰 호는 반원으로 그렸습니다 (호를 두 개로 나눠 그리세요)');
+    } else store.reportError('호를 만들 수 없습니다 (세 점이 한 직선 위에 있거나 너무 짧습니다)');
+  };
   const finishPolygon = (points: Point2[]) => {
     setPoly([]);
     const store = useSceneStore.getState();
@@ -74,7 +85,7 @@ export function SketchDrawTool() {
     const p = world.clone().applyMatrix4(inverse);
     return [Math.round(p.x / step) * step, Math.round(p.y / step) * step];
   };
-  const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' | 'path' }> =>
+  const shapeOf = (d: { from: Point2; to: Point2 }): Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> =>
     tool === 'rectangle'
       ? { type: 'rectangle', from: d.from, to: d.to }
       : { type: 'circle', center: d.from, radius: Math.round(Math.hypot(d.to[0] - d.from[0], d.to[1] - d.from[1]) / step) * step };
@@ -88,6 +99,8 @@ export function SketchDrawTool() {
       const first = pts[0];
       const last = pts.at(-1);
       const near = (q: Point2 | undefined) => !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= Math.max(1.5 * step, 1);
+      // 호: 시작 → 끝 → 호 위의 점 (세 번째 클릭에서 끝)
+      if (tool === 'arc' && pts.length === 2) return finishArc(pts[0]!, pts[1]!, p);
       // 다각형: 첫 점을 다시 누르면 닫힘. 경로: 마지막 점을 다시 누르면 끝 (열린 선)
       if (tool === 'polygon' && pts.length >= 3 && near(first)) return finishPolygon(pts);
       if (tool === 'path' && pts.length >= 2 && near(last)) return finishPolygon(pts);
@@ -126,12 +139,13 @@ export function SketchDrawTool() {
         <meshBasicMaterial transparent opacity={0} depthWrite={false} side={DoubleSide} />
       </mesh>
       {drag && <DrawPreview shape={shapeOf(drag)} />}
-      {multi && poly.length > 0 && <PolylinePreview points={hover ? [...poly, hover] : poly} count={poly.length} />}
+      {multi && poly.length > 0 && tool !== 'arc' && <PolylinePreview points={hover ? [...poly, hover] : poly} count={poly.length} />}
+      {tool === 'arc' && poly.length > 0 && <ArcPreview points={poly} hover={hover} />}
     </group>
   );
 }
 
-function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' }> }) {
+function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }> }) {
   const { geometry, label, anchor } = useMemo(() => {
     const pts: number[] = [];
     let label: string;
@@ -164,6 +178,37 @@ function DrawPreview({ shape }: { shape: Exclude<DrawnShape, { type: 'polygon' |
       <Html position={anchor} style={{ pointerEvents: 'none' }}>
         <div className="draw-label" data-testid="draw-label">
           {label}
+        </div>
+      </Html>
+    </>
+  );
+}
+
+/** 그리는 중인 호: 시작점 → (끝점) → 커서. 점 둘을 찍은 뒤에는 커서를 지나는 호를 보여 준다 */
+function ArcPreview({ points, hover }: { points: Point2[]; hover: Point2 | null }) {
+  const line = useMemo(() => {
+    let pts: Point2[] = hover ? [...points, hover] : points;
+    if (points.length === 2 && hover) {
+      const arc = bulgeThrough(points[0]!, points[1]!, hover);
+      if (arc) pts = sampleSegments([bulgeArc(points[0]!, points[1]!, arc.bulge)], false);
+    }
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute(pts.flatMap(([x, y]) => [x, y, 0.03]), 3));
+    const l = new Line(g, new LineBasicMaterial({ color: '#ffd166', depthTest: false }));
+    l.raycast = () => {};
+    return l;
+  }, [points, hover]);
+  useEffect(() => () => {
+    line.geometry.dispose();
+    (line.material as LineBasicMaterial).dispose();
+  }, [line]);
+  const last = hover ?? points.at(-1)!;
+  return (
+    <>
+      <primitive object={line} />
+      <Html position={[last[0], last[1], 0]} style={{ pointerEvents: 'none' }}>
+        <div className="draw-label" data-testid="draw-label">
+          {points.length === 1 ? '끝점을 클릭하세요' : '호가 지날 점을 클릭하세요'}
         </div>
       </Html>
     </>

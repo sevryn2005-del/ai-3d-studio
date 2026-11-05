@@ -253,7 +253,26 @@ class SlotEntity(Strict):
     angle: SketchAngle
 
 
-SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity, PathEntity], Field(discriminator="type")]
+class RegionItem(Strict):
+    entity: ObjectId
+    op: Literal["add", "subtract"]
+
+
+MAX_REGION_ITEMS = 20
+RegionItems = Annotated[list[RegionItem], Field(min_length=1, max_length=MAX_REGION_ITEMS)]
+
+
+class RegionEntity(Strict):
+    """영역 (형식 v15): 닫힌 요소를 순서대로 합치고(add) 빼서(subtract) 만든 단면. 첫 항목은 add (sketch.ts regionError)"""
+
+    id: ObjectId
+    type: Literal["region"]
+    items: RegionItems
+
+
+SketchEntity = Annotated[
+    Union[RectangleEntity, CircleEntity, PolygonEntity, LineEntity, SlotEntity, PathEntity, RegionEntity], Field(discriminator="type")
+]
 
 ConstraintType = Literal[
     "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent",
@@ -330,7 +349,7 @@ class Sketch(Strict):
     constraints: Annotated[list[SketchConstraint], Field(max_length=Limits.MAX_SKETCH_CONSTRAINTS)]
 
 
-REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width"), "path": ()}
+REQUIRED_DIMENSIONS = {"rectangle": ("width", "height"), "circle": ("diameter",), "polygon": (), "line": (), "slot": ("length", "width"), "path": (), "region": ()}
 
 
 def slot_half_extent(p: dict) -> tuple[float, float]:
@@ -341,6 +360,8 @@ def slot_half_extent(p: dict) -> tuple[float, float]:
 
 def revolve_profile_error(p: dict) -> str | None:
     """회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지 (frontend sketch.ts revolveProfileError 와 같음)."""
+    if p["type"] == "region":  # 합치는 단면들만 본다 (빼기는 줄이기만 한다)
+        return next((e for it in p["items"] if it["op"] == "add" and (e := revolve_profile_error(it["profile"]))), None)
     if p["type"] == "polygon":
         min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True, p.get("arcs")))
     elif p["type"] == "circle":
@@ -387,6 +408,42 @@ def profile_of(sketch: Sketch, ref) -> dict | None:
     return _polygon_profile(thin_polygon(pts, thin), None, sketch.plane.offset, sketch.plane)
 
 
+CLOSED_TYPES = ("rectangle", "circle", "polygon", "slot")
+
+
+def region_error(sketch: Sketch, items, self_id: str | None = None) -> str | None:
+    """영역 구성 규칙 (sketch.ts regionError 와 같음)"""
+    if not items:
+        return "영역에 요소가 없습니다"
+    if items[0].op != "add":
+        return "영역의 첫 요소는 합치기(add)여야 합니다"
+    seen: set[str] = set()
+    for it in items:
+        if it.entity == self_id:
+            return "영역이 자기 자신을 참조합니다"
+        if it.entity in seen:
+            return f"영역에 {it.entity} 이(가) 두 번 들어 있습니다"
+        seen.add(it.entity)
+        e = next((x for x in sketch.entities if x.id == it.entity), None)
+        if e is None:
+            return f"영역의 요소 {it.entity} 이(가) 없습니다"
+        if e.type not in CLOSED_TYPES:
+            return f"영역에는 닫힌 요소(사각형·원·다각형·슬롯)만 넣을 수 있습니다: {it.entity}"
+    return None
+
+
+def profile_bounds(p: dict) -> tuple[float, float, float, float]:
+    """(u0, v0, u1, v1) — sketch.ts profileBounds"""
+    if p["type"] == "circle":
+        r = p["diameter"] / 2
+        return p["center"][0] - r, p["center"][1] - r, p["center"][0] + r, p["center"][1] + r
+    if p["type"] == "slot":
+        hu, hv = slot_half_extent(p)
+        return p["center"][0] - hu, p["center"][1] - hv, p["center"][0] + hu, p["center"][1] + hv
+    cx, cy = p["center"]
+    return cx - p["width"] / 2, cy - p["height"] / 2, cx + p["width"] / 2, cy + p["height"] / 2
+
+
 def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     """돌출 단면 (프론트엔드 cad/sketch.ts 의 resolveProfile 과 같은 규칙)."""
     e = next((x for x in sketch.entities if x.id == entity_id), None)
@@ -394,6 +451,17 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
         return None
     dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
     z = sketch.plane.offset
+    if e.type == "region":
+        if region_error(sketch, e.items, e.id):
+            return None
+        items = [{"op": it.op, "profile": resolve_profile(sketch, it.entity)} for it in e.items]
+        if any(it["profile"] is None for it in items):
+            return None
+        bs = [profile_bounds(it["profile"]) for it in items if it["op"] == "add"]
+        u0, v0 = min(b[0] for b in bs), min(b[1] for b in bs)
+        u1, v1 = max(b[2] for b in bs), max(b[3] for b in bs)
+        return {"type": "region", "items": items, "center": ((u0 + u1) / 2, (v0 + v1) / 2), "width": u1 - u0, "height": v1 - v0,
+                "z": z, "plane": sketch.plane}
     if e.type == "polygon":
         return _polygon_profile(e.points, e.corners, z, sketch.plane, e.arcs)
     if e.type == "rectangle":
@@ -797,7 +865,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[14]
+    schemaVersion: Literal[15]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -921,6 +989,22 @@ class SetArc(Strict):
     entity: ObjectId
     edge: Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]
     bulge: Annotated[float, _num(-1, 1)]
+
+
+class AddRegion(Strict):
+    """영역 단면 추가 (형식 v15)"""
+
+    type: Literal["add_region"]
+    sketch: ObjectId
+    id: ObjectId | None = None
+    items: RegionItems
+
+
+class SetRegion(Strict):
+    type: Literal["set_region"]
+    sketch: ObjectId
+    entity: ObjectId
+    items: RegionItems
 
 
 class ConvertToPolygon(Strict):
@@ -1310,6 +1394,8 @@ CadCommand = Annotated[
         SetCorner,
         SetArc,
         ConvertToPolygon,
+        AddRegion,
+        SetRegion,
         AddSlot,
         SetEntityAngle,
         OffsetEntity,
@@ -1377,6 +1463,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetCorner,
     SetArc,
     ConvertToPolygon,
+    AddRegion,
+    SetRegion,
     AddSlot,
     SetEntityAngle,
     OffsetEntity,

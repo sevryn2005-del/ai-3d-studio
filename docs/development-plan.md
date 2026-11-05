@@ -322,3 +322,14 @@
 - 주기: 표제란 왼쪽 칸에 최대 6줄. DXF 에 CENTER 선 종류·HATCH 층.
 - 공유 픽스처: 막힌 구멍 블록의 정면 단면 (잘린 면 둘레 110, 보이는 선 116), 축선 길이.
 
+## 28. 영역 단면 (형식 v15) + 세 점 호 — ✅ 완료
+
+- 스케치 요소 `region {items: [{entity, op: add|subtract}]}`: 같은 스케치의 닫힌 요소(사각형·원·다각형·슬롯)를 순서대로 합치고 뺀 단면.
+  첫 항목은 add, 같은 요소 두 번·영역 중첩·열린 선 금지 (`sketch.ts regionError` ↔ `commands.region_error`).
+  명령 `add_region`(기본: 첫 요소에서 나머지 빼기)·`set_region`. 구성 요소는 남아 치수·위치를 고치면 영역이 따라 바뀐다
+  — 선분 기반 잘라내기(Trim) 대신 기존 "요소 = 단면" 구조를 유지하면서 구멍 뚫린 판·겹친 윤곽을 스케치 하나로.
+- 엔진: manifold = CrossSection add/subtract, 브라우저 OCCT·서버 = 정확한 면 Fuse/Cut + UnifySameDomain(clean) 후 Prism/Revol.
+  돌출·회전만 (로프트·스윕·헬릭스·얇은 돌출·쉘은 안내 후 거부), 빼기로 비면 오류.
+- 세 점 호 그리기: 시작 → 끝 → 지날 점 → 경로(점 2개) + 호 변(set_arc). `curves.ts bulgeThrough` (반원보다 크면 반원으로 줄이고 안내).
+- 형식 v14 → v15 읽기는 내용 그대로. 공유 픽스처 3가지 (구멍 두 개 판, 겹친 합치기, 회전한 고리 — 파푸스 부피).
+

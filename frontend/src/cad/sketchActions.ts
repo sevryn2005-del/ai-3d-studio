@@ -8,7 +8,7 @@ import { byId, parentMap } from './modelGraph';
 import { findSketch, resolveProfile, slotOutline } from './sketch';
 import { composeTransform } from './transformMath';
 import { polygonError } from './solver';
-import { openPathError } from './curves';
+import { bulgeThrough, openPathError } from './curves';
 
 /** 객체의 월드 변환과 그 객체를 포함한 최상위 객체 (불리언 자식이면 상위 변환을 합성) */
 export function worldPlacement(model: ModelDefinition, id: ObjectId): { world: Transform; root: ObjectId } {
@@ -84,6 +84,7 @@ export function throughHoleCommands(
   const profile = sketch ? resolveProfile(sketch, plate.extrude.profile) : null;
   if (!sketch || !profile) return { ok: false, error: '판의 스케치 치수가 완전하지 않습니다' };
 
+  if (profile.type === 'region') return { ok: false, error: '영역 단면 판에는 빠른 구멍을 낼 수 없습니다 (스케치에 원을 그려 영역에서 빼세요)' };
   const r = hole.diameter / 2;
   const [dx, dy] = [hole.center[0] - profile.center[0], hole.center[1] - profile.center[1]];
   const fits =
@@ -129,7 +130,9 @@ export type DrawnShape =
   | { type: 'rectangle'; from: Point2; to: Point2 }
   | { type: 'circle'; center: Point2; radius: number }
   | { type: 'polygon'; points: Point2[] }
-  | { type: 'path'; points: Point2[] };
+  | { type: 'path'; points: Point2[] }
+  /** 세 점 호 (형식 v13 경로 + 호 변): 시작 → 끝, through = 호 위의 점 */
+  | { type: 'arc'; from: Point2; to: Point2; through: Point2 };
 
 /** 그리기로 만들 수 있는 최소 크기 (mm). 이보다 작으면 클릭으로 보고 무시한다 */
 export const MIN_DRAWN_SIZE = 0.5;
@@ -149,6 +152,15 @@ export function drawShapeCommands(model: ModelDefinition, sketchId: ObjectId | n
   };
   const round = (v: number) => Math.round(v * 1000) / 1000;
   let add: CadCommand;
+  if (shape.type === 'arc') {
+    const a: Point2 = [round(shape.from[0]), round(shape.from[1])];
+    const b: Point2 = [round(shape.to[0]), round(shape.to[1])];
+    const arc = bulgeThrough(a, b, shape.through);
+    if (!arc || Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_DRAWN_SIZE) return null;
+    const id = entityId('arc');
+    const cmds: CadCommand[] = [{ type: 'add_path', sketch: sid, id, points: [a, b] }, { type: 'set_arc', sketch: sid, entity: id, edge: 0, bulge: arc.bulge }];
+    return existing ? cmds : [{ type: 'create_sketch', id: sid }, ...cmds];
+  }
   if (shape.type === 'path') {
     const points = shape.points.map(([x, y]) => [round(x), round(y)] as Point2);
     if (points.length < 2 || openPathError(points)) return null;

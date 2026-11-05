@@ -11,7 +11,7 @@
  */
 import type { CadObject, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects, validateGraph } from '../../../cad/modelGraph';
-import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type BaseProfile, type Profile } from '../../../cad/sketch';
 import { roundedPoints, sweepError, sweepRings, toleranceStep } from '../../../cad/curves';
 import { MANIFOLD_REVOLVE_TO_PLANE, extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
 import { helixError, helixProfilePoints, helixRings, loftSegments, sectionPoints, sweepProfilePoints } from '../../../cad/sections';
@@ -20,7 +20,7 @@ import { ringSolid } from './ringSolid';
 import { Vector3, type Matrix4 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
-import type { ManifoldToplevel, Manifold } from 'manifold-3d';
+import type { CrossSection, ManifoldToplevel, Manifold } from 'manifold-3d';
 
 export const DISPLAY_TOLERANCE = 0.05; // mm (서버 DISPLAY_LINEAR_TOLERANCE 와 같음)
 export const EXPORT_TOLERANCE = 0.01; // mm (서버 EXPORT_LINEAR_TOLERANCE 와 같음)
@@ -68,7 +68,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 14, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 15, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -144,22 +144,30 @@ export function localManifold(
       const p = sk ? profileOf(sk, ref) : null;
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
       // 다각형은 꼭짓점 좌표 그대로 (구속 해석기가 푼 값). 감김 방향과 무관하게 채우도록 NonZero
-      const placed =
-        p.type === 'polygon'
-          ? scope.keep(new CrossSection([roundedPoints(p.points, p.corners, true, (r) => toleranceStep(r, tol), p.arcs)], 'NonZero'))
-          : p.type === 'slot'
-            ? slotSection(wasm, p, tol, scope)
+      const section = (q: BaseProfile): CrossSection =>
+        q.type === 'polygon'
+          ? scope.keep(new CrossSection([roundedPoints(q.points, q.corners, true, (r) => toleranceStep(r, tol), q.arcs)], 'NonZero'))
+          : q.type === 'slot'
+            ? slotSection(wasm, q, tol, scope)
             : scope.keep(
               scope
                 .keep(
-                  p.type === 'rectangle'
-                    ? CrossSection.square([p.width, p.height], true)
-                    : CrossSection.circle(p.diameter / 2, circularSegments(p.diameter / 2, tol)),
+                  q.type === 'rectangle'
+                    ? CrossSection.square([q.width, q.height], true)
+                    : CrossSection.circle(q.diameter / 2, circularSegments(q.diameter / 2, tol)),
                 )
-                .translate(p.center),
+                .translate(q.center),
             );
+      // 영역(형식 v15): 순서대로 합치고 빼기 (2D 불리언)
+      let placed: CrossSection;
+      if (p.type === 'region') {
+        if (obj.kind === 'extrude' && obj.shell) throw new GeometryError(`'${obj.name}': 영역 단면에는 쉘을 줄 수 없습니다`);
+        placed = section(p.items[0]!.profile);
+        for (const it of p.items.slice(1)) placed = scope.keep(it.op === 'add' ? placed.add(section(it.profile)) : placed.subtract(section(it.profile)));
+        if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
+      } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 14, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 15, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {

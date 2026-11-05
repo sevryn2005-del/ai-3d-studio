@@ -13,6 +13,7 @@ export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> 
   line: [], // 구성선: 끝점 좌표 + 구속. 형상을 만들지 않음
   path: [], // 경로(형식 v10): 열린 꺾은선, 꼭짓점 좌표 + 구속
   slot: ['length', 'width'], // 반원 중심 거리, 폭
+  region: [], // 영역(형식 v15): 구성 요소의 치수를 따른다
 };
 
 export function findSketch(model: ModelDefinition, id: ObjectId): Sketch | undefined {
@@ -23,12 +24,26 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
   return sketch.dimensions.find((d) => d.entity === entityId && d.kind === kind)?.value;
 }
 
-/** 돌출 단면: 스케치 평면 좌표의 사각형·원 + 평면 (z = 평면 offset) */
-export type Profile =
+/** 돌출 단면: 스케치 평면 좌표의 사각형·원·다각형·슬롯 + 평면 (z = 평면 offset) */
+export type BaseProfile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
   | { type: 'polygon'; points: Point2[]; corners?: Corner[]; arcs?: Arc[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
+/**
+ * 영역 단면 (형식 v15): 단면들을 순서대로 합치고(add) 뺀 것. center·width·height = 합친(add) 단면들의 바운딩 박스
+ * (빼기로 줄어들 수 있으나 크기 표시·회전 반지름용으로 충분). 엔진은 정확한 2D 불리언 (manifold CrossSection, OCCT 면 불리언)
+ */
+export type RegionProfile = {
+  type: 'region';
+  items: { op: 'add' | 'subtract'; profile: BaseProfile }[];
+  center: Point2;
+  width: number;
+  height: number;
+  z: number;
+  plane: SketchPlane;
+};
+export type Profile = BaseProfile | RegionProfile;
 
 /** 슬롯 윤곽 (반원마다 segs 개 점, 반시계). 미리보기·바운딩 크기용 — 엔진은 정확한 원호/다각형 근사를 따로 만든다 */
 export function slotOutline(p: { center: Point2; length: number; width: number; angle: number }, segs = 16): Point2[] {
@@ -48,6 +63,7 @@ export function slotOutline(p: { center: Point2; length: number; width: number; 
 
 /** 단면의 바운딩 박스 (평면 좌표): 중심·폭(u)·높이(v). 크기 표시·회전 반지름용 */
 export function profileBounds(p: Profile): { center: Point2; width: number; height: number } {
+  if (p.type === 'region') return { center: p.center, width: p.width, height: p.height };
   if (p.type === 'circle') return { center: p.center, width: p.diameter, height: p.diameter };
   if (p.type === 'slot') {
     const [hu, hv] = slotHalfExtent(p);
@@ -68,6 +84,17 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
   if (!e || e.type === 'line' || e.type === 'path') return null; // 구성선·경로는 닫힌 단면이 아니다
   const z = sketch.plane.offset;
   const plane = sketch.plane;
+  if (e.type === 'region') {
+    if (regionError(sketch, e.items, e.id)) return null;
+    const items = e.items.map((it) => ({ op: it.op, profile: resolveProfile(sketch, it.entity) as BaseProfile | null }));
+    if (items.some((it) => !it.profile)) return null;
+    const adds = items.filter((it) => it.op === 'add').map((it) => profileBounds(it.profile!));
+    const x0 = Math.min(...adds.map((b) => b.center[0] - b.width / 2));
+    const x1 = Math.max(...adds.map((b) => b.center[0] + b.width / 2));
+    const y0 = Math.min(...adds.map((b) => b.center[1] - b.height / 2));
+    const y1 = Math.max(...adds.map((b) => b.center[1] + b.height / 2));
+    return { type: 'region', items: items as RegionProfile['items'], center: [(x0 + x1) / 2, (y0 + y1) / 2], width: x1 - x0, height: y1 - y0, z, plane };
+  }
   if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane, e.arcs);
   if (e.type === 'rectangle') {
     const width = dimensionValue(sketch, e.id, 'width');
@@ -81,6 +108,27 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
   }
   const diameter = dimensionValue(sketch, e.id, 'diameter');
   return diameter ? { type: 'circle', center: e.center, diameter, z, plane } : null;
+}
+
+/** 영역 구성 규칙 (서버 commands.region_error 와 같음): 첫 항목 add, 같은 스케치의 닫힌 요소(영역 제외), 같은 요소 두 번 금지 */
+export function regionError(sketch: Sketch, items: { entity: ObjectId; op: 'add' | 'subtract' }[], self?: ObjectId): string | null {
+  if (!items.length) return '영역에 요소가 없습니다';
+  if (items[0]!.op !== 'add') return '영역의 첫 요소는 합치기(add)여야 합니다';
+  const seen = new Set<string>();
+  for (const it of items) {
+    if (it.entity === self) return '영역이 자기 자신을 참조합니다';
+    if (seen.has(it.entity)) return `영역에 ${it.entity} 이(가) 두 번 들어 있습니다`;
+    seen.add(it.entity);
+    const e = sketch.entities.find((x) => x.id === it.entity);
+    if (!e) return `영역의 요소 ${it.entity} 이(가) 없습니다`;
+    if (e.type === 'line' || e.type === 'path' || e.type === 'region') return `영역에는 닫힌 요소(사각형·원·다각형·슬롯)만 넣을 수 있습니다: ${it.entity}`;
+  }
+  return null;
+}
+
+/** 이 요소를 구성으로 쓰는 영역들 */
+export function regionUsers(sketch: Sketch, entityId: ObjectId): ObjectId[] {
+  return sketch.entities.flatMap((e) => (e.type === 'region' && e.items.some((it) => it.entity === entityId) ? [e.id] : []));
 }
 
 /**
@@ -149,6 +197,10 @@ export function sketchErrors(sketch: Sketch): string[] {
       const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
+    if (e.type === 'region') {
+      const err = regionError(sketch, e.items, e.id);
+      if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
+    }
   }
   // 구속: 참조 형식 + 저장된 좌표가 구속을 만족하는지 (해석기가 푼 결과만 저장된다)
   const cids = new Set<string>();
@@ -204,6 +256,8 @@ export function refTarget(sketch: Sketch, ref: FeatureRef): Profile | Point2[] |
 
 /** 회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지. 문제가 없으면 null */
 export function revolveProfileError(p: Profile): string | null {
+  // 영역: 합치는 단면들이 축 한쪽에 있으면 된다 (빼기는 줄이기만 한다)
+  if (p.type === 'region') return p.items.filter((it) => it.op === 'add').map((it) => revolveProfileError(it.profile)).find((e) => e) ?? null;
   const minU =
     p.type === 'polygon'
       ? Math.min(...roundedPoints(p.points, p.corners, true, undefined, p.arcs).map((q) => q[0]))

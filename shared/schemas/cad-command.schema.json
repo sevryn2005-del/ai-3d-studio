@@ -1145,6 +1145,105 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "add_region"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "items": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "add",
+                  "subtract"
+                ]
+              }
+            },
+            "required": [
+              "entity",
+              "op"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_region"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "items": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "add",
+                  "subtract"
+                ]
+              }
+            },
+            "required": [
+              "entity",
+              "op"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "entity",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "add_slot"
         },
         "sketch": {
@@ -2620,6 +2719,51 @@
                             "type",
                             "center",
                             "angle"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "region"
+                            },
+                            "items": {
+                              "minItems": 1,
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "entity": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "add",
+                                      "subtract"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "entity",
+                                  "op"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "type",
+                            "items"
                           ],
                           "additionalProperties": false
                         }

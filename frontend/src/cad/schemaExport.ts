@@ -476,6 +476,45 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 2 },
     ],
   },
+  'region-plate-two-holes': {
+    // 형식 v15 영역: 사각형 40×20 − 원 Ø6 두 개 (스케치 하나로 구멍 뚫린 판), 두께 5
+    volume: (800 - 2 * 9 * PI) * 5,
+    roots: 1,
+    bbox: [[-20, -10, 0], [20, 10, 5]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 40, height: 20 },
+      { type: 'add_circle', sketch: 's', id: 'c1', center: [-10, 0], diameter: 6 },
+      { type: 'add_circle', sketch: 's', id: 'c2', center: [10, 0], diameter: 6 },
+      { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'r', op: 'add' }, { entity: 'c1', op: 'subtract' }, { entity: 'c2', op: 'subtract' }] },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'g', distance: 5 },
+    ],
+  },
+  'region-union-overlap': {
+    // 사각형 20×20 + 원 Ø20(중심 (10, 0)): 원의 왼쪽 반이 겹친다 → 넓이 400 + 50π, 높이 4
+    volume: (400 + 50 * PI) * 4,
+    roots: 1,
+    bbox: [[-10, -10, 0], [20, 10, 4]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 20, height: 20 },
+      { type: 'add_circle', sketch: 's', id: 'c', center: [10, 0], diameter: 20 },
+      { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'r', op: 'add' }, { entity: 'c', op: 'add' }] },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'g', distance: 4 },
+    ],
+  },
+  'region-revolve-ring': {
+    // XZ 평면 사각형 10×10(중심 u 10) − 4×4 → 넓이 84, 도심 반지름 10 → 부피 2π·10·84 (파푸스)
+    volume: 2 * PI * 10 * 84,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'a', center: [10, 5], width: 10, height: 10 },
+      { type: 'add_rectangle', sketch: 's', id: 'b', center: [10, 5], width: 4, height: 4 },
+      { type: 'add_region', sketch: 's', id: 'g', items: [{ entity: 'a', op: 'add' }, { entity: 'b', op: 'subtract' }] },
+      { type: 'revolve', id: 'v', sketch: 's', profile: 'g' },
+    ],
+  },
   'rib-l-path': {
     // 리브: 꺾은 중심선 길이 30 × 두께 2 (마이터 이음은 넓이 = 두께 × 중심선 길이) × 높이 5
     volume: 30 * 2 * 5,

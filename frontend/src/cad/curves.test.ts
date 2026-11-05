@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { Point2 } from './commandTypes';
 import { emptyModel, type ModelDefinition } from './commandTypes';
 import { executeCommand } from './commandExecutor';
-import { bulgeArc, cornerError, cornerSegments, roundedPoints, sweepError, thinPolygon } from './curves';
+import { bulgeArc, bulgeThrough, cornerError, cornerSegments, roundedPoints, sweepError, thinPolygon } from './curves';
+import { drawShapeCommands } from './sketchActions';
+import { resolveProfile, revolveProfileError } from './sketch';
 import { signedArea } from './sections';
 import { validateGraph } from './modelGraph';
 
@@ -140,5 +142,70 @@ describe('형식 v13 호 변·사각형 → 다각형·대칭 구속 (서버 tes
     expect(m.sketches[0]!.dimensions.filter((d) => d.entity === 'r')).toEqual([]);
     expect(err(m, { type: 'convert_to_polygon', sketch: 's', entity: 'r' })).toMatch('사각형');
     expect(err(base, { type: 'convert_to_polygon', sketch: 's', entity: 'c' })).toMatch('사각형');
+  });
+});
+
+describe('형식 v15 세 점 호·영역 단면', () => {
+  it('bulgeThrough: 반원·사분원·방향·직선·반원 넘는 호', () => {
+    // a(0,0) → b(10,0), 오른쪽(아래) 반원 위 점 (5,-5) → +1 (반시계)
+    expect(bulgeThrough([0, 0], [10, 0], [5, -5])).toEqual({ bulge: 1, clamped: false });
+    expect(bulgeThrough([0, 0], [10, 0], [5, 5])).toEqual({ bulge: -1, clamped: false });
+    // 90° 호: 중심 (5, 5), 반지름 √50, 아래쪽 가운데 점
+    const q = bulgeThrough([0, 0], [10, 0], [5, 5 - Math.sqrt(50)])!;
+    expect(q.bulge).toBeCloseTo(Math.tan(Math.PI / 8), 6);
+    // bulgeArc 로 되돌리면 지난 점이 호 가운데
+    const arc = bulgeArc([0, 0], [10, 0], q.bulge);
+    if (arc.type !== 'arc') throw new Error();
+    expect(arc.mid[1]).toBeCloseTo(5 - Math.sqrt(50), 4);
+    expect(bulgeThrough([0, 0], [10, 0], [20, 0])).toBeNull();
+    expect(bulgeThrough([0, 0], [10, 0], [5, -20])).toEqual({ bulge: 1, clamped: true });
+  });
+
+  it('호 그리기 → 경로 + 호 변 (실행 취소 1번)', () => {
+    const cmds = drawShapeCommands(emptyModel(), null, { type: 'arc', from: [0, 0], to: [10, 0], through: [5, -5] })!;
+    expect(cmds.map((c) => (c as { type: string }).type)).toEqual(['create_sketch', 'add_path', 'set_arc']);
+    const m = run(cmds);
+    expect(m.sketches[0]!.entities[0]).toMatchObject({ id: 'arc1', type: 'path', points: [[0, 0], [10, 0]], arcs: [{ k: 0, bulge: 1 }] });
+    expect(drawShapeCommands(emptyModel(), null, { type: 'arc', from: [0, 0], to: [10, 0], through: [3, 0] })).toBeNull();
+  });
+
+  const base = run([
+    { type: 'create_sketch', id: 's', plane: XY },
+    { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 40, height: 20 },
+    { type: 'add_circle', sketch: 's', id: 'c', center: [10, 0], diameter: 6 },
+    { type: 'add_path', sketch: 's', id: 'pa', points: [[0, 0], [10, 0]] },
+  ]);
+  const items = [{ entity: 'r', op: 'add' }, { entity: 'c', op: 'subtract' }];
+
+  it('add_region·set_region: 규칙 검사, 돌출 가능, 자동 ID', () => {
+    const m = run([{ type: 'add_region', sketch: 's', items }], base);
+    expect(m.sketches[0]!.entities.at(-1)).toEqual({ id: 'region1', type: 'region', items });
+    expect(validateGraph(m)).toEqual([]);
+    const ex = run([{ type: 'extrude', sketch: 's', profile: 'region1', distance: 5 }], m);
+    expect(ex.objects).toHaveLength(1);
+    expect(err(base, { type: 'add_region', sketch: 's', items: [{ entity: 'c', op: 'subtract' }] })).toMatch('첫 요소');
+    expect(err(base, { type: 'add_region', sketch: 's', items: [{ entity: 'r', op: 'add' }, { entity: 'pa', op: 'add' }] })).toMatch('닫힌 요소');
+    expect(err(base, { type: 'add_region', sketch: 's', items: [{ entity: 'r', op: 'add' }, { entity: 'r', op: 'subtract' }] })).toMatch('두 번');
+    const m2 = run([{ type: 'set_region', sketch: 's', entity: 'region1', items: [{ entity: 'r', op: 'add' }, { entity: 'c', op: 'add' }] }], m);
+    expect((m2.sketches[0]!.entities.at(-1) as { items: unknown[] }).items).toEqual([{ entity: 'r', op: 'add' }, { entity: 'c', op: 'add' }]);
+    expect(err(m, { type: 'set_region', sketch: 's', entity: 'r', items })).toMatch('영역');
+  });
+
+  it('영역이 쓰는 요소는 지울 수 없고, 영역은 옮기기·오프셋·스윕·헬릭스·로프트에 못 쓴다', () => {
+    const m = run([{ type: 'add_region', sketch: 's', id: 'g', items }], base);
+    expect(err(m, { type: 'delete_sketch_entity', sketch: 's', entity: 'c' })).toMatch('영역');
+    expect(err(m, { type: 'set_entity_center', sketch: 's', entity: 'g', center: [1, 1] })).toMatch('영역');
+    expect(err(m, { type: 'offset_entity', sketch: 's', entity: 'g', distance: 1 })).toMatch('영역');
+    expect(err(m, { type: 'helix', sketch: 's', profile: 'g', pitch: 30, turns: 2 })).toMatch('돌출·회전에만');
+    // 영역을 지우면 구성 요소도 지울 수 있다
+    const m2 = run([{ type: 'delete_sketch_entity', sketch: 's', entity: 'g' }, { type: 'delete_sketch_entity', sketch: 's', entity: 'c' }], m);
+    expect(m2.sketches[0]!.entities.map((e) => e.id)).toEqual(['r', 'pa']);
+  });
+
+  it('영역 단면 크기 = 합치는 단면들의 범위, 회전 축 검사', () => {
+    const m = run([{ type: 'add_circle', sketch: 's', id: 'c2', center: [30, 0], diameter: 10 }, { type: 'add_region', sketch: 's', id: 'g', items: [...items, { entity: 'c2', op: 'add' }] }], base);
+    const p = resolveProfile(m.sketches[0]!, 'g')!;
+    expect(p).toMatchObject({ type: 'region', center: [7.5, 0], width: 55, height: 20 });
+    expect(revolveProfileError(p)).toMatch('회전축');
   });
 });

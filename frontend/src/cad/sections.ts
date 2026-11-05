@@ -9,7 +9,10 @@ import type { Point2 } from './commandTypes';
 import { profileBounds, slotOutline, type Profile } from './sketch';
 import { roundedPoints } from './curves';
 
+export const REGION_UNSUPPORTED = '영역 단면은 돌출·회전에만 쓸 수 있습니다 (로프트·헬릭스·스윕은 사각형·원·다각형·슬롯 하나로)';
+
 export function outline(p: Profile): Point2[] {
+  if (p.type === 'region') throw new Error(REGION_UNSUPPORTED);
   let pts: Point2[];
   if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true, undefined, p.arcs);
   else if (p.type === 'rectangle') {

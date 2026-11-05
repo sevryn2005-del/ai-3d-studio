@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
 import { useSceneStore } from '../../cad/sceneStore';
-import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, profileOf, resolveProfile, revolveProfileError, sketchRefs } from '../../cad/sketch';
+import { REQUIRED_DIMENSIONS, dimensionValue, findSketch, profileOf, regionUsers, resolveProfile, revolveProfileError, sketchRefs } from '../../cad/sketch';
 import { throughHoleCommands } from '../../cad/sketchActions';
 import { NumberField } from './NumberField';
 import { ConstraintPanel, PolygonFields } from './ConstraintFields';
@@ -13,7 +13,8 @@ const dimLabel = (kind: DimensionKind, plane: SketchPlane, type?: SketchEntity['
   : kind === 'length' ? '길이 (반원 중심 사이)'
   : type === 'slot' && kind === 'width' ? '폭'
   : kind === 'width' ? `폭 (${planeAxes(plane)[0]})` : `높이 (${planeAxes(plane)[1]})`;
-export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯', path: '경로' };
+export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '사각형', circle: '원', polygon: '다각형', line: '구성선', slot: '슬롯', path: '경로', region: '영역' };
+const CLOSED = new Set<SketchEntity['type']>(['rectangle', 'circle', 'polygon', 'slot']);
 
 /**
  * 스케치 요소 하나의 치수·중심 입력. 바꾸면 set_dimension / set_entity_center 1건
@@ -22,6 +23,7 @@ export const ENTITY_LABEL: Record<SketchEntity['type'], string> = { rectangle: '
 function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEntity }) {
   const submitNow = useSceneStore((s) => s.submitNow);
   if (entity.type === 'polygon' || entity.type === 'path') return <PolygonFields sketch={sketch} polygon={entity} />;
+  if (entity.type === 'region') return <RegionFields sketch={sketch} region={entity} />;
   if (entity.type === 'line') {
     const [u, v] = planeAxes(sketch.plane);
     const setPoint = (k: 0 | 1, axis: 0 | 1) => (val: number) => {
@@ -79,6 +81,67 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
         />
       )}
     </>
+  );
+}
+
+/**
+ * 영역 (형식 v15): 구성 요소를 순서대로 합치기(+)·빼기(−). 첫 요소는 합치기. 바꾸면 set_region 1건
+ * (잘라내기 대신 — 구성 요소는 그대로 남아 치수를 고치면 영역이 따라 바뀐다)
+ */
+function RegionFields({ sketch, region }: { sketch: Sketch; region: Extract<SketchEntity, { type: 'region' }> }) {
+  const submitNow = useSceneStore((s) => s.submitNow);
+  const set = (items: typeof region.items) => submitNow({ type: 'set_region', sketch: sketch.id, entity: region.id, items });
+  const free = sketch.entities.filter((e) => CLOSED.has(e.type) && !region.items.some((it) => it.entity === e.id));
+  return (
+    <div className="region-fields">
+      <p className="muted small">구성 요소를 위에서부터 차례로 합치고(+) 뺍니다(−). 구성 요소의 치수·위치를 고치면 영역이 따라 바뀝니다.</p>
+      <ol className="region-items">
+        {region.items.map((it, k) => (
+          <li key={it.entity} data-testid={`region-item-${it.entity}`}>
+            <select
+              aria-label={`${it.entity} 합치기/빼기`}
+              value={it.op}
+              disabled={k === 0}
+              onChange={(e) => set(region.items.map((x) => (x.entity === it.entity ? { ...x, op: e.target.value as 'add' | 'subtract' } : x)))}
+              data-testid={`region-op-${it.entity}`}
+            >
+              <option value="add">+ 합치기</option>
+              <option value="subtract">− 빼기</option>
+            </select>
+            <span>
+              {ENTITY_LABEL[sketch.entities.find((e) => e.id === it.entity)?.type ?? 'rectangle']} {it.entity}
+            </span>
+            <button
+              className="cancel"
+              title="영역에서 빼기 (요소는 남음)"
+              disabled={region.items.length === 1}
+              onClick={() => {
+                const rest = region.items.filter((x) => x.entity !== it.entity);
+                set(rest.map((x, i) => (i === 0 ? { ...x, op: 'add' } : x)));
+              }}
+              data-testid={`region-remove-${it.entity}`}
+            >
+              ✕
+            </button>
+          </li>
+        ))}
+      </ol>
+      {free.length > 0 && (
+        <select
+          value=""
+          aria-label="영역에 요소 넣기"
+          onChange={(e) => e.target.value && set([...region.items, { entity: e.target.value, op: 'subtract' }])}
+          data-testid={`region-add-${region.id}`}
+        >
+          <option value="">+ 요소 넣기 (빼기로)</option>
+          {free.map((e) => (
+            <option key={e.id} value={e.id}>
+              {ENTITY_LABEL[e.type]} {e.id}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
   );
 }
 
@@ -166,7 +229,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           </legend>
           <EntityDimensions sketch={sketch} entity={e} />
           <ExtrudeAction sketch={sketch} entityId={e.id} />
-          {e.type !== 'line' && (
+          {e.type !== 'line' && e.type !== 'region' && (
             <NumberField
               label="오프셋 복사 (+ 바깥, − 안쪽)"
               unit="mm"
@@ -178,8 +241,14 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           <button
             className="danger"
             data-testid={`delete-entity-${e.id}`}
-            disabled={usersOf(e.id).length > 0}
-            title={usersOf(e.id).length ? `${usersOf(e.id).map((o) => o.name).join(', ')}이(가) 쓰고 있어 지울 수 없습니다` : undefined}
+            disabled={usersOf(e.id).length > 0 || regionUsers(sketch, e.id).length > 0}
+            title={
+              usersOf(e.id).length
+                ? `${usersOf(e.id).map((o) => o.name).join(', ')}이(가) 쓰고 있어 지울 수 없습니다`
+                : regionUsers(sketch, e.id).length
+                  ? `영역 ${regionUsers(sketch, e.id).join(', ')}이(가) 쓰고 있어 지울 수 없습니다`
+                  : undefined
+            }
             onClick={() => submitNow({ type: 'delete_sketch_entity', sketch: sketch.id, entity: e.id })}
           >
             {ENTITY_LABEL[e.type]} 삭제
@@ -199,6 +268,18 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
         >
           + 다각형
         </button>
+        {sketch.entities.some((e) => CLOSED.has(e.type)) && (
+          <button
+            title="닫힌 요소들로 영역 단면을 만듭니다: 첫 요소에서 나머지를 뺍니다 (구멍 뚫린 판 등). 영역에서 합치기·빼기를 바꿀 수 있습니다"
+            data-testid="add-region"
+            onClick={() => {
+              const closed = sketch.entities.filter((e) => CLOSED.has(e.type));
+              submitNow({ type: 'add_region', sketch: sketch.id, id: nextEntity('region'), items: closed.map((e, k) => ({ entity: e.id, op: k === 0 ? 'add' : 'subtract' })) });
+            }}
+          >
+            + 영역 (합치기·빼기)
+          </button>
+        )}
       </div>
       <ConstraintPanel sketch={sketch} />
       {users.length > 0 && (

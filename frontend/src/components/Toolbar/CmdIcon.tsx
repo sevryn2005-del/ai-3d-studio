@@ -28,6 +28,7 @@ const PATHS: Record<string, string> = {
   sweep: 'M4 18c4 0 6-12 16-12M2 16h4v4H2zM18 4h4v4h-4z',
   rib: 'M3 20h18M8 20V8h2v12M14 20V8h2v12M8 8h8',
   path: 'M3 18l6-8 5 4 7-9M3 18h.01M21 5h.01',
+  arc: 'M4 18a9 9 0 0 1 16 0M4 18h.01M20 18h.01',
   chamfer: 'M4 20V10l6-6h10M4 20h16',
   draft: 'M4 20h16M7 20L9 4h6l2 16M12 4v16',
   linear: 'M3 8h5v8H3zM10 8h5v8h-5zM17 8h4v8h-4',

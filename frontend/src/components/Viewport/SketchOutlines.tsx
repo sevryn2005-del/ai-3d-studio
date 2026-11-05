@@ -66,6 +66,8 @@ function EntityOutline({ sketch, entity, color }: { sketch: Sketch; entity: Sket
       const w = (dimensionValue(sketch, entity.id, 'width') ?? 0) / 2;
       const h = (dimensionValue(sketch, entity.id, 'height') ?? 0) / 2;
       for (const [x, y] of [[-w, -h], [w, -h], [w, h], [-w, h]] as const) pts.push(cx + x, cy + y, z);
+    } else if (entity.type === 'region') {
+      // 영역은 따로 그리지 않는다 (구성 요소의 윤곽이 이미 보인다)
     } else {
       const [cx, cy] = entity.center;
       const r = (dimensionValue(sketch, entity.id, 'diameter') ?? 0) / 2;

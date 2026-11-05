@@ -13,6 +13,7 @@ OCCT 주의 사항 (실험으로 확인)
 
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 
 import cadquery as cq
@@ -23,7 +24,8 @@ from OCP.BRepBuilderAPI import (
     BRepBuilderAPI_Transform,
 )
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakePipeShell
-from OCP.gp import gp_Dir, gp_GTrsf, gp_Trsf
+from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol
+from OCP.gp import gp_Ax1, gp_Dir, gp_GTrsf, gp_Pnt, gp_Trsf, gp_Vec
 
 from app.cad.commands import (
     BooleanObject,
@@ -148,6 +150,10 @@ _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"
 
 def profile_workplane(p: dict) -> cq.Workplane:
     """평면 좌표(u, v) 단면 윤곽 (대기 윤곽 하나). 꼭짓점 처리는 정확한 원호 (curves.py 와 같은 점)"""
+    if p["type"] == "region":
+        from app.cad.sections import REGION_UNSUPPORTED
+
+        raise GeometryError(REGION_UNSUPPORTED)
     if p["type"] == "polygon" and (p.get("corners") or p.get("arcs")):
         segs = corner_segments(p["points"], p.get("corners"), True, p.get("arcs"))
         w = cq.Workplane("XY").moveTo(*segs[0][1])
@@ -169,6 +175,21 @@ def profile_wire(p: dict) -> cq.Wire:
     return wires[0]
 
 
+def region_face(p: dict, name: str) -> cq.Shape:
+    """영역 단면 (형식 v15): 면들을 순서대로 합치고 뺀 뒤 같은 면을 하나로 — 브라우저 occtGeometry.profileShape 와 같음"""
+    def face(q: dict) -> cq.Shape:
+        return cq.Face.makeFromWires(profile_wire(q))
+
+    s = face(p["items"][0]["profile"])
+    for it in p["items"][1:]:
+        f = face(it["profile"])
+        s = s.fuse(f) if it["op"] == "add" else s.cut(f)
+    s = s.clean()
+    if s.Area() < 1e-9:
+        raise GeometryError(f"'{name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)")
+    return s
+
+
 def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject], sketches: dict[str, Sketch]) -> cq.Shape:
     """스케치 피처 (객체 로컬 좌표). 평면 좌표에서 단면을 돌출(또는 v 축 둘레 회전)한 뒤 frames.extrude_local_matrix 로 옮긴다
     — 기준 평면·면 평면 모두 브라우저 엔진 geometry.ts / sketchPlane.ts 와 같은 행렬.
@@ -185,6 +206,23 @@ def extrude_solid(obj: ExtrudeObject | RevolveObject, index: dict[str, CadObject
     def profile_wp() -> cq.Workplane:
         # 작업 평면의 대기 윤곽은 돌출 한 번에 소모되므로, 쓸 때마다 새로 만든다
         return profile_workplane(p)
+
+    if p["type"] == "region":
+        if isinstance(obj, ExtrudeObject) and obj.shell is not None:
+            raise GeometryError(f"'{obj.name}': 영역 단면에는 쉘을 줄 수 없습니다")
+        if isinstance(obj, RevolveObject) and (err := revolve_profile_error(p)):
+            raise GeometryError(f"'{obj.name}': {err}")
+        rf = region_face(p, obj.name)
+        if isinstance(obj, RevolveObject):
+            solid = cq.Shape.cast(BRepPrimAPI_MakeRevol(rf.wrapped, gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 1, 0)), math.radians(obj.params.angle)).Shape())
+        else:
+            d = obj.params.distance
+            solid = cq.Shape.cast(BRepPrimAPI_MakePrism(rf.wrapped, gp_Vec(0, 0, abs(d))).Shape())
+            if d < 0:
+                solid = solid.translate(cq.Vector(0, 0, d))
+        trsf = gp_Trsf()
+        trsf.SetValues(*local[:3, :4].ravel().tolist())
+        return cq.Shape.cast(BRepBuilderAPI_Transform(solid.wrapped, trsf, True).Shape())
 
     wp = profile_wp()
     if isinstance(obj, RevolveObject):

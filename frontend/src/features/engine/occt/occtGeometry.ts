@@ -16,10 +16,10 @@ import type { OpenCascadeInstance, TopoDS_Edge, TopoDS_Face, TopoDS_Shape } from
 import { Matrix4, Vector3 } from 'three';
 import type { CadObject, FeatureEdges, ModelDefinition, ObjectId, Sketch } from '../../../cad/commandTypes';
 import { byId, sketchIndex, topLevelObjects } from '../../../cad/modelGraph';
-import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type Profile } from '../../../cad/sketch';
+import { openLinePoints, profileBounds, profileOf, resolveProfile, revolveProfileError, type BaseProfile, type Profile } from '../../../cad/sketch';
 import { cornerSegments, sweepError, type Segment } from '../../../cad/curves';
 import { extrudeLocalMatrix, sketchLocalMatrix } from '../../../cad/sketchPlane';
-import { helixError, helixProfilePoints, helixRings, sweepProfilePoints } from '../../../cad/sections';
+import { helixError, helixProfilePoints, helixRings, REGION_UNSUPPORTED, sweepProfilePoints } from '../../../cad/sections';
 import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices } from '../../../cad/features';
@@ -71,7 +71,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 14, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 15, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -167,12 +167,32 @@ function faceOf(c: Ctx, wire: ReturnType<typeof polygonWire>): TopoDS_Face {
 }
 
 /** 평면 좌표(u, v) 단면 — CadQuery rect·circle·polyline·slot2D 와 같은 윤곽 */
-function profileFace(c: Ctx, p: Profile): TopoDS_Face {
+function profileFace(c: Ctx, p: BaseProfile): TopoDS_Face {
   return faceOf(c, profileWire(c, p));
+}
+
+/**
+ * 돌출·회전할 단면 형상: 단면 하나는 면, 영역(형식 v15)은 면들을 순서대로 합치고 뺀 뒤 같은 면을 하나로 (정확한 원·호 유지)
+ */
+function profileShape(c: Ctx, p: Profile, name: string): TopoDS_Shape {
+  if (p.type !== 'region') return profileFace(c, p);
+  let s: TopoDS_Shape = profileFace(c, p.items[0]!.profile);
+  for (const it of p.items.slice(1)) {
+    const f = profileFace(c, it.profile);
+    s = it.op === 'add' ? fuse(c, s, f) : cut(c, s, f);
+  }
+  const u = c.gc.k(new c.oc.ShapeUpgrade_UnifySameDomain(s, true, true, false));
+  u.Build();
+  s = c.gc.k(u.Shape());
+  const props = c.gc.k(new c.oc.GProp_GProps());
+  c.oc.BRepGProp.SurfaceProperties(s, props, false, false);
+  if (props.Mass() < 1e-9) throw new GeometryError(`'${name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
+  return s;
 }
 
 /** 단면 윤곽선 (정확한 원·호) */
 function profileWire(c: Ctx, p: Profile): ReturnType<typeof polygonWire> {
+  if (p.type === 'region') throw new GeometryError(REGION_UNSUPPORTED);
   if (p.type === 'polygon') {
     if (!p.corners?.length && !p.arcs?.length) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
     // 꼭짓점 처리: 직선 + 정확한 원호 (호 방향은 원 축 ±Z 로)
@@ -710,7 +730,8 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       if (!p) throw new GeometryError(`'${obj.name}': 참조한 스케치 프로파일을 찾을 수 없습니다`);
       const local = extrudeLocalMatrix(modelOf(c), obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
-      const face = profileFace(c, p);
+      if (p.type === 'region' && obj.kind === 'extrude' && obj.shell) throw new GeometryError(`'${obj.name}': 영역 단면에는 쉘을 줄 수 없습니다`);
+      const face = profileShape(c, p, obj.name);
       let solid: TopoDS_Shape;
       if (obj.kind === 'revolve') {
         const err = revolveProfileError(p);
@@ -728,7 +749,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
           const z1 = highOpen ? Math.abs(d) + 1 : Math.abs(d) - t;
           let inner: TopoDS_Face;
           try {
-            const off = c.gc.k(new c.oc.BRepOffsetAPI_MakeOffset(face, 'GeomAbs_Intersection' as never, false));
+            const off = c.gc.k(new c.oc.BRepOffsetAPI_MakeOffset(c.oc.TopoDS.Face(face), 'GeomAbs_Intersection' as never, false));
             off.Perform(-t, 0);
             if (!off.IsDone()) throw new Error('offset');
             inner = faceOf(c, c.oc.TopoDS.Wire(c.gc.k(off.Shape())));

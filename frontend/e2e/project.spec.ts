@@ -30,7 +30,7 @@ test.describe('파일 선택 창/다운로드 방식 (File System Access API 미
     expect(download.suggestedFilename()).toBe('제목 없음.ai3d');
     await expect(page.getByTestId('project-name')).toHaveText('제목 없음');
     const saved = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-    expect(saved).toMatchObject({ format: 'ai3d-project', formatVersion: 14, name: '제목 없음' });
+    expect(saved).toMatchObject({ format: 'ai3d-project', formatVersion: 15, name: '제목 없음' });
     expect(saved.model.objects[0].params.height).toBe(50);
 
     // 실행 취소 → 미저장, 다시 실행(저장 시점) → 저장됨
