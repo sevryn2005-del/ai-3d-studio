@@ -125,6 +125,21 @@ export const FACE_SKETCH_COMMANDS: unknown[] = [
  * 구멍 Ø6 @ (40, 7.5) 을 5mm 판에서 뺀다. 부피 = (60·15 + 20·25)·5 − π·9·5.
  * 백엔드는 저장된 좌표가 구속을 만족하는지 같은 잔차 식으로 검사한다 (app/cad/constraints.py).
  */
+/**
+ * 사각형 모서리·변 참조와 중간점 구속 (형식 v21): 40×20 사각형의 왼쪽 아래 모서리 고정 → 중심 (0, 0),
+ * 삼각형 p0 = 사각형 오른쪽 위 모서리(일치), p1 = 사각형 오른쪽 변의 가운데(중간점), p2 는 왼쪽 위 모서리와 수직. 서버 test_constraints 가 같은 잔차로 검사
+ */
+export const CONSTRAINT_RECT_CORNER_COMMANDS: unknown[] = [
+  { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+  { type: 'add_rectangle', sketch: 's', id: 'r', center: [3, -2], width: 40, height: 20 },
+  { type: 'add_constraint', sketch: 's', id: 'fix_corner', constraint: 'fix', refs: ['r.p0'] },
+  { type: 'add_polygon', sketch: 's', id: 'tri', points: [[26, 12], [27, 1], [35, 25]] },
+  { type: 'add_constraint', sketch: 's', id: 'on_corner', constraint: 'coincident', refs: ['tri.p0', 'r.p2'] },
+  { type: 'add_constraint', sketch: 's', id: 'on_mid', constraint: 'midpoint', refs: ['tri.p1', 'r.e1'] },
+  { type: 'add_constraint', sketch: 's', id: 'below_corner', constraint: 'vertical', refs: ['tri.p2', 'r.p3'] },
+  { type: 'extrude', id: 'plate', sketch: 's', profile: 'r', distance: 5 },
+];
+
 export const CONSTRAINT_BRACKET_COMMANDS: unknown[] = [
   { type: 'create_sketch', id: 'sk_l', name: 'L 브래킷' },
   { type: 'add_polygon', sketch: 'sk_l', id: 'l', points: [[1, -1], [58, 2], [61, 14], [22, 17], [18, 38], [-2, 41]] },
@@ -862,6 +877,7 @@ export function generateSchemas(samples: FixtureSamples): Record<string, string>
     'examples/model-sketch-planes.json': JSON.stringify(buildSketchPlateFixture(SKETCH_PLANES_COMMANDS), null, 2) + '\n',
     'examples/model-face-sketch.json': JSON.stringify(buildSketchPlateFixture(FACE_SKETCH_COMMANDS), null, 2) + '\n',
     'examples/model-constraint-bracket.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_BRACKET_COMMANDS), null, 2) + '\n',
+    'examples/model-constraint-rect-corner.json': JSON.stringify(buildSketchPlateFixture(CONSTRAINT_RECT_CORNER_COMMANDS), null, 2) + '\n',
     'examples/model-revolve.json': JSON.stringify(buildSketchPlateFixture(REVOLVE_COMMANDS), null, 2) + '\n',
     'examples/survey-cases.json': JSON.stringify(buildSurveyFixture(), null, 2) + '\n',
     'examples/feature-cases.json': JSON.stringify(buildFeatureFixture(samples), null, 2) + '\n',

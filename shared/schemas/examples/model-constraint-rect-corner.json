@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 21,
+  "units": "mm",
+  "sketches": [
+    {
+      "id": "s",
+      "name": "스케치 1",
+      "plane": {
+        "type": "XY",
+        "offset": 0
+      },
+      "entities": [
+        {
+          "id": "r",
+          "type": "rectangle",
+          "center": [
+            3,
+            -2
+          ]
+        },
+        {
+          "id": "tri",
+          "type": "polygon",
+          "points": [
+            [
+              23,
+              8
+            ],
+            [
+              23,
+              -2
+            ],
+            [
+              -17,
+              25
+            ]
+          ]
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "r.width",
+          "entity": "r",
+          "kind": "width",
+          "value": 40
+        },
+        {
+          "id": "r.height",
+          "entity": "r",
+          "kind": "height",
+          "value": 20
+        }
+      ],
+      "constraints": [
+        {
+          "id": "fix_corner",
+          "type": "fix",
+          "refs": [
+            "r.p0"
+          ]
+        },
+        {
+          "id": "on_corner",
+          "type": "coincident",
+          "refs": [
+            "tri.p0",
+            "r.p2"
+          ]
+        },
+        {
+          "id": "on_mid",
+          "type": "midpoint",
+          "refs": [
+            "tri.p1",
+            "r.e1"
+          ]
+        },
+        {
+          "id": "below_corner",
+          "type": "vertical",
+          "refs": [
+            "tri.p2",
+            "r.p3"
+          ]
+        }
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "id": "plate",
+      "name": "돌출 1",
+      "kind": "extrude",
+      "params": {
+        "distance": 5
+      },
+      "extrude": {
+        "sketch": "s",
+        "profile": "r"
+      },
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

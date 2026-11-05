@@ -198,7 +198,7 @@ export function ConstraintPanel({ sketch }: { sketch: Sketch }) {
   );
 }
 
-const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'angle', 'equal', 'coincident', 'distance', 'concentric', 'tangent', 'symmetric'];
+const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'angle', 'equal', 'coincident', 'distance', 'concentric', 'tangent', 'symmetric', 'midpoint'];
 
 function PairConstraintForm({ sketch }: { sketch: Sketch }) {
   const submitNow = useSceneStore((s) => s.submitNow);
@@ -215,6 +215,8 @@ function PairConstraintForm({ sketch }: { sketch: Sketch }) {
       if (e.type === 'path') e.points.slice(1).forEach((_, k) => refs.push(`${e.id}.e${k}`));
       if (e.type === 'line') refs.push(`${e.id}.e0`);
       if (e.type === 'circle') refs.push(e.id);
+      // 사각형 모서리·변 (형식 v21): 왼쪽 아래부터 반시계
+      if (e.type === 'rectangle') for (let k = 0; k < 4; k++) refs.push(`${e.id}.p${k}`, `${e.id}.e${k}`);
     }
     return refs;
   }, [sketch]);

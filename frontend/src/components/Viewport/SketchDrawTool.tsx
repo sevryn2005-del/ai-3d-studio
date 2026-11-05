@@ -3,7 +3,7 @@ import { Html, Line as DreiLine } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Line, LineBasicMaterial, Matrix4, Vector3 } from 'three';
 import type { CadCommand, Point2 } from '../../cad/commandTypes';
-import { centerRelations, drawnTarget, polylineRelations, withRelations, type PlacedMeta, type Relation } from '../../cad/autoRelations';
+import { centerRelations, drawnTarget, polylineRelations, rectRelations, withRelations, type PlacedMeta, type Relation } from '../../cad/autoRelations';
 import { notify } from '../../features/projects/projectActions';
 import { selectModel, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { drawShapeCommands, type DrawnShape } from '../../cad/sketchActions';
@@ -154,7 +154,11 @@ export function SketchDrawTool() {
     setTyped(null);
     setDrag(null);
     const cmds = drawShapeCommands(useSceneStore.getState().history.present.model, sketchIdNow(), r.shape);
-    if (cmds) commit(cmds, (id) => (r.shape.type === 'circle' ? centerRelations(id, r.anchor ?? undefined) : []));
+    const anchorSnap = r.anchor ? metaOf(r.anchor).snap : undefined;
+    if (cmds)
+      commit(cmds, (id) =>
+        r.shape.type === 'circle' ? centerRelations(id, anchorSnap) : r.shape.type === 'rectangle' ? rectRelations(id, r.shape.from, r.shape.to, anchorSnap, undefined) : [],
+      );
   };
 
   useEffect(() => {
@@ -243,7 +247,7 @@ export function SketchDrawTool() {
     return { type: 'circle', center: d.from, radius: exact ? Number(r.toFixed(6)) : Math.round(r / step) * step };
   };
   const isPointSnap = (r: SnapResult | null) => !!r && r.kind !== 'grid' && r.kind !== 'free';
-  const metaOf = (r: SnapResult): PlacedMeta => ({ snap: { kind: r.kind, guides: r.guides, ...(r.ref ? { ref: r.ref } : {}) } });
+  const metaOf = (r: SnapResult): PlacedMeta => ({ snap: { kind: r.kind, guides: r.guides, ...(r.ref ? { ref: r.ref } : {}), ...(r.edge ? { edge: r.edge } : {}) } });
 
   const down = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
@@ -291,7 +295,12 @@ export function SketchDrawTool() {
     const r = snapAt(e.point, e.nativeEvent.shiftKey);
     const to = square(d.from, r.point, e.nativeEvent.shiftKey);
     const cmds = drawShapeCommands(useSceneStore.getState().history.present.model, sketch?.id ?? null, shapeOf({ from: d.from, to }, isPointSnap(r)));
-    if (cmds) commit(cmds, (id) => (tool === 'circle' ? centerRelations(id, metaOf(d.fromSnap).snap) : []));
+    // 끝 모서리는 정사각형(Shift)으로 바뀌지 않았을 때만 붙은 점을 쓴다
+    const toSnap = to[0] === r.point[0] && to[1] === r.point[1] ? metaOf(r).snap : undefined;
+    if (cmds)
+      commit(cmds, (id) =>
+        tool === 'circle' ? centerRelations(id, metaOf(d.fromSnap).snap) : tool === 'rectangle' ? rectRelations(id, d.from, to, metaOf(d.fromSnap).snap, toSnap) : [],
+      );
   };
   const color = view.paper ? '#1f5fd6' : '#ffd166';
   // 숫자를 치는 중이면 미리보기도 그 값으로

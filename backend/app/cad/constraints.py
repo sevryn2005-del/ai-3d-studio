@@ -16,7 +16,7 @@ CHECK_TOLERANCE = 1e-4
 LABEL = {
     "fix": "고정", "coincident": "일치", "concentric": "동심", "horizontal": "수평", "vertical": "수직", "parallel": "평행",
     "perpendicular": "직교", "equal": "같은 길이", "length": "길이", "distance": "거리", "tangent": "접선", "angle": "각도",
-    "symmetric": "대칭",
+    "symmetric": "대칭", "midpoint": "중간점",
 }
 
 # 구속 종류별 참조 형식 (solver.ts CONSTRAINT_ARITY 와 같음)
@@ -34,6 +34,7 @@ ARITY: dict[str, tuple[list[tuple[str, ...]], bool]] = {
     "tangent": ([("edge", "circle")], False),
     "angle": ([("edge", "edge")], True),
     "symmetric": ([("point", "point", "edge")], False),
+    "midpoint": ([("point", "edge")], False),
 }
 
 
@@ -45,6 +46,12 @@ def sketch_points(sk: Sketch) -> dict[str, tuple[float, float]]:
                 pts[f"{e.id}.p{k}"] = (p[0], p[1])
         elif e.type != "region":
             pts[f"{e.id}.center"] = (e.center[0], e.center[1])
+        if e.type == "rectangle":
+            # 사각형 모서리 (형식 v21): p0..p3 = 왼쪽 아래부터 반시계 = 중심 ± 폭·높이 치수 / 2 (solver.ts 와 같음)
+            w = next((d.value for d in sk.dimensions if d.entity == e.id and d.kind == "width"), 0) / 2
+            h = next((d.value for d in sk.dimensions if d.entity == e.id and d.kind == "height"), 0) / 2
+            for k, (sx, sy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+                pts[f"{e.id}.p{k}"] = (e.center[0] + sx * w, e.center[1] + sy * h)
     return pts
 
 
@@ -57,6 +64,10 @@ def ref_kind(sk: Sketch, ref: str) -> str | None:
         return "circle" if e.type == "circle" else None
     if part == "center":
         return None if e.type in ("polygon", "line", "path") else "point"
+    if e.type == "rectangle":
+        if len(part) == 2 and part[0] in "pe" and part[1] in "0123":
+            return "point" if part[0] == "p" else "edge"
+        return None
     if e.type not in ("polygon", "line", "path"):
         return None
     # 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선·경로: 열린 선 → 변 = 점 수 − 1
@@ -86,7 +97,8 @@ def constraint_error(sk: Sketch, c: SketchConstraint) -> str | None:
 
 def _edge(sk: Sketch, pts: dict, ref: str):
     eid, _, part = ref.partition(".")
-    n = len(next(e for e in sk.entities if e.id == eid).points)
+    ent = next(e for e in sk.entities if e.id == eid)
+    n = 4 if ent.type == "rectangle" else len(ent.points)
     k = int(part[1:])
     return pts[f"{eid}.p{k}"], pts[f"{eid}.p{(k + 1) % n}"]
 
@@ -140,6 +152,10 @@ def residuals(sk: Sketch, c: SketchConstraint) -> list[float]:
         ln = max(math.hypot(dx, dy), 1e-12)
         mx, my = (p[0] + q[0]) / 2 - a[0], (p[1] + q[1]) / 2 - a[1]
         return [(dx * my - dy * mx) / ln, ((q[0] - p[0]) * dx + (q[1] - p[1]) * dy) / ln]
+    if t == "midpoint":
+        p = P(c.refs[0])
+        a, b = _edge(sk, pts, c.refs[1])
+        return [p[0] - (a[0] + b[0]) / 2, p[1] - (a[1] + b[1]) / 2]
     if t == "tangent":
         a, b = _edge(sk, pts, c.refs[0])
         o = P(c.refs[1])

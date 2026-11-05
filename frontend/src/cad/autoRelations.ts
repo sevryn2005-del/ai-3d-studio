@@ -1,6 +1,6 @@
 /**
  * 자동 구속 (솔리드웍스 "자동 관계"): 그릴 때 붙은 점·정렬 안내를 구속으로 남긴다 — 순수 함수.
- * - 다른 요소의 점(꼭짓점·중심)에 붙음 → 일치, 원점에 붙음 → 고정
+ * - 다른 요소의 점(꼭짓점·사각형 모서리·중심)에 붙음 → 일치, 변 가운데에 붙음 → 중간점, 원점에 붙음 → 고정
  * - 다른 점과 수평·수직 정렬 안내 → 두 점 수평/수직
  * - 그린 변이 정확히 가로·세로 → 변 수평/수직, 숫자로 입력한 길이 → 길이 구속
  * 넣을 수 없는(모순·과다) 구속은 하나씩 확인해 건너뛴다 → 그리기 자체는 항상 된다.
@@ -16,7 +16,7 @@ export interface Relation {
 }
 /** 찍은 점 하나의 정보: 어디에 붙었는지, 숫자로 친 길이(앞 점에서) */
 export interface PlacedMeta {
-  snap?: Pick<SnapResult, 'kind' | 'ref' | 'guides'>;
+  snap?: Pick<SnapResult, 'kind' | 'ref' | 'guides' | 'edge'>;
   length?: number;
 }
 
@@ -27,6 +27,7 @@ const key = (r: Relation) => `${r.constraint}:${r.refs.join(',')}`;
 function pointRelations(self: string, snap: PlacedMeta['snap'], resolve: (ref: string) => string | null): Relation[] {
   if (!snap) return [];
   if (snap.kind === 'origin') return [{ constraint: 'fix', refs: [self] }];
+  if (snap.kind === 'midpoint' && snap.edge) return [{ constraint: 'midpoint', refs: [self, snap.edge] }];
   if (snap.ref) {
     const other = resolve(snap.ref);
     return other ? [{ constraint: 'coincident', refs: [self, other] }] : [];
@@ -74,6 +75,20 @@ export function polylineRelations(id: ObjectId, points: Point2[], meta: PlacedMe
 /** 중심이 있는 도형(원): 중심이 붙은 점·정렬 → 구속 */
 export function centerRelations(id: ObjectId, snap: PlacedMeta['snap']): Relation[] {
   return dedupe(pointRelations(`${id}.center`, snap, (ref) => (ref.startsWith('@') ? null : ref)));
+}
+
+/** 새 사각형: 드래그 시작·끝 모서리가 붙은 점 → 그 모서리(p0..p3) 구속 */
+export function rectRelations(id: ObjectId, from: Point2, to: Point2, fromSnap: PlacedMeta['snap'], toSnap: PlacedMeta['snap']): Relation[] {
+  const corner = (p: Point2, q: Point2) => {
+    const right = p[0] > q[0];
+    const top = p[1] > q[1];
+    return right ? (top ? 2 : 1) : top ? 3 : 0;
+  };
+  const resolve = (ref: string) => (ref.startsWith('@') ? null : ref);
+  return dedupe([
+    ...pointRelations(`${id}.p${corner(from, to)}`, fromSnap, resolve),
+    ...pointRelations(`${id}.p${corner(to, from)}`, toSnap, resolve),
+  ]);
 }
 
 function dedupe(rs: Relation[]): Relation[] {

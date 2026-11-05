@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { executeBatch, executeCommand } from './commandExecutor';
 import { emptyModel, type ModelDefinition, type Sketch } from './commandTypes';
 import { validateGraph } from './modelGraph';
+import { CONSTRAINT_RECT_CORNER_COMMANDS, buildSketchPlateFixture } from './schemaExport';
 import { constraintResiduals, degreesOfFreedom, polygonError, solveSketch } from './solver';
 
 function run(m: ModelDefinition, cmds: unknown[]): ModelDefinition {
@@ -202,5 +203,32 @@ describe('다각형 형상', () => {
     const s = sk(quad());
     const r = solveSketch(s);
     expect(r.ok && r.sketch.entities).toEqual(s.entities);
+  });
+});
+
+describe('사각형 모서리·변 참조와 중간점 구속 (형식 v21)', () => {
+  it('모서리 고정 → 중심이 움직이고, 일치·중간점·수직이 모서리·변을 따른다', () => {
+    const m = buildSketchPlateFixture(CONSTRAINT_RECT_CORNER_COMMANDS);
+    const sk = m.sketches[0]!;
+    const r = sk.entities.find((e) => e.id === 'r') as { center: number[] };
+    const tri = sk.entities.find((e) => e.id === 'tri') as { points: number[][] };
+    // 고정은 그린 자리(중심 (3, −2) → 왼쪽 아래 (−17, −12))를 지킨다
+    expect(r.center).toEqual([3, -2]);
+    expect(tri.points[0]).toEqual([23, 8]); // 오른쪽 위 모서리
+    expect(tri.points[1]).toEqual([23, -2]); // 오른쪽 변 가운데
+    expect(tri.points[2]![0]).toBeCloseTo(-17, 6); // 왼쪽 위 모서리와 수직
+    expect(Math.max(...constraintResiduals(sk).values())).toBeLessThan(1e-6);
+  });
+});
+
+describe('사각형 → 다각형: 모서리 구속은 그대로 (형식 v21)', () => {
+  it('일치·중간점 구속이 다각형 꼭짓점·변 이름으로 이어진다', () => {
+    const m = buildSketchPlateFixture(CONSTRAINT_RECT_CORNER_COMMANDS);
+    const r = executeCommand(m, { type: 'convert_to_polygon', sketch: 's', entity: 'r' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const sk = r.model.sketches[0]!;
+    expect(sk.constraints.map((c) => c.id).sort()).toEqual(['below_corner', 'fix_corner', 'on_corner', 'on_mid']);
+    expect(Math.max(...constraintResiduals(sk).values())).toBeLessThan(1e-6);
   });
 });

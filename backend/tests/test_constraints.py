@@ -73,3 +73,20 @@ def test_stl_export(client):
     tris = export(client, fixture())
     assert mesh_volume(tris) == pytest.approx(EXACT, rel=2e-3)
     assert is_watertight(tris)
+
+
+def test_rectangle_corner_and_midpoint_constraints():
+    """형식 v21: 사각형 모서리 p0..p3·변 e0..e3 참조, 중간점 구속 — 프론트엔드가 푼 좌표를 같은 잔차로 확인"""
+    raw = load_json("examples/model-constraint-rect-corner.json")
+    m = ModelDefinition.model_validate(raw)
+    assert check_model(m) == []
+    sk = m.sketches[0]
+    assert {c.type for c in sk.constraints} >= {"fix", "coincident", "midpoint", "vertical"}
+    for c in sk.constraints:
+        assert max((abs(v) for v in residuals(sk, c)), default=0) < 1e-6, c.id
+    tri = next(e for e in sk.entities if e.id == "tri")
+    assert [tuple(p) for p in tri.points[:2]] == [(23, 8), (23, -2)]
+    # 사각형을 옮기면(모서리·가운데에서 벗어나면) 거부
+    bad = copy.deepcopy(raw)
+    next(e for e in bad["sketches"][0]["entities"] if e["id"] == "r")["center"] = [4, -2]
+    assert check_model(ModelDefinition.model_validate(bad)) != []

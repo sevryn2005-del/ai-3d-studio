@@ -1514,7 +1514,8 @@
             "distance",
             "tangent",
             "angle",
-            "symmetric"
+            "symmetric",
+            "midpoint"
           ]
         },
         "refs": {
@@ -3480,7 +3481,8 @@
                             "distance",
                             "tangent",
                             "angle",
-                            "symmetric"
+                            "symmetric",
+                            "midpoint"
                           ]
                         },
                         "refs": {

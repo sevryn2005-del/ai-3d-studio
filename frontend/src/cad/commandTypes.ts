@@ -322,6 +322,7 @@ export const ConstraintTypeSchema = z.enum([
   'fix', 'coincident', 'concentric', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'equal', 'length', 'distance', 'tangent',
   'angle', // 형식 v7: 두 변 사이 각도(°, 첫 변 → 둘째 변 반시계)
   'symmetric', // 형식 v13: 두 점이 대칭축(변)에 대해 대칭 [점, 점, 변]
+  'midpoint', // 형식 v21: 점이 변의 가운데 [점, 변]. 사각형 모서리 p0..p3·변 e0..e3 도 참조할 수 있다
 ]);
 export type ConstraintType = z.infer<typeof ConstraintTypeSchema>;
 export const GeomRefSchema = z
@@ -660,7 +661,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 20;
+export const MODEL_SCHEMA_VERSION = 21;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

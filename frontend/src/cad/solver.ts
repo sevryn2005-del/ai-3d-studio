@@ -28,6 +28,7 @@ export const CONSTRAINT_LABEL: Record<ConstraintType, string> = {
   tangent: '접선',
   angle: '각도',
   symmetric: '대칭',
+  midpoint: '중간점',
 };
 
 type RefKind = 'point' | 'edge' | 'circle';
@@ -47,6 +48,7 @@ export const CONSTRAINT_ARITY: Record<ConstraintType, { refs: RefKind[][]; value
   symmetric: { refs: [['point', 'point', 'edge']], value: false },
   tangent: { refs: [['edge', 'circle']], value: false },
   angle: { refs: [['edge', 'edge']], value: true },
+  midpoint: { refs: [['point', 'edge']], value: false },
 };
 
 // ---- 참조 해석 ---------------------------------------------------------------
@@ -65,6 +67,32 @@ function entityOf(sketch: Sketch, ref: string): SketchEntity | undefined {
   return sketch.entities.find((e) => e.id === ref.split('.')[0]);
 }
 
+/**
+ * 사각형 모서리 (형식 v21): `사각형ID.p0..p3` = 왼쪽 아래부터 반시계 (다각형으로 바꿨을 때와 같은 순서),
+ * 변 `e0..e3` = pk → p(k+1). 모서리는 변수가 아니라 중심 + 폭·높이 치수에서 나온다 → 구속은 중심을 움직인다.
+ */
+const RECT_CORNERS: Point2[] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+function rectCorner(sketch: Sketch, id: string, k: number, center: Point2): Point2 {
+  const dim = (kind: 'width' | 'height') => sketch.dimensions.find((d) => d.entity === id && d.kind === kind)?.value ?? 0;
+  const [sx, sy] = RECT_CORNERS[k]!;
+  return [center[0] + (sx * dim('width')) / 2, center[1] + (sy * dim('height')) / 2];
+}
+const isRectPart = (sketch: Sketch, ref: string) => entityOf(sketch, ref)?.type === 'rectangle' && /\.[pe]\d+$/.test(ref);
+
+/** 점 이름 → 해석기 변수 이름 (사각형 모서리는 그 사각형의 중심) */
+export function pointVariable(sketch: Sketch, ref: string): string {
+  return isRectPart(sketch, ref) ? `${ref.split('.')[0]}.center` : ref;
+}
+
+/** 좌표 읽기에 사각형 모서리를 더한다 */
+function withDerived(sketch: Sketch, get: (name: string) => Point2): (name: string) => Point2 {
+  return (name) => {
+    if (!isRectPart(sketch, name)) return get(name);
+    const [id, part] = name.split('.') as [string, string];
+    return rectCorner(sketch, id, Number(part.slice(1)), get(`${id}.center`));
+  };
+}
+
 /** 참조 종류. 없는 참조면 null */
 export function refKind(sketch: Sketch, ref: string): RefKind | null {
   const e = entityOf(sketch, ref);
@@ -72,6 +100,7 @@ export function refKind(sketch: Sketch, ref: string): RefKind | null {
   const [, part] = ref.split('.');
   if (part === undefined) return e.type === 'circle' ? 'circle' : null;
   if (part === 'center') return e.type === 'polygon' || e.type === 'line' || e.type === 'path' ? null : 'point';
+  if (e.type === 'rectangle') return /^[pe][0-3]$/.test(part) ? (part[0] === 'p' ? 'point' : 'edge') : null;
   if (e.type !== 'polygon' && e.type !== 'line' && e.type !== 'path') return null;
   const k = Number(part.slice(1));
   // 다각형: 꼭짓점 수만큼 변 (닫힘). 구성선·경로: 열린 선 → 변 = 점 수 − 1
@@ -82,9 +111,10 @@ export function refKind(sketch: Sketch, ref: string): RefKind | null {
 /** 변 → 두 끝점 이름 */
 function edgeEnds(sketch: Sketch, ref: string): [string, string] {
   const [id, part] = ref.split('.') as [string, string];
-  const e = entityOf(sketch, ref) as Extract<SketchEntity, { type: 'polygon' | 'line' | 'path' }>;
+  const e = entityOf(sketch, ref)!;
   const k = Number(part.slice(1));
-  return [`${id}.p${k}`, `${id}.p${(k + 1) % e.points.length}`];
+  const n = e.type === 'polygon' || e.type === 'line' || e.type === 'path' ? e.points.length : 4;
+  return [`${id}.p${k}`, `${id}.p${(k + 1) % n}`];
 }
 
 function circleRadius(sketch: Sketch, id: string): number {
@@ -113,7 +143,8 @@ export function constraintError(sketch: Sketch, c: Pick<SketchConstraint, 'type'
 type Get = (name: string) => Point2;
 
 /** 구속 하나의 잔차 (만족하면 모두 0). fix 는 변수에서 빠지므로 잔차가 없다 */
-function residuals(sketch: Sketch, c: SketchConstraint, get: Get): number[] {
+function residuals(sketch: Sketch, c: SketchConstraint, rawGet: Get): number[] {
+  const get = withDerived(sketch, rawGet);
   const P = (ref: string) => get(ref.endsWith('.center') || ref.includes('.p') ? ref : `${ref}.center`);
   const dir = (edge: string): Point2 => {
     const [a, b] = edgeEnds(sketch, edge).map(get) as [Point2, Point2];
@@ -174,6 +205,12 @@ function residuals(sketch: Sketch, c: SketchConstraint, get: Get): number[] {
       const m: Point2 = [(p[0] + q[0]) / 2 - a[0], (p[1] + q[1]) / 2 - a[1]];
       return [(d[0] * m[1] - d[1] * m[0]) / l, ((q[0] - p[0]) * d[0] + (q[1] - p[1]) * d[1]) / l];
     }
+    case 'midpoint': {
+      // 점이 변의 가운데 (형식 v21)
+      const p = P(c.refs[0]!);
+      const [a, b] = edgeEnds(sketch, c.refs[1]!).map(get) as [Point2, Point2];
+      return [p[0] - (a[0] + b[0]) / 2, p[1] - (a[1] + b[1]) / 2];
+    }
     case 'tangent': {
       const [a, b] = edgeEnds(sketch, c.refs[0]!).map(get) as [Point2, Point2];
       const o = P(c.refs[1]!);
@@ -187,7 +224,7 @@ function residuals(sketch: Sketch, c: SketchConstraint, get: Get): number[] {
 /** 고정된 점 이름 */
 function fixedPoints(sketch: Sketch): Set<string> {
   const s = new Set<string>();
-  for (const c of sketch.constraints) if (c.type === 'fix') s.add(c.refs[0]!);
+  for (const c of sketch.constraints) if (c.type === 'fix') s.add(pointVariable(sketch, c.refs[0]!));
   return s;
 }
 

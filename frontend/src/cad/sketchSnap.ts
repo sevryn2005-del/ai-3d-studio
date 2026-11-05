@@ -12,6 +12,8 @@ export interface SnapPoint {
   kind: SnapPointKind;
   /** 구속에 쓸 수 있는 점 이름 ("다각형ID.p0", "원ID.center"). 그리는 중인 점은 "@번호" */
   ref?: string;
+  /** 중간점이면 그 변 이름 ("다각형ID.e0", "사각형ID.e1") — 중간점 구속 */
+  edge?: string;
 }
 export interface SnapGuide {
   /** h = 수평선(같은 v), v = 수직선(같은 u), angle = 기준점에서 각도 */
@@ -27,6 +29,8 @@ export interface SnapResult {
   angle?: number;
   /** 점에 붙었을 때 그 점 이름 (자동 구속) */
   ref?: string;
+  /** 중간점에 붙었을 때 그 변 이름 */
+  edge?: string;
 }
 
 export interface SnapOptions {
@@ -68,9 +72,10 @@ export function sketchSnapPoints(sketch: Sketch | null, drawing: Point2[] = []):
       const c = e.center;
       out.push({ p: c, kind: 'center', ref: `${e.id}.center` });
       const corners: Point2[] = [[-w, -h], [w, -h], [w, h], [-w, h]].map((d) => add(c, d as Point2));
+      // 모서리 p0..p3 = 왼쪽 아래부터 반시계, 변 ek = pk → p(k+1) (형식 v21 구속 참조)
       corners.forEach((p, i) => {
-        out.push({ p, kind: 'endpoint' });
-        out.push({ p: mid(p, corners[(i + 1) % 4]!), kind: 'midpoint' });
+        out.push({ p, kind: 'endpoint', ref: `${e.id}.p${i}` });
+        out.push({ p: mid(p, corners[(i + 1) % 4]!), kind: 'midpoint', edge: `${e.id}.e${i}` });
       });
     } else if (e.type === 'circle') {
       const r = dim('diameter') / 2;
@@ -91,7 +96,7 @@ export function sketchSnapPoints(sketch: Sketch | null, drawing: Point2[] = []):
         out.push({ p, kind: 'endpoint', ref: `${e.id}.p${i}` });
         const q = pts[i + 1] ?? (closed ? pts[0] : undefined);
         const straight = e.type === 'line' || (!e.arcs?.[i] && !e.spline);
-        if (q && straight) out.push({ p: mid(p, q), kind: 'midpoint' });
+        if (q && straight) out.push({ p: mid(p, q), kind: 'midpoint', edge: `${e.id}.e${i}` });
       });
     }
   }
@@ -126,7 +131,7 @@ export function snapSketchPoint(raw: Point2, points: SnapPoint[], o: SnapOptions
         bestD = d;
       }
     }
-    if (best) return { point: [...best.p], kind: best.kind, guides: [], ...(best.ref ? { ref: best.ref } : {}) };
+    if (best) return { point: [...best.p], kind: best.kind, guides: [], ...(best.ref ? { ref: best.ref } : {}), ...(best.edge ? { edge: best.edge } : {}) };
   }
   // 3) 격자
   let point: Point2 = o.grid ? [roundStep(raw[0], o.grid), roundStep(raw[1], o.grid)] : [...raw];

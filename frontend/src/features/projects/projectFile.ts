@@ -31,9 +31,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 18: + 타원(sketch ellipse). v17 내용은 그대로 유효
  * - 19: + 작업 모드(model.workspace: 설계·3D 모델링). v18 내용은 그대로 유효 (모드 없음 = 예전 통합 화면)
  * - 20: + 폴리메시 객체(3D 모델링 모드, kind 'polymesh'). v19 내용은 그대로 유효
- * 읽기는 1~20 모두, 쓰기는 항상 최신(20). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 21: + 중간점 구속(midpoint), 사각형 모서리·변 참조(사각형ID.p0..p3·e0..e3). v20 내용은 그대로 유효
+ * 읽기는 1~21 모두, 쓰기는 항상 최신(21). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 20;
+export const PROJECT_FORMAT_VERSION = 21;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -212,8 +213,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 20) {
     // v19 → v20: 객체 종류(polymesh)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 19 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 19 ? { ...model, schemaVersion: 20 } : model;
     file = { ...file, formatVersion: 20, model: migrated };
+  }
+  if ((file.formatVersion as number) < 21) {
+    // v20 → v21: 구속 종류(midpoint)·사각형 모서리 참조만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 20 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 21, model: migrated };
   }
   return file;
 }

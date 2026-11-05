@@ -65,7 +65,7 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   await expect(page.getByTestId('mode-object')).toHaveAttribute('aria-pressed', 'true');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(20);
+  expect(saved.formatVersion).toBe(21);
   expect(saved.model.workspace).toBe('modeling');
   const obj = saved.model.objects[0];
   expect(obj.kind).toBe('polymesh');

@@ -103,3 +103,42 @@ test('숫자로 길이 입력 + 자동 구속: 원점에서 20×10 사각형 다
   const ents = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities;
   expect(ents.find((e) => e.type === 'rectangle')!.center).toEqual([37.5, 4]);
 });
+
+test('사각형 모서리에 일치, 변 가운데에 중간점 구속이 자동으로', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-design').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-start-sketch').click();
+  await page.locator('[data-plane="XY"]').click();
+  await page.getByRole('tab', { name: '스케치' }).click();
+  await page.getByRole('button', { name: /^사각형/ }).click();
+  await page.waitForTimeout(500);
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  const a = await at(-20, -10);
+  const b = await at(20, 10);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  // 경로: 오른쪽 위 모서리 근처 → 오른쪽 변 가운데 근처 → 바깥 점 → Enter
+  await page.getByRole('button', { name: /^경로/ }).click();
+  for (const [x, y, snap] of [[19.6, 10.4, 'endpoint'], [20.3, 0.4, 'midpoint']] as const) {
+    const p = await at(x, y);
+    await page.mouse.move(p.x, p.y, { steps: 3 });
+    await expect(page.getByTestId('snap-hud')).toHaveAttribute('data-snap', snap);
+    await page.mouse.click(p.x, p.y);
+  }
+  const q = await at(31.2, -6.3);
+  await page.mouse.click(q.x, q.y);
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('notice')).toContainText('자동 구속');
+  const sk = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!;
+  const path = sk.entities.find((e) => e.type === 'path')!;
+  expect(sk.constraints).toEqual(
+    expect.arrayContaining([
+      { type: 'coincident', refs: [`${path.id}.p0`, 'r1.p2'] },
+      { type: 'midpoint', refs: [`${path.id}.p1`, 'r1.e1'] },
+    ]),
+  );
+});

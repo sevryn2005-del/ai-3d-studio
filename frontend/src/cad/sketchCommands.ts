@@ -9,7 +9,7 @@ import { cornerError, openPathError, sweepError, type Corner } from './curves';
 import { helixError, helixProfilePoints, REGION_UNSUPPORTED, sweepProfilePoints } from './sections';
 import { facesOf } from './sketchPlane';
 import { dependencyCycle } from './modelGraph';
-import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, polygonError, refKind, solveSketch } from './solver';
+import { CONSTRAINT_LABEL, MIN_EDGE, constraintError, pointVariable, polygonError, refKind, solveSketch } from './solver';
 
 const SKETCH_TYPES = [
   'create_sketch', 'add_rectangle', 'add_circle', 'set_dimension',
@@ -73,7 +73,8 @@ function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, aff
 
 /** 고정(fix) 구속이 걸린 점 */
 function isFixed(sketch: Sketch, point: string): boolean {
-  return sketch.constraints.some((c) => c.type === 'fix' && c.refs[0] === point);
+  const v = pointVariable(sketch, point);
+  return sketch.constraints.some((c) => c.type === 'fix' && pointVariable(sketch, c.refs[0]!) === v);
 }
 
 /** 요소를 참조하는 구속인가 (`r1`, `r1.center`, `poly.p0` …) */
@@ -421,12 +422,14 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const [w, h] = [prof.width / 2, prof.height / 2];
       const round = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
       const points: [number, number][] = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]].map(([x, y]) => [round(x!), round(y!)]);
-      // 같은 ID 로 바꿔 넣는다 → 이 요소를 쓰는 돌출은 그대로. 중심을 참조하던 구속·치수는 지운다
+      // 같은 ID 로 바꿔 넣는다 → 이 요소를 쓰는 돌출은 그대로. 모서리·변(p0..p3·e0..e3) 구속은 같은 이름·순서라 그대로 두고,
+      // 중심을 참조하던 구속·치수는 지운다
+      const keepsMeaning = (r: string) => r.startsWith(`${e.id}.p`) || r.startsWith(`${e.id}.e`);
       const next: Sketch = {
         ...sketch,
         entities: sketch.entities.map((x) => (x.id === e.id ? { id: e.id, type: 'polygon', points } : x)),
         dimensions: sketch.dimensions.filter((d) => d.entity !== e.id),
-        constraints: sketch.constraints.filter((c) => !c.refs.some((r) => refersTo(r, e.id))),
+        constraints: sketch.constraints.filter((c) => !c.refs.some((r) => refersTo(r, e.id) && !keepsMeaning(r))),
       };
       return ok(replaceSketch(model, next), cmd, sketch.id);
     }

@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 20
+      "const": 21
     },
     "units": {
       "type": "string",
@@ -770,7 +770,8 @@
                     "distance",
                     "tangent",
                     "angle",
-                    "symmetric"
+                    "symmetric",
+                    "midpoint"
                   ]
                 },
                 "refs": {

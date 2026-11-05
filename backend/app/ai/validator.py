@@ -67,6 +67,9 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             return "circle" if etype == "circle" else None
         if part == "center":
             return None if etype in ("polygon", "line", "path", "region") else "point"
+        if etype == "rectangle":
+            # 사각형 모서리 p0..p3·변 e0..e3 (형식 v21)
+            return ("point" if part[0] == "p" else "edge") if len(part) == 2 and part[0] in "pe" and part[1] in "0123" else None
         if etype not in ("polygon", "line", "path"):
             return None
         size = poly_sizes.get((sid, eid), 0)
@@ -80,7 +83,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         for r, k in zip(refs, kinds_):
             if k is None:
                 errors.append(f"commands[{i}].refs: sketch '{sid}' has no point/edge/circle '{r}' "
-                              "(points: '<polygon>.p0', '<circle or rectangle>.center'; edges: '<polygon>.e0'; circles: '<circle id>')")
+                              "(points: '<polygon>.p0', '<rectangle>.p0'..'p3', '<circle or rectangle>.center'; edges: '<polygon>.e0', '<rectangle>.e0'..'e3'; circles: '<circle id>')")
                 return
         forms, needs_value = CONSTRAINT_ARITY[ctype]
         if tuple(kinds_) not in forms:
