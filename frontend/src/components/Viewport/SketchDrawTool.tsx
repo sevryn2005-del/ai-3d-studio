@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Line as DreiLine } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Line, LineBasicMaterial, Matrix4, Vector3 } from 'three';
-import type { Point2 } from '../../cad/commandTypes';
+import type { CadCommand, Point2 } from '../../cad/commandTypes';
+import { centerRelations, drawnTarget, polylineRelations, withRelations, type PlacedMeta, type Relation } from '../../cad/autoRelations';
+import { notify } from '../../features/projects/projectActions';
 import { selectModel, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { drawShapeCommands, type DrawnShape } from '../../cad/sketchActions';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
@@ -24,13 +26,23 @@ export function SketchDrawTool() {
   const model = useSceneStore(selectModel);
   const sketch = useSceneStore(selectSelectedSketch);
   const view = useSketchView();
-  const [drag, setDrag] = useState<{ from: Point2; to: Point2 } | null>(null);
+  const [drag, setDrag] = useState<{ from: Point2; to: Point2; fromSnap: SnapResult } | null>(null);
   const dragRef = useRef(drag);
   dragRef.current = drag;
-  const [poly, setPoly] = useState<Point2[]>([]);
-  const [hover, setHover] = useState<SnapResult | null>(null);
+  // 찍은 점 + 그 점이 어디에 붙었는지·숫자로 친 길이 (자동 구속)
+  const [placed, setPlaced] = useState<{ p: Point2; m: PlacedMeta }[]>([]);
+  const placedRef = useRef(placed);
+  placedRef.current = placed;
+  const poly = useMemo(() => placed.map((x) => x.p), [placed]);
   const polyRef = useRef(poly);
   polyRef.current = poly;
+  const [hover, setHover] = useState<SnapResult | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
+  /** 숫자 입력 (솔리드웍스·캐드처럼 그리는 중 길이를 친다): 칸들과 지금 칸 */
+  const [typed, setTyped] = useState<{ fields: string[]; active: number } | null>(null);
+  const typedRef = useRef(typed);
+  typedRef.current = typed;
 
   // 그리기 평면: 스케치 좌표 → 월드
   const frame = useMemo(() => {
@@ -42,43 +54,163 @@ export function SketchDrawTool() {
 
   useEffect(() => {
     setDrag(null);
-    setPoly([]);
+    setPlaced([]);
     setHover(null);
+    setTyped(null);
   }, [tool, sketch?.id]);
   const multi = tool === 'polygon' || tool === 'path' || tool === 'arc' || tool === 'spline';
-  const finishArc = (from: Point2, to: Point2, through: Point2) => {
-    setPoly([]);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  /** 명령 묶음 + 자동 구속 → 한 번에 (실행 취소 1번) */
+  const commit = (cmds: CadCommand[], rels: (entity: string) => Relation[]) => {
     const store = useSceneStore.getState();
-    const sid = store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null;
-    const cmds = drawShapeCommands(store.history.present.model, sid, { type: 'arc', from, to, through });
+    const target = drawnTarget(cmds);
+    if (viewRef.current.autoRelations && target) {
+      const { commands, added } = withRelations(store.history.present.model, cmds, target.sketch, rels(target.entity));
+      const r = store.dispatchBatch(commands);
+      if (r.ok && added > 0) notify(`자동 구속 ${added}개를 넣었습니다 (속성에서 확인·삭제)`);
+      return r.ok;
+    }
+    return store.dispatchBatch(cmds).ok;
+  };
+  const sketchIdNow = () => {
+    const m = useSceneStore.getState().history.present.model;
+    return m.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null;
+  };
+  const finishArc = (pts: { p: Point2; m: PlacedMeta }[], through: Point2) => {
+    setPlaced([]);
+    const [from, to] = [pts[0]!.p, pts[1]!.p];
+    const store = useSceneStore.getState();
+    const cmds = drawShapeCommands(store.history.present.model, sketchIdNow(), { type: 'arc', from, to, through });
     if (cmds) {
-      store.dispatchBatch(cmds);
+      commit(cmds, (id) => polylineRelations(id, [from, to], pts.map((x) => x.m), { closed: false, straight: false }));
       if (bulgeThrough(from, to, through)?.clamped) store.reportError('반원보다 큰 호는 반원으로 그렸습니다 (호를 두 개로 나눠 그리세요)');
     } else store.reportError('호를 만들 수 없습니다 (세 점이 한 직선 위에 있거나 너무 짧습니다)');
   };
   /** 다각형·경로 끝내기. 스플라인 도구: 첫 점을 다시 누르면 닫힌 스플라인, Enter·마지막 점 다시 누르면 열린 스플라인 */
-  const finishPolygon = (points: Point2[], closed = tool === 'polygon') => {
-    setPoly([]);
+  const finishPolygon = (pts: { p: Point2; m: PlacedMeta }[], closed = tool === 'polygon') => {
+    setPlaced([]);
+    setTyped(null);
     const store = useSceneStore.getState();
     const type = closed ? 'polygon' : 'path';
-    const cmds = drawShapeCommands(store.history.present.model, store.history.present.model.sketches.some((k) => k.id === sketch?.id) ? sketch!.id : null, { type, points, spline: tool === 'spline' });
-    if (cmds) store.dispatchBatch(cmds);
+    const points = pts.map((x) => x.p);
+    const cmds = drawShapeCommands(store.history.present.model, sketchIdNow(), { type, points, spline: tool === 'spline' });
+    if (cmds) commit(cmds, (id) => polylineRelations(id, points, pts.map((x) => x.m), { closed, straight: tool !== 'spline' }));
     else store.reportError(type === 'path' ? '경로를 만들 수 없습니다 (같은 점이 겹치거나 되돌아갑니다)' : '다각형을 만들 수 없습니다 (변이 교차하거나 넓이가 없습니다)');
   };
+
+  /** 숫자 입력 칸 (도구마다) */
+  const typedFields = (): string[] | null => {
+    if (tool === 'rectangle' || tool === 'ellipse') return ['폭', '높이'];
+    if (tool === 'circle') return ['지름'];
+    if (tool === 'polygon' || tool === 'path' || tool === 'spline') return polyRef.current.length ? ['길이', '각도'] : null;
+    return null;
+  };
+  /** 입력한 숫자로 다음 점 (다각형·경로): 앞 점에서 길이, 각도(비우면 지금 커서 방향) */
+  const typedNext = (t: { fields: string[] }): { p: Point2; length: number } | null => {
+    const last = polyRef.current.at(-1);
+    const L = Number(t.fields[0]);
+    if (!last || !(L > 0)) return null;
+    let ang: number;
+    if (t.fields[1] !== undefined && t.fields[1] !== '' && Number.isFinite(Number(t.fields[1]))) ang = Number(t.fields[1]);
+    else {
+      const h = hoverRef.current?.point;
+      ang = h && (h[0] !== last[0] || h[1] !== last[1]) ? (Math.atan2(h[1] - last[1], h[0] - last[0]) * 180) / Math.PI : 0;
+    }
+    const a = (ang * Math.PI) / 180;
+    const r6 = (v: number) => Number(v.toFixed(6)) + 0;
+    return { p: [r6(last[0] + L * Math.cos(a)), r6(last[1] + L * Math.sin(a))], length: L };
+  };
+  /** 사각형·타원·원: 기준점(드래그 시작 또는 커서) + 입력한 크기 */
+  const typedShape = (t: { fields: string[] }): { shape: Exclude<DrawnShape, { type: 'polygon' | 'path' | 'arc' }>; anchor: SnapResult | null } | null => {
+    const d = dragRef.current;
+    const anchor = d?.fromSnap ?? hoverRef.current;
+    if (!anchor) return null;
+    const a = anchor.point;
+    if (tool === 'circle') {
+      const D = Number(t.fields[0]);
+      return D > 0 ? { shape: { type: 'circle', center: a, radius: D / 2 }, anchor } : null;
+    }
+    const W = Number(t.fields[0]);
+    const H = t.fields[1] ? Number(t.fields[1]) : W;
+    if (!(W > 0) || !(H > 0)) return null;
+    const sx = d ? Math.sign(d.to[0] - d.from[0]) || 1 : 1;
+    const sy = d ? Math.sign(d.to[1] - d.from[1]) || 1 : 1;
+    return { shape: { type: tool as 'rectangle' | 'ellipse', from: a, to: [a[0] + sx * W, a[1] + sy * H] }, anchor };
+  };
+  const applyTyped = () => {
+    const t = typedRef.current;
+    if (!t) return;
+    if (multi) {
+      const n = typedNext(t);
+      if (!n) return useSceneStore.getState().reportError('길이를 0보다 크게 입력하세요');
+      setPlaced([...placedRef.current, { p: n.p, m: { length: n.length } }]);
+      setTyped(null);
+      return;
+    }
+    const r = typedShape(t);
+    if (!r) return useSceneStore.getState().reportError('크기를 0보다 크게 입력하세요');
+    setTyped(null);
+    setDrag(null);
+    const cmds = drawShapeCommands(useSceneStore.getState().history.present.model, sketchIdNow(), r.shape);
+    if (cmds) commit(cmds, (id) => (r.shape.type === 'circle' ? centerRelations(id, r.anchor ?? undefined) : []));
+  };
+
   useEffect(() => {
-    if (!multi) return;
+    if (!tool) return;
+    // 캡처 단계: 전역 단축키(Esc = 그리기 끝, Enter = 확인)보다 먼저 받는다
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && polyRef.current.length >= (tool === 'polygon' ? 3 : 2)) {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = typedRef.current;
+      const stop = () => {
         e.preventDefault();
-        finishPolygon(polyRef.current);
+        e.stopImmediatePropagation();
+      };
+      if (/^[0-9.]$/.test(e.key) || (e.key === '-' && t)) {
+        const fields = t?.fields ?? typedFields();
+        if (!fields) return;
+        stop();
+        const cur = t ?? { fields: fields.map(() => ''), active: 0 };
+        const f = [...cur.fields];
+        const v = f[cur.active]!;
+        if (e.key === '-') f[cur.active] = v.startsWith('-') ? v.slice(1) : '-' + v;
+        else if (!(e.key === '.' && v.includes('.'))) f[cur.active] = v + e.key;
+        setTyped({ fields: f, active: cur.active });
+        return;
+      }
+      if (t) {
+        if (e.key === 'Tab') {
+          stop();
+          setTyped({ ...t, active: (t.active + 1) % t.fields.length });
+        } else if (e.key === 'Backspace') {
+          stop();
+          const f = [...t.fields];
+          f[t.active] = f[t.active]!.slice(0, -1);
+          setTyped(f.every((x) => x === '') ? null : { ...t, fields: f });
+        } else if (e.key === 'Escape') {
+          stop();
+          setTyped(null);
+        } else if (e.key === 'Enter') {
+          stop();
+          applyTyped();
+        }
+        return;
+      }
+      if (!multi) return;
+      if (e.key === 'Enter' && polyRef.current.length >= (tool === 'polygon' ? 3 : 2)) {
+        stop();
+        finishPolygon(placedRef.current);
       } else if (e.key === 'Backspace' && polyRef.current.length > 0) {
         // 마지막으로 찍은 점 지우기 (그리는 도중 실수 고치기)
-        e.preventDefault();
-        setPoly(polyRef.current.slice(0, -1));
+        stop();
+        setPlaced(placedRef.current.slice(0, -1));
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   });
   useEffect(() => {
     if (!tool) return;
@@ -111,29 +243,31 @@ export function SketchDrawTool() {
     return { type: 'circle', center: d.from, radius: exact ? Number(r.toFixed(6)) : Math.round(r / step) * step };
   };
   const isPointSnap = (r: SnapResult | null) => !!r && r.kind !== 'grid' && r.kind !== 'free';
+  const metaOf = (r: SnapResult): PlacedMeta => ({ snap: { kind: r.kind, guides: r.guides, ...(r.ref ? { ref: r.ref } : {}) } });
 
   const down = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (typedRef.current) setTyped(null); // 클릭하면 입력 중인 숫자는 버리고 마우스로
     const r = snapAt(e.point, e.nativeEvent.shiftKey);
     const p = r.point;
     if (multi) {
-      const pts = polyRef.current;
-      const first = pts[0];
-      const last = pts.at(-1);
+      const pts = placedRef.current;
+      const first = pts[0]?.p;
+      const last = pts.at(-1)?.p;
       const near = (q: Point2 | undefined) => !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= Math.max(tol, 1e-6);
       // 호: 시작 → 끝 → 호 위의 점 (세 번째 클릭에서 끝)
-      if (tool === 'arc' && pts.length === 2) return finishArc(pts[0]!, pts[1]!, p);
+      if (tool === 'arc' && pts.length === 2) return finishArc(pts, p);
       // 다각형: 첫 점을 다시 누르면 닫힘. 경로: 마지막 점을 다시 누르면 끝 (열린 선)
       if (tool === 'polygon' && pts.length >= 3 && near(first)) return finishPolygon(pts);
       if (tool === 'path' && pts.length >= 2 && near(last)) return finishPolygon(pts);
       if (tool === 'spline' && pts.length >= 3 && near(first)) return finishPolygon(pts, true);
       if (tool === 'spline' && pts.length >= 2 && near(last)) return finishPolygon(pts, false);
-      if (!last || last[0] !== p[0] || last[1] !== p[1]) setPoly([...pts, p]);
+      if (!last || last[0] !== p[0] || last[1] !== p[1]) setPlaced([...pts, { p, m: metaOf(r) }]);
       return;
     }
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    setDrag({ from: p, to: p });
+    setDrag({ from: p, to: p, fromSnap: r });
   };
   const move = (e: ThreeEvent<PointerEvent>) => {
     const r = snapAt(e.point, e.nativeEvent.shiftKey);
@@ -142,7 +276,7 @@ export function SketchDrawTool() {
       e.stopPropagation();
       const to = square(d.from, r.point, e.nativeEvent.shiftKey);
       setHover({ ...r, point: to });
-      setDrag({ from: d.from, to });
+      setDrag({ ...d, to });
       return;
     }
     setHover(r);
@@ -153,14 +287,18 @@ export function SketchDrawTool() {
     if (!d) return;
     e.stopPropagation();
     setDrag(null);
+    if (typedRef.current) return; // 숫자를 치는 중이면 Enter 로 확정
     const r = snapAt(e.point, e.nativeEvent.shiftKey);
     const to = square(d.from, r.point, e.nativeEvent.shiftKey);
-    const store = useSceneStore.getState();
-    const cmds = drawShapeCommands(store.history.present.model, sketch?.id ?? null, shapeOf({ from: d.from, to }, isPointSnap(r)));
-    if (cmds) store.dispatchBatch(cmds);
+    const cmds = drawShapeCommands(useSceneStore.getState().history.present.model, sketch?.id ?? null, shapeOf({ from: d.from, to }, isPointSnap(r)));
+    if (cmds) commit(cmds, (id) => (tool === 'circle' ? centerRelations(id, metaOf(d.fromSnap).snap) : []));
   };
   const color = view.paper ? '#1f5fd6' : '#ffd166';
-  const hoverPt = hover?.point ?? null;
+  // 숫자를 치는 중이면 미리보기도 그 값으로
+  const typedPoint = typed && multi ? typedNext(typed)?.p ?? null : null;
+  const typedPreview = typed && !multi ? typedShape(typed)?.shape ?? null : null;
+  const hoverPt = typedPoint ?? hover?.point ?? null;
+  const labelAt = typedPoint ?? hover?.point ?? poly.at(-1) ?? drag?.from ?? null;
 
   return (
     <group matrixAutoUpdate={false} matrix={frame}>
@@ -169,10 +307,23 @@ export function SketchDrawTool() {
         <planeGeometry args={[20000, 20000]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} side={DoubleSide} />
       </mesh>
-      {drag && <DrawPreview shape={shapeOf(drag, isPointSnap(hover))} color={color} />}
+      {typedPreview ? <DrawPreview shape={typedPreview} color={color} /> : drag && <DrawPreview shape={shapeOf(drag, isPointSnap(hover))} color={color} />}
       {multi && poly.length > 0 && tool !== 'arc' && <PolylinePreview points={hoverPt ? [...poly, hoverPt] : poly} count={poly.length} color={color} />}
       {tool === 'arc' && poly.length > 0 && <ArcPreview points={poly} hover={hoverPt} color={color} />}
-      {hover && <SnapFeedback snap={hover} px={view.mmPerPx} paper={view.paper} from={drag ? null : poly.at(-1) ?? null} showSegment={multi && tool !== 'arc'} />}
+      {hover && !typed && <SnapFeedback snap={hover} px={view.mmPerPx} paper={view.paper} from={drag ? null : poly.at(-1) ?? null} showSegment={multi && tool !== 'arc'} />}
+      {typed && labelAt && (
+        <Html position={[labelAt[0], labelAt[1], 0]} style={{ pointerEvents: 'none' }}>
+          <div className={`typed-input${view.paper ? ' on-paper' : ''}`} data-testid="typed-input">
+            {typed.fields.map((f, i) => (
+              <span key={i} className={i === typed.active ? 'active' : ''}>
+                {typedFields()?.[i] ?? ''} <b>{f || ' '}</b>
+                {i === 1 && multi ? '°' : 'mm'}
+              </span>
+            ))}
+            <small>Enter 확정 · Tab 다음 칸 · Esc 취소</small>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }

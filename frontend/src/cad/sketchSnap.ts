@@ -10,11 +10,14 @@ export type SnapPointKind = 'endpoint' | 'center' | 'midpoint' | 'quadrant' | 'o
 export interface SnapPoint {
   p: Point2;
   kind: SnapPointKind;
+  /** 구속에 쓸 수 있는 점 이름 ("다각형ID.p0", "원ID.center"). 그리는 중인 점은 "@번호" */
+  ref?: string;
 }
 export interface SnapGuide {
   /** h = 수평선(같은 v), v = 수직선(같은 u), angle = 기준점에서 각도 */
   dir: 'h' | 'v' | 'angle';
   from: Point2;
+  ref?: string;
 }
 export interface SnapResult {
   point: Point2;
@@ -22,6 +25,8 @@ export interface SnapResult {
   guides: SnapGuide[];
   /** 각도 스냅일 때 각도(°) */
   angle?: number;
+  /** 점에 붙었을 때 그 점 이름 (자동 구속) */
+  ref?: string;
 }
 
 export interface SnapOptions {
@@ -61,7 +66,7 @@ export function sketchSnapPoints(sketch: Sketch | null, drawing: Point2[] = []):
     if (e.type === 'rectangle') {
       const [w, h] = [dim('width') / 2, dim('height') / 2];
       const c = e.center;
-      out.push({ p: c, kind: 'center' });
+      out.push({ p: c, kind: 'center', ref: `${e.id}.center` });
       const corners: Point2[] = [[-w, -h], [w, -h], [w, h], [-w, h]].map((d) => add(c, d as Point2));
       corners.forEach((p, i) => {
         out.push({ p, kind: 'endpoint' });
@@ -69,28 +74,28 @@ export function sketchSnapPoints(sketch: Sketch | null, drawing: Point2[] = []):
       });
     } else if (e.type === 'circle') {
       const r = dim('diameter') / 2;
-      out.push({ p: e.center, kind: 'center' });
+      out.push({ p: e.center, kind: 'center', ref: `${e.id}.center` });
       for (const d of [[r, 0], [0, r], [-r, 0], [0, -r]] as Point2[]) out.push({ p: add(e.center, d), kind: 'quadrant' });
     } else if (e.type === 'ellipse') {
-      out.push({ p: e.center, kind: 'center' });
+      out.push({ p: e.center, kind: 'center', ref: `${e.id}.center` });
       const [a, b] = [dim('width') / 2, dim('height') / 2];
       for (const d of [[a, 0], [0, b], [-a, 0], [0, -b]] as Point2[]) out.push({ p: add(e.center, rot(d, e.angle)), kind: 'quadrant' });
     } else if (e.type === 'slot') {
-      out.push({ p: e.center, kind: 'center' });
+      out.push({ p: e.center, kind: 'center', ref: `${e.id}.center` });
       const l = dim('length') / 2;
       for (const d of [[l, 0], [-l, 0]] as Point2[]) out.push({ p: add(e.center, rot(d, e.angle)), kind: 'center' });
     } else if (e.type === 'polygon' || e.type === 'path' || e.type === 'line') {
       const pts = e.points;
       const closed = e.type === 'polygon';
       pts.forEach((p, i) => {
-        out.push({ p, kind: 'endpoint' });
+        out.push({ p, kind: 'endpoint', ref: `${e.id}.p${i}` });
         const q = pts[i + 1] ?? (closed ? pts[0] : undefined);
         const straight = e.type === 'line' || (!e.arcs?.[i] && !e.spline);
         if (q && straight) out.push({ p: mid(p, q), kind: 'midpoint' });
       });
     }
   }
-  for (const p of drawing) out.push({ p, kind: 'endpoint' });
+  drawing.forEach((p, i) => out.push({ p, kind: 'endpoint', ref: `@${i}` }));
   return out;
 }
 
@@ -121,7 +126,7 @@ export function snapSketchPoint(raw: Point2, points: SnapPoint[], o: SnapOptions
         bestD = d;
       }
     }
-    if (best) return { point: [...best.p], kind: best.kind, guides: [] };
+    if (best) return { point: [...best.p], kind: best.kind, guides: [], ...(best.ref ? { ref: best.ref } : {}) };
   }
   // 3) 격자
   let point: Point2 = o.grid ? [roundStep(raw[0], o.grid), roundStep(raw[1], o.grid)] : [...raw];
@@ -137,11 +142,11 @@ export function snapSketchPoint(raw: Point2, points: SnapPoint[], o: SnapOptions
     }
     if (vx) {
       point = [vx.p[0], point[1]];
-      guides.push({ dir: 'v', from: vx.p });
+      guides.push({ dir: 'v', from: vx.p, ...(vx.ref ? { ref: vx.ref } : {}) });
     }
     if (hy) {
       point = [point[0], hy.p[1]];
-      guides.push({ dir: 'h', from: hy.p });
+      guides.push({ dir: 'h', from: hy.p, ...(hy.ref ? { ref: hy.ref } : {}) });
     }
     if (guides.length) kind = 'free';
   }

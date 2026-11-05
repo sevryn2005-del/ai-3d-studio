@@ -13,7 +13,7 @@ export function SketchOptionsBar() {
   const drawTool = useEditorStore((s) => s.drawTool);
   if (!active) return null;
   const steps = gridSteps(v);
-  const toggle = (k: 'paper' | 'grid' | 'gridSnap' | 'inference', label: string, title: string) => (
+  const toggle = (k: 'paper' | 'grid' | 'gridSnap' | 'inference' | 'autoRelations', label: string, title: string) => (
     <button aria-pressed={v[k]} onClick={() => v.set({ [k]: !v[k] })} title={title} data-testid={`sketch-opt-${k}`}>
       {label}
     </button>
@@ -24,6 +24,7 @@ export function SketchOptionsBar() {
       {toggle('grid', '격자', '격자 선 보이기/숨기기')}
       {toggle('gridSnap', '격자 스냅', '점을 격자에 맞춰 찍기 (끄면 0.01mm 단위)')}
       {toggle('inference', '점·정렬 스냅', '끝점·중심·중간점·원점에 붙고, 다른 점과 수평·수직으로 맞추기')}
+      {toggle('autoRelations', '자동 구속', '그릴 때 붙은 점은 일치, 정렬은 수평·수직, 가로·세로 변은 수평·수직, 원점은 고정, 숫자로 친 길이는 길이 구속')}
       <label className="grid-step" title="격자 간격 (자동 = 확대에 맞춰 바뀜)">
         간격
         <select
@@ -44,7 +45,7 @@ export function SketchOptionsBar() {
       <button onClick={() => useEditorStore.getState().requestView('normal')} title="스케치 평면을 정면으로 보기 (Ctrl+8)">
         수직 보기
       </button>
-      {drawTool && <span className="sketch-tips">Shift: 정사각형·15° · Backspace: 마지막 점 지우기</span>}
+      {drawTool && <span className="sketch-tips">숫자: 길이 입력 (Tab 다음 칸) · Shift: 정사각형·15° · Backspace: 마지막 점 지우기</span>}
     </div>
   );
 }

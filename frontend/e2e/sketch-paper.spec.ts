@@ -60,3 +60,46 @@ test('스케치 종이·격자·끝점 스냅·수평 정렬·설정 유지', as
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('sketch-options')).toHaveCount(0);
 });
+
+test('숫자로 길이 입력 + 자동 구속: 원점에서 20×10 사각형 다각형 → 완전 정의', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-design').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-start-sketch').click();
+  await page.locator('[data-plane="XY"]').click();
+  await page.getByRole('tab', { name: '스케치' }).click();
+  await page.getByRole('button', { name: /^다각형/ }).click();
+  await page.waitForTimeout(500);
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  // 원점 근처 클릭 → 원점에 붙음 (고정)
+  const o = await at(0.3, -0.2);
+  await page.mouse.click(o.x, o.y);
+  // 20 Tab 0 Enter → (20, 0) / 10 Tab 90 → (20, 10) / 20 Tab 180 → (0, 10)
+  for (const [len, ang] of [['20', '0'], ['10', '90'], ['20', '180']]) {
+    await page.keyboard.type(len!);
+    await expect(page.getByTestId('typed-input')).toContainText(len!);
+    await page.keyboard.press('Tab');
+    await page.keyboard.type(ang!);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('typed-input')).toHaveCount(0);
+  }
+  await page.keyboard.press('Enter'); // 닫기
+  await expect(page.getByTestId('notice')).toContainText('자동 구속');
+  const poly = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities[0]!;
+  expect(poly.type).toBe('polygon');
+  await page.keyboard.press('Escape'); // 그리기 끝 (스케치는 선택된 채)
+  // 고정 + 수평·수직 4 + 길이 → 완전 정의
+  await expect(page.locator('footer.statusbar')).toContainText('완전 정의');
+
+  // 사각형 도구: 숫자로 폭·높이 (커서 위치가 모서리)
+  await page.getByRole('button', { name: /^사각형/ }).click();
+  const c = await at(30, 0);
+  await page.mouse.move(c.x, c.y, { steps: 2 });
+  await page.keyboard.type('15');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('8');
+  await page.keyboard.press('Enter');
+  const ents = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities;
+  expect(ents.find((e) => e.type === 'rectangle')!.center).toEqual([37.5, 4]);
+});

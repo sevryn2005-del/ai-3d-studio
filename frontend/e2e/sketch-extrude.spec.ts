@@ -316,6 +316,8 @@ test('면 위 스케치: 판 윗면에 기둥 → 판 두께 변경을 따라감
 test('구속 해석기: 다각형 그리기 → 고정·수평·수직·길이로 40×20 완전 구속 → 모순 거부 → 돌출 → 길이 50 → 저장·다시 열기', async ({ page }, info) => {
   await page.addInitScript(() => {
     for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+    // 손으로 구속을 넣는 흐름을 검사하므로 자동 구속은 끈다 (자동 구속은 sketch-paper.spec)
+    localStorage.setItem('ai3d.sketchView', JSON.stringify({ autoRelations: false }));
   });
   await page.goto('/');
   await page.waitForFunction(() => !!window.__AI3D_DEV__);
