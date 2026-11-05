@@ -203,6 +203,16 @@ class Corner(Strict):
 Corners = Annotated[list[Corner], Field(max_length=Limits.MAX_POLYGON_POINTS)]
 
 
+class Arc(Strict):
+    """변을 호로 (형식 v13): 변 k 의 볼록 정도 bulge = tan(호 각도/4), −1~1 (양수 = 반시계) — curves.py"""
+
+    k: Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]
+    bulge: Annotated[float, _num(-1, 1)]
+
+
+Arcs = Annotated[list[Arc], Field(max_length=Limits.MAX_POLYGON_POINTS)]
+
+
 class PolygonEntity(Strict):
     """닫힌 다각형 (형식 v4). 꼭짓점 = 구속 해석기가 푼 좌표. 꼭짓점 k = ID.pk, 변 k = ID.ek. corners (v10)."""
 
@@ -210,6 +220,7 @@ class PolygonEntity(Strict):
     type: Literal["polygon"]
     points: Annotated[list[Point2], Field(min_length=3, max_length=Limits.MAX_POLYGON_POINTS)]
     corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
+    arcs: Arcs | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PathEntity(Strict):
@@ -219,6 +230,7 @@ class PathEntity(Strict):
     type: Literal["path"]
     points: Annotated[list[Point2], Field(min_length=2, max_length=Limits.MAX_POLYGON_POINTS)]
     corners: Corners | None = Field(default=None, exclude_if=lambda v: v is None)
+    arcs: Arcs | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class LineEntity(Strict):
@@ -245,7 +257,7 @@ SketchEntity = Annotated[Union[RectangleEntity, CircleEntity, PolygonEntity, Lin
 
 ConstraintType = Literal[
     "fix", "coincident", "concentric", "horizontal", "vertical", "parallel", "perpendicular", "equal", "length", "distance", "tangent",
-    "angle",
+    "angle", "symmetric",
 ]
 GeomRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z][a-z0-9_]{0,63}(\.(p|e)\d{1,2}|\.center)?$")]
 
@@ -255,7 +267,7 @@ class SketchConstraint(Strict):
 
     id: ObjectId
     type: ConstraintType
-    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=2)]
+    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=3)]
     value: Annotated[Dimension | None, Field(exclude_if=lambda v: v is None)] = None
 
 
@@ -330,7 +342,7 @@ def slot_half_extent(p: dict) -> tuple[float, float]:
 def revolve_profile_error(p: dict) -> str | None:
     """회전 프로파일이 축(u = 0)의 한쪽(u ≥ 0)에 있는지 (frontend sketch.ts revolveProfileError 와 같음)."""
     if p["type"] == "polygon":
-        min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True))
+        min_u = min(q[0] for q in rounded_points(p["points"], p.get("corners"), True, p.get("arcs")))
     elif p["type"] == "circle":
         min_u = p["center"][0] - p["diameter"] / 2
     elif p["type"] == "slot":
@@ -342,15 +354,17 @@ def revolve_profile_error(p: dict) -> str | None:
     return None
 
 
-def _polygon_profile(points, corners, z, plane) -> dict:
-    """다각형 단면 (sketch.ts polygonProfile 과 같음): 중심·크기 = 꼭짓점 처리 후 윤곽의 바운딩 박스"""
-    outline = rounded_points(points, corners, True)
+def _polygon_profile(points, corners, z, plane, arcs=None) -> dict:
+    """다각형 단면 (sketch.ts polygonProfile 과 같음): 중심·크기 = 꼭짓점 처리·호 변 뒤 윤곽의 바운딩 박스"""
+    outline = rounded_points(points, corners, True, arcs)
     xs = [p[0] for p in outline]
     ys = [p[1] for p in outline]
     out = {"type": "polygon", "points": [tuple(p) for p in points], "center": ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
            "width": max(xs) - min(xs), "height": max(ys) - min(ys), "z": z, "plane": plane}
     if corners:
         out["corners"] = [c.model_dump() if hasattr(c, "model_dump") else c for c in corners]
+    if arcs:
+        out["arcs"] = [a.model_dump() if hasattr(a, "model_dump") else a for a in arcs]
     return out
 
 
@@ -359,7 +373,7 @@ def open_line_points(sketch: Sketch, entity_id: str) -> list | None:
     e = next((x for x in sketch.entities if x.id == entity_id), None)
     if e is None or e.type not in ("line", "path"):
         return None
-    return rounded_points(e.points, e.corners if e.type == "path" else None, False)
+    return rounded_points(e.points, e.corners if e.type == "path" else None, False, e.arcs if e.type == "path" else None)
 
 
 def profile_of(sketch: Sketch, ref) -> dict | None:
@@ -381,7 +395,7 @@ def resolve_profile(sketch: Sketch, entity_id: str) -> dict | None:
     dims = {d.kind: d.value for d in sketch.dimensions if d.entity == e.id}
     z = sketch.plane.offset
     if e.type == "polygon":
-        return _polygon_profile(e.points, e.corners, z, sketch.plane)
+        return _polygon_profile(e.points, e.corners, z, sketch.plane, e.arcs)
     if e.type == "rectangle":
         if "width" in dims and "height" in dims:
             return {"type": "rectangle", "center": e.center, "width": dims["width"], "height": dims["height"], "z": z,
@@ -760,7 +774,7 @@ class Mate(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[12]
+    schemaVersion: Literal[13]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -875,6 +889,24 @@ class SetCorner(Strict):
     size: Annotated[float, _num(0, Limits.MAX_DIMENSION)]
 
 
+class SetArc(Strict):
+    """변을 호로 (형식 v13): 다각형·경로의 변 edge 를 볼록 정도 bulge 의 원호로 (0 = 직선)"""
+
+    type: Literal["set_arc"]
+    sketch: ObjectId
+    entity: ObjectId
+    edge: Annotated[int, Field(strict=True, ge=0, le=Limits.MAX_POLYGON_POINTS - 1)]
+    bulge: Annotated[float, _num(-1, 1)]
+
+
+class ConvertToPolygon(Strict):
+    """사각형 → 같은 모양의 다각형 (형식 v13)"""
+
+    type: Literal["convert_to_polygon"]
+    sketch: ObjectId
+    entity: ObjectId
+
+
 class SweepCommand(Strict):
     type: Literal["sweep"]
     id: ObjectId | None = None
@@ -968,7 +1000,7 @@ class AddConstraint(Strict):
     sketch: ObjectId
     id: ObjectId | None = None
     constraint: ConstraintType
-    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=2)]
+    refs: Annotated[list[GeomRef], Field(min_length=1, max_length=3)]
     value: Dimension | None = None
 
 
@@ -1245,6 +1277,8 @@ CadCommand = Annotated[
         AddLine,
         AddPath,
         SetCorner,
+        SetArc,
+        ConvertToPolygon,
         AddSlot,
         SetEntityAngle,
         OffsetEntity,
@@ -1309,6 +1343,8 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddLine,
     AddPath,
     SetCorner,
+    SetArc,
+    ConvertToPolygon,
     AddSlot,
     SetEntityAngle,
     OffsetEntity,

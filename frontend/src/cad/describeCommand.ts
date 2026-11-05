@@ -130,6 +130,10 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `부품 삽입 "${cmd.name}" (객체 ${cmd.part.objects.length}개)`;
     case 'set_thin':
       return `${name(cmd.target)} 두께 → ${formatMm(cmd.thin)}mm`;
+    case 'set_arc':
+      return Math.abs(cmd.bulge) > 1e-9 ? `${sketchName(cmd.sketch)}의 ${cmd.entity}.e${cmd.edge} 을(를) 호로 (볼록 ${formatMm(cmd.bulge)})` : `${sketchName(cmd.sketch)}의 ${cmd.entity}.e${cmd.edge} 을(를) 직선으로`;
+    case 'convert_to_polygon':
+      return `${sketchName(cmd.sketch)}의 ${cmd.entity} 을(를) 다각형으로 바꾸기`;
     case 'add_path':
       return `${sketchName(cmd.sketch)}에 경로 추가 (점 ${cmd.points.length}개)`;
     case 'set_corner':

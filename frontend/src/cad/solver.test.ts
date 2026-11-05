@@ -87,6 +87,20 @@ describe('해석기: 구속 종류', () => {
     expect(validateGraph(m)).toEqual([]);
   });
 
+  it('대칭: 두 점이 축 변에 대해 대칭 (형식 v13)', () => {
+    const m = run(quad(), [
+      { type: 'add_line', sketch: 'sk', id: 'ax', points: [[5, -5], [5.5, 30]] },
+      { type: 'add_constraint', sketch: 'sk', constraint: 'fix', refs: ['ax.p0'] },
+      { type: 'add_constraint', sketch: 'sk', constraint: 'vertical', refs: ['ax.e0'] },
+      { type: 'add_constraint', sketch: 'sk', constraint: 'symmetric', refs: ['q.p0', 'q.p1', 'ax.e0'] },
+    ]);
+    expect(Math.max(...constraintResiduals(sk(m)).values())).toBeLessThan(1e-6);
+    const [p0, p1] = pts(m);
+    expect(p0![1]).toBeCloseTo(p1![1], 5);
+    expect((p0![0] + p1![0]) / 2).toBeCloseTo(5, 5);
+    expect(validateGraph(m)).toEqual([]);
+  });
+
   it('원: 동심·접선·거리 (원 중심을 꼭짓점에서 10mm)', () => {
     const m = run(quad(), [
       { type: 'add_circle', sketch: 'sk', id: 'c1', center: [20, 8], diameter: 10 },

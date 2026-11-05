@@ -60,6 +60,15 @@ function EntityDimensions({ sketch, entity }: { sketch: Sketch; entity: SketchEn
       ))}
       <NumberField label={`중심 ${planeAxes(sketch.plane)[0]}`} unit="mm" value={entity.center[0]} onCommit={setCenter(0)} testId={`center-${entity.id}-x`} />
       <NumberField label={`중심 ${planeAxes(sketch.plane)[1]}`} unit="mm" value={entity.center[1]} onCommit={setCenter(1)} testId={`center-${entity.id}-y`} />
+      {entity.type === 'rectangle' && (
+        <button
+          onClick={() => submitNow({ type: 'convert_to_polygon', sketch: sketch.id, entity: entity.id })}
+          data-testid={`to-polygon-${entity.id}`}
+          title="같은 모양의 다각형으로 바꿉니다 — 꼭짓점 필렛·모따기, 변을 호로, 꼭짓점 이동을 쓸 수 있습니다"
+        >
+          다각형으로 바꾸기 (모서리 둥글게·호)
+        </button>
+      )}
       {entity.type === 'slot' && (
         <NumberField
           label="방향"

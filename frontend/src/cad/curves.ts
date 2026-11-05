@@ -17,6 +17,12 @@ export interface Corner {
   size: number;
 }
 
+/** 변을 호로 (형식 v13): 변 k(pk → p(k+1))의 볼록 정도 bulge = tan(호 각도/4). 양수 = pk 에서 반시계로 도는 호 (DXF 와 같은 규칙) */
+export interface Arc {
+  k: number;
+  bulge: number;
+}
+
 export type Segment =
   | { type: 'line'; a: Point2; b: Point2 }
   | { type: 'arc'; a: Point2; b: Point2; c: Point2; r: number; ccw: boolean; sweep: number; mid: Point2 };
@@ -66,8 +72,21 @@ function cutCorner(prev: Point2, v: Point2, next: Point2, corner: Corner | undef
   return { a, b, cut: t, seg: { type: 'arc', a, b, c, r, ccw, sweep: Math.PI - theta, mid } };
 }
 
-/** 꼭짓점 처리를 적용한 윤곽 조각 (닫힘: 마지막 조각이 처음으로 돌아온다) */
-export function cornerSegments(points: Point2[], corners: Corner[] | undefined, closed: boolean): Segment[] {
+/** 볼록 정도 bulge 로 a → b 를 잇는 호 */
+export function bulgeArc(a: Point2, b: Point2, bulge: number): Segment {
+  const chord = len(sub(b, a));
+  const d = unit(sub(b, a));
+  const nL: Point2 = [-d[1], d[0]];
+  const m: Point2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const s = (bulge * chord) / 2; // 현에서 호 가운데까지 (부호 포함)
+  const r = (chord * (1 + bulge * bulge)) / (4 * Math.abs(bulge));
+  const c = at(m, nL, Math.sign(bulge) * (r - Math.abs(s)));
+  const mid = at(m, nL, -s);
+  return { type: 'arc', a, b, c, r, ccw: bulge > 0, sweep: 4 * Math.atan(Math.abs(bulge)), mid };
+}
+
+/** 꼭짓점 처리·호 변을 적용한 윤곽 조각 (닫힘: 마지막 조각이 처음으로 돌아온다) */
+export function cornerSegments(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[]): Segment[] {
   const n = points.length;
   const byK = new Map((corners ?? []).map((c) => [c.k, c]));
   const cuts = points.map((v, k) => {
@@ -76,24 +95,30 @@ export function cornerSegments(points: Point2[], corners: Corner[] | undefined, 
   });
   const segs: Segment[] = [];
   const last = closed ? n : n - 1;
+  const bulges = new Map((arcs ?? []).filter((x) => Math.abs(x.bulge) > 1e-9).map((x) => [x.k, x.bulge]));
   for (let k = 0; k < last; k++) {
     const from = cuts[k]!;
     const to = cuts[(k + 1) % n]!;
-    if (len(sub(to.a, from.b)) > 1e-12) segs.push({ type: 'line', a: from.b, b: to.a });
+    const bulge = bulges.get(k);
+    if (bulge !== undefined) segs.push(bulgeArc(from.b, to.a, bulge));
+    else if (len(sub(to.a, from.b)) > 1e-12) segs.push({ type: 'line', a: from.b, b: to.a });
     if (to.seg && (closed || k + 1 < n - 1)) segs.push(to.seg);
   }
   return segs;
 }
 
 /** 꼭짓점 처리가 들어가지 않으면 사용자용 메시지 (변 하나에 양 끝 처리 길이의 합이 변 길이를 넘음) */
-export function cornerError(points: Point2[], corners: Corner[] | undefined, closed: boolean): string | null {
-  if (!corners?.length) return null;
+export function cornerError(points: Point2[], corners: Corner[] | undefined, closed: boolean, arcs?: Arc[]): string | null {
   const n = points.length;
+  const arcEdges = new Set((arcs ?? []).filter((x) => Math.abs(x.bulge) > 1e-9).map((x) => x.k));
+  for (const a of arcs ?? []) if (a.k >= (closed ? n : n - 1)) return `변 e${a.k} 이(가) 없습니다`;
+  if (!corners?.length) return null;
   const seen = new Set<number>();
   for (const c of corners) {
     if (c.k >= n || (!closed && (c.k === 0 || c.k === n - 1))) return `꼭짓점 p${c.k} 에는 모서리 처리를 할 수 없습니다${closed ? '' : ' (경로의 양 끝점)'}`;
     if (seen.has(c.k)) return `꼭짓점 p${c.k} 의 모서리 처리가 중복되었습니다`;
     seen.add(c.k);
+    if (arcEdges.has(c.k) || arcEdges.has((c.k - 1 + n) % n)) return `꼭짓점 p${c.k} 은(는) 호 변에 붙어 있어 필렛·모따기를 할 수 없습니다`;
   }
   const byK = new Map(corners.map((c) => [c.k, c]));
   const cut = points.map((v, k) =>
@@ -135,10 +160,10 @@ export function sampleSegments(segs: Segment[], closed: boolean, step: (r: numbe
   return out;
 }
 
-/** 꼭짓점 처리를 적용한 점 목록 (윤곽 표본) */
-export function roundedPoints(points: Point2[], corners: Corner[] | undefined, closed: boolean, step?: (r: number) => number): Point2[] {
-  if (!corners?.length) return points.map((p) => [p[0], p[1]]);
-  return sampleSegments(cornerSegments(points, corners, closed), closed, step);
+/** 꼭짓점 처리·호 변을 적용한 점 목록 (윤곽 표본) */
+export function roundedPoints(points: Point2[], corners: Corner[] | undefined, closed: boolean, step?: (r: number) => number, arcs?: Arc[]): Point2[] {
+  if (!corners?.length && !arcs?.some((a) => Math.abs(a.bulge) > 1e-9)) return points.map((p) => [p[0], p[1]]);
+  return sampleSegments(cornerSegments(points, corners, closed, arcs), closed, step);
 }
 
 /** 열린 선을 두께 t 로 띄운 닫힌 다각형 (꺾인 곳 = 모서리 연장) */

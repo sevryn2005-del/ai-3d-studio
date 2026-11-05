@@ -16,7 +16,7 @@ const SKETCH_TYPES = [
   'set_entity_center', 'delete_sketch_entity', 'set_sketch_plane', 'rename_sketch', 'delete_sketch', 'extrude',
   'add_polygon', 'move_point', 'add_constraint', 'set_constraint', 'delete_constraint', 'revolve',
   'add_line', 'add_slot', 'set_entity_angle', 'helix', 'loft', 'offset_entity',
-  'add_path', 'set_corner', 'sweep',
+  'add_path', 'set_corner', 'sweep', 'set_arc', 'convert_to_polygon',
 ] as const;
 type SketchCommand = Extract<CadCommand, { type: (typeof SKETCH_TYPES)[number] }>;
 
@@ -58,7 +58,7 @@ function solvedResult(model: ModelDefinition, next: Sketch, cmd: CadCommand, aff
   if (!solved.ok) return fail(solved.error);
   for (const e of solved.sketch.entities) {
     if (e.type !== 'polygon' && e.type !== 'path') continue;
-    const err = e.type === 'polygon' ? (polygonError(e.points) ?? cornerError(e.points, e.corners, true)) : (openPathError(e.points) ?? cornerError(e.points, e.corners, false));
+    const err = e.type === 'polygon' ? (polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs)) : (openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs));
     if (err) return fail(`${e.id}: ${err}`);
   }
   // 회전 피처가 쓰는 프로파일은 회전축(u = 0)을 넘으면 안 된다
@@ -320,12 +320,52 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
       const kept = (e.corners ?? []).filter((c) => !ks.includes(c.k));
       const added: Corner[] = cmd.size > 0 ? ks.map((k) => ({ k, type: cmd.corner, size: cmd.size })) : [];
       const corners = [...kept, ...added].sort((a, b) => a.k - b.k);
-      const err = cornerError(e.points, corners, closed);
+      const err = cornerError(e.points, corners, closed, e.arcs);
       if (err) return fail(err);
       const { corners: _old, ...rest } = e;
       void _old;
       const next = corners.length ? { ...rest, corners } : rest;
       return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
+    }
+
+    case 'set_arc': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
+      if (e.type !== 'polygon' && e.type !== 'path') return fail('호 변은 다각형·경로에만 있습니다 (사각형은 다각형으로 바꾸세요)');
+      const closed = e.type === 'polygon';
+      const edges = closed ? e.points.length : e.points.length - 1;
+      if (cmd.edge >= edges) return fail(`변 e${cmd.edge} 이(가) 없습니다 (변은 e0~e${edges - 1})`);
+      const arcs = [...(e.arcs ?? []).filter((a) => a.k !== cmd.edge), ...(Math.abs(cmd.bulge) > 1e-9 ? [{ k: cmd.edge, bulge: cmd.bulge }] : [])].sort((a, b) => a.k - b.k);
+      const err = cornerError(e.points, e.corners, closed, arcs);
+      if (err) return fail(err);
+      const { arcs: _old, ...rest } = e;
+      void _old;
+      const next = arcs.length ? { ...rest, arcs } : rest;
+      return ok(replaceSketch(model, { ...sketch, entities: sketch.entities.map((x) => (x.id === e.id ? next : x)) }), cmd, sketch.id);
+    }
+
+    case 'convert_to_polygon': {
+      const sketch = findSketch(model, cmd.sketch);
+      if (!sketch) return fail(`존재하지 않는 스케치입니다: ${cmd.sketch}`);
+      const e = sketch.entities.find((x) => x.id === cmd.entity);
+      if (!e) return fail(`'${sketch.name}'에 요소 ${cmd.entity} 이(가) 없습니다`);
+      if (e.type !== 'rectangle') return fail('사각형만 다각형으로 바꿀 수 있습니다');
+      const prof = resolveProfile(sketch, e.id);
+      if (!prof || prof.type !== 'rectangle') return fail(`${e.id} 의 치수가 완전하지 않습니다`);
+      const [cx, cy] = prof.center;
+      const [w, h] = [prof.width / 2, prof.height / 2];
+      const round = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+      const points: [number, number][] = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]].map(([x, y]) => [round(x!), round(y!)]);
+      // 같은 ID 로 바꿔 넣는다 → 이 요소를 쓰는 돌출은 그대로. 중심을 참조하던 구속·치수는 지운다
+      const next: Sketch = {
+        ...sketch,
+        entities: sketch.entities.map((x) => (x.id === e.id ? { id: e.id, type: 'polygon', points } : x)),
+        dimensions: sketch.dimensions.filter((d) => d.entity !== e.id),
+        constraints: sketch.constraints.filter((c) => !c.refs.some((r) => refersTo(r, e.id))),
+      };
+      return ok(replaceSketch(model, next), cmd, sketch.id);
     }
 
     case 'sweep': {

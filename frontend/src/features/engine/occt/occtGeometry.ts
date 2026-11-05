@@ -71,7 +71,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 12, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 13, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -174,10 +174,10 @@ function profileFace(c: Ctx, p: Profile): TopoDS_Face {
 /** 단면 윤곽선 (정확한 원·호) */
 function profileWire(c: Ctx, p: Profile): ReturnType<typeof polygonWire> {
   if (p.type === 'polygon') {
-    if (!p.corners?.length) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
+    if (!p.corners?.length && !p.arcs?.length) return polygonWire(c, p.points.map(([u, v]) => [u, v, 0]));
     // 꼭짓점 처리: 직선 + 정확한 원호 (호 방향은 원 축 ±Z 로)
     const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
-    for (const sg of cornerSegments(p.points, p.corners, true)) {
+    for (const sg of cornerSegments(p.points, p.corners, true, p.arcs)) {
       const a = pnt(c, sg.a[0], sg.a[1], 0);
       const b = pnt(c, sg.b[0], sg.b[1], 0);
       if (sg.type === 'line') mw.Add(c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeEdge(a, b)).Edge()));
@@ -293,7 +293,7 @@ function thruSections(c: Ctx, wires: ReturnType<typeof polygonWire>[], name: str
  * 메시 엔진의 sweepRings 와 같은 형상
  */
 function pipeSweep(c: Ctx, p: Profile, path: Extract<Sketch['entities'][number], { type: 'path' | 'line' }>, m: Matrix4, name: string): TopoDS_Shape {
-  const segs: Segment[] = path.type === 'path' ? cornerSegments(path.points, path.corners, false) : [{ type: 'line', a: path.points[0], b: path.points[1] }];
+  const segs: Segment[] = path.type === 'path' ? cornerSegments(path.points, path.corners, false, path.arcs) : [{ type: 'line', a: path.points[0], b: path.points[1] }];
   const mw = c.gc.k(new c.oc.BRepBuilderAPI_MakeWire());
   for (const sg of segs) {
     const a = pnt(c, sg.a[0], sg.a[1], 0);

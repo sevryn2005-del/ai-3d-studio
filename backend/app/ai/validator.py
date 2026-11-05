@@ -227,6 +227,22 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
             if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["entity"]) not in ("polygon", "path"):
                 errors.append(f"commands[{i}].entity: '{c['entity']}' is not a polygon or path of sketch '{c['sketch']}' "
                               "(sketch fillet/chamfer works on polygon and path vertices; draw a rectangle as add_polygon to round it)")
+        elif t == "set_arc":
+            if sketch_exists(i, c["sketch"]):
+                if sketches[c["sketch"]].get(c["entity"]) not in ("polygon", "path"):
+                    errors.append(f"commands[{i}].entity: '{c['entity']}' is not a polygon or path of sketch '{c['sketch']}' "
+                                  "(convert a rectangle first with convert_to_polygon)")
+                elif (n := poly_sizes.get((c["sketch"], c["entity"]))) is not None:
+                    edges = n if sketches[c["sketch"]][c["entity"]] == "polygon" else n - 1
+                    if c["edge"] >= edges:
+                        errors.append(f"commands[{i}].edge: '{c['entity']}' has edges e0..e{edges - 1}")
+        elif t == "convert_to_polygon":
+            if sketch_exists(i, c["sketch"]):
+                if sketches[c["sketch"]].get(c["entity"]) != "rectangle":
+                    errors.append(f"commands[{i}].entity: '{c['entity']}' is not a rectangle of sketch '{c['sketch']}'")
+                else:
+                    sketches[c["sketch"]][c["entity"]] = "polygon"
+                    poly_sizes[(c["sketch"], c["entity"])] = 4
         elif t == "sweep":
             if sketch_exists(i, c["sketch"]) and sketches[c["sketch"]].get(c["profile"]) in (None, "line", "path"):
                 errors.append(f"commands[{i}].profile: sketch '{c['sketch']}' has no closed profile '{c['profile']}'")

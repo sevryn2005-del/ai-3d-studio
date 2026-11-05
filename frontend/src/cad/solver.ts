@@ -27,6 +27,7 @@ export const CONSTRAINT_LABEL: Record<ConstraintType, string> = {
   distance: '거리',
   tangent: '접선',
   angle: '각도',
+  symmetric: '대칭',
 };
 
 type RefKind = 'point' | 'edge' | 'circle';
@@ -43,6 +44,7 @@ export const CONSTRAINT_ARITY: Record<ConstraintType, { refs: RefKind[][]; value
   equal: { refs: [['edge', 'edge']], value: false },
   length: { refs: [['edge']], value: true },
   distance: { refs: [['point', 'point']], value: true },
+  symmetric: { refs: [['point', 'point', 'edge']], value: false },
   tangent: { refs: [['edge', 'circle']], value: false },
   angle: { refs: [['edge', 'edge']], value: true },
 };
@@ -101,7 +103,7 @@ export function constraintError(sketch: Sketch, c: Pick<SketchConstraint, 'type'
   }
   if (spec.value && c.value === undefined) return `${CONSTRAINT_LABEL[c.type]} 구속에는 값(mm)이 필요합니다`;
   if (!spec.value && c.value !== undefined) return `${CONSTRAINT_LABEL[c.type]} 구속에는 값을 넣지 않습니다`;
-  if (c.refs.length === 2 && c.refs[0] === c.refs[1]) return '같은 대상을 두 번 참조할 수 없습니다';
+  if (new Set(c.refs).size < c.refs.length) return '같은 대상을 두 번 참조할 수 없습니다';
   if (c.type === 'angle' && (c.value! <= 0 || c.value! >= 180)) return '각도는 0° 보다 크고 180° 보다 작아야 합니다';
   return null;
 }
@@ -161,6 +163,16 @@ function residuals(sketch: Sketch, c: SketchConstraint, get: Get): number[] {
       const n = Math.max(len(u) * len(v), 1e-12);
       const t = (c.value! * Math.PI) / 180;
       return [((u[0] * v[1] - u[1] * v[0]) * Math.cos(t) - (u[0] * v[0] + u[1] * v[1]) * Math.sin(t)) / n];
+    }
+    case 'symmetric': {
+      // 두 점이 대칭축(변)에 대해 대칭: 가운데 점이 축 위, 두 점을 잇는 선이 축에 수직 (길이로 나눠 거리 단위)
+      const p = P(c.refs[0]!);
+      const q = P(c.refs[1]!);
+      const [a, b] = edgeEnds(sketch, c.refs[2]!).map(get) as [Point2, Point2];
+      const d: Point2 = [b[0] - a[0], b[1] - a[1]];
+      const l = Math.max(len(d), 1e-12);
+      const m: Point2 = [(p[0] + q[0]) / 2 - a[0], (p[1] + q[1]) / 2 - a[1]];
+      return [(d[0] * m[1] - d[1] * m[0]) / l, ((q[0] - p[0]) * d[0] + (q[1] - p[1]) * d[1]) / l];
     }
     case 'tangent': {
       const [a, b] = edgeEnds(sketch, c.refs[0]!).map(get) as [Point2, Point2];

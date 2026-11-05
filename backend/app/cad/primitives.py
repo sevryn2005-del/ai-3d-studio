@@ -148,8 +148,8 @@ _OPERATION_LABEL = {"cut": "빼기", "union": "합치기", "intersect": "교차"
 
 def profile_workplane(p: dict) -> cq.Workplane:
     """평면 좌표(u, v) 단면 윤곽 (대기 윤곽 하나). 꼭짓점 처리는 정확한 원호 (curves.py 와 같은 점)"""
-    if p["type"] == "polygon" and p.get("corners"):
-        segs = corner_segments(p["points"], p["corners"], True)
+    if p["type"] == "polygon" and (p.get("corners") or p.get("arcs")):
+        segs = corner_segments(p["points"], p.get("corners"), True, p.get("arcs"))
         w = cq.Workplane("XY").moveTo(*segs[0][1])
         for sg in segs:
             w = w.lineTo(*sg[2]) if sg[0] == "line" else w.threePointArc(sg[7], sg[2])
@@ -285,7 +285,7 @@ def sweep_solid(obj: SweepObject, index: dict[str, CadObject], sketches: dict[st
         raise GeometryError(f"'{obj.name}': 경로 스케치의 평면을 찾을 수 없습니다")
     # 정확한 스윕 (브라우저 정밀 엔진 pipeSweep 과 같은 배치): 경로 = 직선 + 정확한 원호, B(경로 평면 법선) 고정, 꺾인 곳 마이터
     ent = next(e for e in pk.entities if e.id == obj.sweep.path)
-    segs = corner_segments(ent.points, ent.corners, False) if ent.type == "path" else [("line", tuple(ent.points[0]), tuple(ent.points[1]))]
+    segs = corner_segments(ent.points, ent.corners, False, ent.arcs) if ent.type == "path" else [("line", tuple(ent.points[0]), tuple(ent.points[1]))]
     edges = []
     for sg in segs:
         a, b2 = cq.Vector(*sg[1], 0), cq.Vector(*sg[2], 0)

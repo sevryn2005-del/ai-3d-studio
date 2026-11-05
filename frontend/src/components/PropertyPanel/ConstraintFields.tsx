@@ -73,6 +73,23 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
             <button data-testid={`len-${ref}`} onClick={() => add('length', [ref], Math.round(len * 100) / 100 || 1)} title="지금 길이로 길이 구속">
               길이
             </button>
+            <input
+              className="bulge-input"
+              aria-label={`e${k} 호 볼록 정도`}
+              title="변을 호로: 볼록 정도 (0 = 직선, ±1 = 반원, 부호 = 방향)"
+              data-testid={`bulge-${ref}`}
+              type="number"
+              step={0.1}
+              min={-1}
+              max={1}
+              defaultValue={polygon.arcs?.find((x) => x.k === k)?.bulge ?? 0}
+              key={`${ref}:${polygon.arcs?.find((x) => x.k === k)?.bulge ?? 0}`}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                const v = Number((e.target as HTMLInputElement).value);
+                if (Number.isFinite(v)) submitNow({ type: 'set_arc', sketch: sketch.id, entity: polygon.id, edge: k, bulge: Math.max(-1, Math.min(1, v)) });
+              }}
+            />
           </div>
         );
       })}
@@ -82,14 +99,19 @@ export function PolygonFields({ sketch, polygon }: { sketch: Sketch; polygon: Po
 }
 
 /**
- * 스케치 필렛·모따기 (형식 v10): 모든 꼭짓점(경로는 안쪽 꼭짓점)에 같은 크기로. 크기 0 = 제거.
- * 꼭짓점 하나만 바꾸려면 AI·명령(set_corner vertices)으로
+ * 스케치 필렛·모따기 (형식 v10): 고른 꼭짓점(안 고르면 모든 꼭짓점, 경로는 안쪽 꼭짓점)에 같은 크기로. 크기 0 = 제거.
+ * 호 변(v13)에 붙은 꼭짓점은 처리할 수 없다
  */
 function CornerFields({ sketch, entity }: { sketch: Sketch; entity: Polygon }) {
   const submitNow = useSceneStore((s) => s.submitNow);
   const first = entity.corners?.[0];
   const [corner, setCorner] = useState<'fillet' | 'chamfer'>(first?.type ?? 'fillet');
-  const apply = (size: number) => submitNow({ type: 'set_corner', sketch: sketch.id, entity: entity.id, corner, size });
+  const n = entity.points.length;
+  const candidates = Array.from({ length: n }, (_, k) => k).filter((k) => entity.type === 'polygon' || (k > 0 && k < n - 1));
+  // 꼭짓점 고르기: 비우면 모든 꼭짓점
+  const [only, setOnly] = useState<number[]>([]);
+  const apply = (size: number) =>
+    submitNow({ type: 'set_corner', sketch: sketch.id, entity: entity.id, corner, size, ...(only.length ? { vertices: only } : {}) });
   return (
     <fieldset className="corner-fields">
       <legend>꼭짓점 처리 (스케치 필렛·모따기)</legend>
@@ -99,6 +121,20 @@ function CornerFields({ sketch, entity }: { sketch: Sketch; entity: Polygon }) {
           <option value="fillet">필렛 (둥글게)</option>
           <option value="chamfer">모따기 (비스듬히)</option>
         </select>
+      </div>
+      <div className="corner-vertices" role="group" aria-label="처리할 꼭짓점">
+        {candidates.map((k) => (
+          <label key={k} className="check small">
+            <input
+              type="checkbox"
+              data-testid={`corner-v${k}`}
+              checked={only.includes(k)}
+              onChange={(e) => setOnly((o) => (e.target.checked ? [...o, k].sort((x, y) => x - y) : o.filter((x) => x !== k)))}
+            />
+            p{k}
+          </label>
+        ))}
+        <span className="muted small">{only.length ? '고른 꼭짓점만' : '안 고르면 모든 꼭짓점'}</span>
       </div>
       <NumberField label={corner === 'fillet' ? '반지름' : '거리'} unit="mm" value={first?.size ?? 0} onCommit={apply} testId="corner-size" />
       <p className="muted small">
@@ -153,25 +189,29 @@ export function ConstraintPanel({ sketch }: { sketch: Sketch }) {
   );
 }
 
-const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'angle', 'equal', 'coincident', 'distance', 'concentric', 'tangent'];
+const PAIR_TYPES: ConstraintType[] = ['parallel', 'perpendicular', 'angle', 'equal', 'coincident', 'distance', 'concentric', 'tangent', 'symmetric'];
 
 function PairConstraintForm({ sketch }: { sketch: Sketch }) {
   const submitNow = useSceneStore((s) => s.submitNow);
   const [type, setType] = useState<ConstraintType>('parallel');
   const [a, setA] = useState('');
   const [b, setB] = useState('');
+  const [c3, setC3] = useState('');
   const [value, setValue] = useState(10);
   // 이 구속에 맞는 참조 후보 (첫 번째·두 번째 자리)
   const all = useMemo(() => {
     const refs: string[] = [...sketchPoints(sketch).keys()];
     for (const e of sketch.entities) {
       if (e.type === 'polygon') e.points.forEach((_, k) => refs.push(`${e.id}.e${k}`));
+      if (e.type === 'path') e.points.slice(1).forEach((_, k) => refs.push(`${e.id}.e${k}`));
       if (e.type === 'line') refs.push(`${e.id}.e0`);
       if (e.type === 'circle') refs.push(e.id);
     }
     return refs;
   }, [sketch]);
-  const form = CONSTRAINT_ARITY[type].refs.find((f) => f.length === 2)!;
+  const form = CONSTRAINT_ARITY[type].refs.find((f) => f.length >= 2)!;
+  const third = form.length === 3 ? all.filter((r) => refKind(sketch, r) === form[2]) : [];
+  const rc = third.includes(c3) ? c3 : (third[0] ?? '');
   const first = all.filter((r) => refKind(sketch, r) === form[0]);
   const second = all.filter((r) => refKind(sketch, r) === form[1]);
   const ra = first.includes(a) ? a : (first[0] ?? '');
@@ -204,13 +244,22 @@ function PairConstraintForm({ sketch }: { sketch: Sketch }) {
             </option>
           ))}
         </select>
+        {form.length === 3 && (
+          <select aria-label="대칭축" title="대칭축 (구성선·변)" data-testid="pair-c" value={rc} onChange={(e) => setC3(e.target.value)}>
+            {third.map((r) => (
+              <option key={r} value={r}>
+                축 {r}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       {needsValue && <NumberField label={type === 'angle' ? '각도' : '거리'} unit={type === 'angle' ? '°' : 'mm'} value={value} onCommit={setValue} testId="pair-value" />}
       <button
         data-testid="pair-add"
-        disabled={!ra || !rb}
+        disabled={!ra || !rb || (form.length === 3 && !rc)}
         onClick={() =>
-          submitNow({ type: 'add_constraint', sketch: sketch.id, constraint: type, refs: [ra, rb], ...(needsValue ? { value } : {}) })
+          submitNow({ type: 'add_constraint', sketch: sketch.id, constraint: type, refs: form.length === 3 ? [ra, rb, rc] : [ra, rb], ...(needsValue ? { value } : {}) })
         }
       >
         구속 추가

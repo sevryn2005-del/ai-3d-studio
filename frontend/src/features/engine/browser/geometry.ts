@@ -68,7 +68,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 12, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 13, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -146,7 +146,7 @@ export function localManifold(
       // 다각형은 꼭짓점 좌표 그대로 (구속 해석기가 푼 값). 감김 방향과 무관하게 채우도록 NonZero
       const placed =
         p.type === 'polygon'
-          ? scope.keep(new CrossSection([roundedPoints(p.points, p.corners, true, (r) => toleranceStep(r, tol))], 'NonZero'))
+          ? scope.keep(new CrossSection([roundedPoints(p.points, p.corners, true, (r) => toleranceStep(r, tol), p.arcs)], 'NonZero'))
           : p.type === 'slot'
             ? slotSection(wasm, p, tol, scope)
             : scope.keep(
@@ -159,7 +159,7 @@ export function localManifold(
                 .translate(p.center),
             );
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 12, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 13, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {

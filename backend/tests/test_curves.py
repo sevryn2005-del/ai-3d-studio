@@ -6,7 +6,15 @@ import math
 
 from app.ai.validator import validate_commands
 from app.cad.commands import ModelDefinition
-from app.cad.curves import corner_error, rounded_points, sweep_error, thin_polygon
+from app.cad.constraints import residuals
+from app.cad.curves import (
+    bulge_arc,
+    corner_error,
+    corner_segments,
+    rounded_points,
+    sweep_error,
+    thin_polygon,
+)
 from app.cad.validation import check_model
 
 SQUARE = [(-10, -10), (10, -10), (10, 10), (-10, 10)]
@@ -40,7 +48,7 @@ def test_sweep_bend_too_sharp():
 
 
 def model(sketches, objects=()):
-    return ModelDefinition.model_validate({"schemaVersion": 12, "units": "mm", "sketches": sketches, "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 13, "units": "mm", "sketches": sketches, "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -77,3 +85,63 @@ def test_ai_validator_v10():
     assert any("give thin" in e for e in errs)
     assert any("pa.e1" in e for e in errs)
     assert any("no closed profile" in e for e in errs)
+
+
+# ---- 형식 v13: 호 변·대칭 구속 (frontend curves.test.ts 와 같은 값) -------------------------------
+
+
+def test_bulge_arc_half_circle_and_inward():
+    _, _, _, c, r, ccw, sweep, mid = bulge_arc((10, -10), (10, 10), 1)
+    assert math.isclose(r, 10) and ccw and math.isclose(sweep, math.pi)
+    assert math.isclose(c[0], 10) and math.isclose(mid[0], 20) and abs(mid[1]) < 1e-12
+    _, _, _, _, r2, ccw2, _, mid2 = bulge_arc((10, -10), (10, 10), -math.tan(math.pi / 8))
+    assert not ccw2 and math.isclose(r2, math.sqrt(2) * 10) and mid2[0] < 10
+
+
+def test_arc_edge_area_and_errors():
+    pts = rounded_points(SQUARE, None, True, [{"k": 1, "bulge": 1}])
+    assert math.isclose(area(pts), 400 + 50 * math.pi, rel_tol=1e-2)
+    assert [s[0] for s in corner_segments(SQUARE, None, True, [{"k": 1, "bulge": 1}])] == ["line", "arc", "line", "line"]
+    assert "e4" in corner_error(SQUARE, None, True, [{"k": 4, "bulge": 1}])
+    assert "e2" in corner_error([(0, 0), (10, 0), (10, 10)], None, False, [{"k": 2, "bulge": 1}])
+    assert "호 변" in corner_error(SQUARE, [{"k": 2, "type": "fillet", "size": 1}], True, [{"k": 1, "bulge": 1}])
+    assert corner_error(SQUARE, [{"k": 3, "type": "fillet", "size": 1}], True, [{"k": 1, "bulge": 1}]) is None
+
+
+def test_symmetric_residual_and_check():
+    def sk(p1, constraints):
+        return model([{"id": "s", "name": "s", "plane": XY, "dimensions": [], "constraints": constraints, "entities": [
+            {"id": "q", "type": "polygon", "points": [[0, 0], p1, [5, 10]]},
+            {"id": "ax", "type": "line", "points": [[5, -5], [5, 30]]}]}])
+    sym = {"id": "k1", "type": "symmetric", "refs": ["q.p0", "q.p1", "ax.e0"]}
+    good = sk([10, 0], [sym])
+    assert max(abs(v) for v in residuals(good.sketches[0], good.sketches[0].constraints[0])) < 1e-12
+    assert check_model(good) == []
+    bad = sk([11, 1], [sym])
+    assert any("대칭" in i.message or "k1" in i.message for i in check_model(bad))
+    dup = sk([10, 0], [{"id": "k1", "type": "symmetric", "refs": ["q.p0", "q.p0", "ax.e0"]}])
+    assert any("두 번" in i.message for i in check_model(dup))
+
+
+def test_ai_validator_v13():
+    m = model([])
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_rectangle", "sketch": "s", "id": "r", "center": [0, 0], "width": 20, "height": 10},
+        {"type": "convert_to_polygon", "sketch": "s", "entity": "r"},
+        {"type": "set_arc", "sketch": "s", "entity": "r", "edge": 1, "bulge": 0.5},
+        {"type": "add_line", "sketch": "s", "id": "ax", "points": [[0, -10], [0, 10]]},
+        {"type": "add_constraint", "sketch": "s", "constraint": "symmetric", "refs": ["r.p0", "r.p1", "ax.e0"]},
+    ], m)
+    assert errs == []
+    _, errs = validate_commands([
+        {"type": "create_sketch", "id": "s", "plane": XY},
+        {"type": "add_rectangle", "sketch": "s", "id": "r", "center": [0, 0], "width": 20, "height": 10},
+        {"type": "set_arc", "sketch": "s", "entity": "r", "edge": 1, "bulge": 0.5},
+        {"type": "add_polygon", "sketch": "s", "id": "p", "points": [[0, 0], [10, 0], [0, 10]]},
+        {"type": "set_arc", "sketch": "s", "entity": "p", "edge": 3, "bulge": 0.5},
+        {"type": "convert_to_polygon", "sketch": "s", "entity": "p"},
+    ], m)
+    assert any("convert_to_polygon" in e for e in errs)
+    assert any("e0..e2" in e for e in errs)
+    assert any("is not a rectangle" in e for e in errs)

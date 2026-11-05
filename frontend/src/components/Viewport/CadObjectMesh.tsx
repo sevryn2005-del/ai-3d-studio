@@ -29,7 +29,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 12, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 13, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -288,7 +288,7 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
 /** 회전 미리보기용 단면 윤곽 (스케치 평면 u·v, 닫힌 선) */
 function profileOutline(p: Profile): Vector2[] {
   if (p.type === 'polygon') {
-    const pts = roundedPoints(p.points, p.corners, true);
+    const pts = roundedPoints(p.points, p.corners, true, undefined, p.arcs);
     return [...pts, pts[0]!].map(([x, y]) => new Vector2(x, y));
   }
   if (p.type === 'slot') {
@@ -323,7 +323,7 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
       return <sphereGeometry args={[o.params.radius, SEGMENTS, SEGMENTS / 2]} />;
     case 'extrude':
       if (profile?.type === 'polygon' || profile?.type === 'slot') {
-        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : roundedPoints(profile.points, profile.corners, true);
+        const pts = profile.type === 'slot' ? slotOutline(profile, 16) : roundedPoints(profile.points, profile.corners, true, undefined, profile.arcs);
         const shape = new Shape(pts.map(([x, y]) => new Vector2(x, y)));
         return <extrudeGeometry args={[shape, { depth: Math.abs(o.params.distance), bevelEnabled: false }]} />;
       }

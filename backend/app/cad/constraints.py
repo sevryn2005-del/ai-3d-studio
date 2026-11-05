@@ -16,6 +16,7 @@ CHECK_TOLERANCE = 1e-4
 LABEL = {
     "fix": "고정", "coincident": "일치", "concentric": "동심", "horizontal": "수평", "vertical": "수직", "parallel": "평행",
     "perpendicular": "직교", "equal": "같은 길이", "length": "길이", "distance": "거리", "tangent": "접선", "angle": "각도",
+    "symmetric": "대칭",
 }
 
 # 구속 종류별 참조 형식 (solver.ts CONSTRAINT_ARITY 와 같음)
@@ -32,6 +33,7 @@ ARITY: dict[str, tuple[list[tuple[str, ...]], bool]] = {
     "distance": ([("point", "point")], True),
     "tangent": ([("edge", "circle")], False),
     "angle": ([("edge", "edge")], True),
+    "symmetric": ([("point", "point", "edge")], False),
 }
 
 
@@ -75,7 +77,7 @@ def constraint_error(sk: Sketch, c: SketchConstraint) -> str | None:
         return f"{LABEL[c.type]} 구속에는 값(mm)이 필요합니다"
     if not needs_value and c.value is not None:
         return f"{LABEL[c.type]} 구속에는 값을 넣지 않습니다"
-    if len(c.refs) == 2 and c.refs[0] == c.refs[1]:
+    if len(set(c.refs)) < len(c.refs):
         return "같은 대상을 두 번 참조할 수 없습니다"
     if c.type == "angle" and not (0 < c.value < 180):
         return "각도는 0° 보다 크고 180° 보다 작아야 합니다"
@@ -130,6 +132,14 @@ def residuals(sk: Sketch, c: SketchConstraint) -> list[float]:
         n = max(math.hypot(*u) * math.hypot(*v), 1e-12)
         a = math.radians(c.value)
         return [((u[0] * v[1] - u[1] * v[0]) * math.cos(a) - (u[0] * v[0] + u[1] * v[1]) * math.sin(a)) / n]
+    if t == "symmetric":
+        # 두 점이 대칭축(변)에 대해 대칭: 가운데 점이 축 위, 두 점을 잇는 선이 축에 수직 (solver.ts 와 같음)
+        p, q = P(c.refs[0]), P(c.refs[1])
+        a, b = _edge(sk, pts, c.refs[2])
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = max(math.hypot(dx, dy), 1e-12)
+        mx, my = (p[0] + q[0]) / 2 - a[0], (p[1] + q[1]) / 2 - a[1]
+        return [(dx * my - dy * mx) / ln, ((q[0] - p[0]) * dx + (q[1] - p[1]) * dy) / ln]
     if t == "tangent":
         a, b = _edge(sk, pts, c.refs[0])
         o = P(c.refs[1])
@@ -177,9 +187,9 @@ def constraint_errors(sk: Sketch) -> list[str]:
     """스케치의 다각형·구속 문제 목록 (validation.sketch_errors 에서 사용)."""
     errors: list[str] = []
     for e in sk.entities:
-        if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True)):
+        if e.type == "polygon" and (err := polygon_error(e.points) or corner_error(e.points, e.corners, True, e.arcs)):
             errors.append(f"{sk.id}: {e.id} {err}")
-        if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False)):
+        if e.type == "path" and (err := open_path_error(e.points) or corner_error(e.points, e.corners, False, e.arcs)):
             errors.append(f"{sk.id}: {e.id} {err}")
     seen: set[str] = set()
     for c in sk.constraints:

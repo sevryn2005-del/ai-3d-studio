@@ -4,7 +4,7 @@
  */
 import type { CadObject, DimensionKind, ModelDefinition, ObjectId, Point2, Sketch, SketchEntity, SketchPlane } from './commandTypes';
 import { CHECK_TOLERANCE, constraintError, constraintResiduals, polygonError } from './solver';
-import { cornerError, openPathError, roundedPoints, thinPolygon, type Corner } from './curves';
+import { cornerError, openPathError, roundedPoints, thinPolygon, type Arc, type Corner } from './curves';
 
 export const REQUIRED_DIMENSIONS: Record<SketchEntity['type'], DimensionKind[]> = {
   rectangle: ['width', 'height'],
@@ -27,7 +27,7 @@ export function dimensionValue(sketch: Sketch, entityId: ObjectId, kind: Dimensi
 export type Profile =
   | { type: 'rectangle'; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'circle'; center: Point2; diameter: number; z: number; plane: SketchPlane }
-  | { type: 'polygon'; points: Point2[]; corners?: Corner[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
+  | { type: 'polygon'; points: Point2[]; corners?: Corner[]; arcs?: Arc[]; center: Point2; width: number; height: number; z: number; plane: SketchPlane }
   | { type: 'slot'; center: Point2; length: number; width: number; angle: number; z: number; plane: SketchPlane };
 
 /** 슬롯 윤곽 (반원마다 segs 개 점, 반시계). 미리보기·바운딩 크기용 — 엔진은 정확한 원호/다각형 근사를 따로 만든다 */
@@ -68,7 +68,7 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
   if (!e || e.type === 'line' || e.type === 'path') return null; // 구성선·경로는 닫힌 단면이 아니다
   const z = sketch.plane.offset;
   const plane = sketch.plane;
-  if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane);
+  if (e.type === 'polygon') return polygonProfile(e.points, e.corners, z, plane, e.arcs);
   if (e.type === 'rectangle') {
     const width = dimensionValue(sketch, e.id, 'width');
     const height = dimensionValue(sketch, e.id, 'height');
@@ -87,8 +87,8 @@ export function resolveProfile(sketch: Sketch, entityId: ObjectId): Profile | nu
  * 다각형 단면. center·width·height = (꼭짓점 처리 후 윤곽의) 바운딩 박스 — 크기 표시·구멍 위치 기본값·단면 기준점.
  * 형상은 points(+ corners) 그대로
  */
-function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: number, plane: SketchPlane): Profile {
-  const outline = roundedPoints(points, corners, true);
+function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: number, plane: SketchPlane, arcs?: Arc[]): Profile {
+  const outline = roundedPoints(points, corners, true, undefined, arcs);
   const xs = outline.map((p) => p[0]);
   const ys = outline.map((p) => p[1]);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -96,6 +96,7 @@ function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: numb
     type: 'polygon',
     points,
     ...(corners?.length ? { corners } : {}),
+    ...(arcs?.length ? { arcs } : {}),
     center: [(x0 + x1) / 2, (y0 + y1) / 2],
     width: x1 - x0,
     height: y1 - y0,
@@ -108,7 +109,7 @@ function polygonProfile(points: Point2[], corners: Corner[] | undefined, z: numb
 export function openLinePoints(sketch: Sketch, entityId: ObjectId): Point2[] | null {
   const e = sketch.entities.find((x) => x.id === entityId);
   if (!e || (e.type !== 'line' && e.type !== 'path')) return null;
-  return roundedPoints(e.points, e.type === 'path' ? e.corners : undefined, false);
+  return e.type === 'path' ? roundedPoints(e.points, e.corners, false, undefined, e.arcs) : roundedPoints(e.points, undefined, false);
 }
 
 /**
@@ -141,11 +142,11 @@ export function sketchErrors(sketch: Sketch): string[] {
   }
   for (const e of sketch.entities) {
     if (e.type === 'polygon') {
-      const err = polygonError(e.points) ?? cornerError(e.points, e.corners, true);
+      const err = polygonError(e.points) ?? cornerError(e.points, e.corners, true, e.arcs);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
     if (e.type === 'path') {
-      const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false);
+      const err = openPathError(e.points) ?? cornerError(e.points, e.corners, false, e.arcs);
       if (err) errors.push(`${sketch.id}: ${e.id} ${err}`);
     }
   }
@@ -205,7 +206,7 @@ export function refTarget(sketch: Sketch, ref: FeatureRef): Profile | Point2[] |
 export function revolveProfileError(p: Profile): string | null {
   const minU =
     p.type === 'polygon'
-      ? Math.min(...roundedPoints(p.points, p.corners, true).map((q) => q[0]))
+      ? Math.min(...roundedPoints(p.points, p.corners, true, undefined, p.arcs).map((q) => q[0]))
       : p.type === 'circle'
         ? p.center[0] - p.diameter / 2
         : p.type === 'slot'

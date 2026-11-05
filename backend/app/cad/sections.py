@@ -32,7 +32,7 @@ def signed_area(pts) -> float:
 def outline(p: dict) -> list[tuple[float, float]]:
     t = p["type"]
     if t == "polygon":
-        pts = rounded_points(p["points"], p.get("corners"), True)
+        pts = rounded_points(p["points"], p.get("corners"), True, p.get("arcs"))
     elif t == "rectangle":
         cx, cy = p["center"]
         w, h = p["width"] / 2, p["height"] / 2

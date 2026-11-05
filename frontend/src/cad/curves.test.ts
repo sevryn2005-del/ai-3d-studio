@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Point2 } from './commandTypes';
 import { emptyModel, type ModelDefinition } from './commandTypes';
 import { executeCommand } from './commandExecutor';
-import { cornerError, roundedPoints, sweepError, thinPolygon } from './curves';
+import { bulgeArc, cornerError, cornerSegments, roundedPoints, sweepError, thinPolygon } from './curves';
 import { signedArea } from './sections';
 import { validateGraph } from './modelGraph';
 
@@ -82,5 +82,63 @@ describe('형식 v10 명령', () => {
     expect(m.objects[0]).toMatchObject({ kind: 'sweep', name: '스윕 1' });
     expect(err(m, { type: 'delete_sketch_entity', sketch: 's', entity: 'pa' })).toMatch('삭제할 수 없습니다');
     expect(validateGraph(m)).toEqual([]);
+  });
+});
+
+describe('형식 v13 호 변·사각형 → 다각형·대칭 구속 (서버 tests/test_curves.py 와 같은 값)', () => {
+  it('bulge 호: 반원(1)·볼록 방향·각도', () => {
+    const half = bulgeArc([10, -10], [10, 10], 1);
+    expect(half).toMatchObject({ type: 'arc', r: 10, ccw: true });
+    if (half.type !== 'arc') throw new Error();
+    expect(half.c[0]).toBeCloseTo(10, 12);
+    expect(half.mid).toEqual([20, 0]);
+    expect(half.sweep).toBeCloseTo(Math.PI, 12);
+    const inward = bulgeArc([10, -10], [10, 10], -Math.tan(Math.PI / 8)); // 90° 호, 안쪽으로
+    if (inward.type !== 'arc') throw new Error();
+    expect(inward.ccw).toBe(false);
+    expect(inward.r).toBeCloseTo(Math.SQRT2 * 10, 9);
+    expect(inward.mid[0]).toBeLessThan(10);
+  });
+  it('호 변 넓이: 반원을 붙이면 400 + 50π (표본 오차 1% 미만)', () => {
+    const p = roundedPoints(SQUARE, undefined, true, undefined, [{ k: 1, bulge: 1 }]);
+    expect(Math.abs(area(p) - (400 + 50 * Math.PI)) / (400 + 50 * Math.PI)).toBeLessThan(1e-2);
+    expect(cornerSegments(SQUARE, undefined, true, [{ k: 1, bulge: 1 }]).map((s) => s.type)).toEqual(['line', 'arc', 'line', 'line']);
+  });
+  it('호 변 오류: 없는 변, 호에 붙은 꼭짓점 필렛', () => {
+    expect(cornerError(SQUARE, undefined, true, [{ k: 4, bulge: 1 }])).toMatch('e4');
+    expect(cornerError([[0, 0], [10, 0], [10, 10]], undefined, false, [{ k: 2, bulge: 1 }])).toMatch('e2');
+    expect(cornerError(SQUARE, [{ k: 2, type: 'fillet', size: 1 }], true, [{ k: 1, bulge: 1 }])).toMatch('호 변');
+    expect(cornerError(SQUARE, [{ k: 3, type: 'fillet', size: 1 }], true, [{ k: 1, bulge: 1 }])).toBeNull();
+  });
+
+  const base = run([
+    { type: 'create_sketch', id: 's', plane: XY },
+    { type: 'add_polygon', sketch: 's', id: 'p', points: SQUARE },
+    { type: 'add_rectangle', sketch: 's', id: 'r', center: [50, 0], width: 20, height: 10 },
+    { type: 'add_circle', sketch: 's', id: 'c', center: [-50, 0], diameter: 4 },
+  ]);
+  const ent = (m: ModelDefinition, id: string) => m.sketches[0]!.entities.find((e) => e.id === id) as Record<string, unknown>;
+
+  it('set_arc: 다각형·경로만, 변 범위, 0 이면 제거, 다시 주면 바꿈', () => {
+    expect(err(base, { type: 'set_arc', sketch: 's', entity: 'r', edge: 0, bulge: 1 })).toMatch('다각형');
+    expect(err(base, { type: 'set_arc', sketch: 's', entity: 'c', edge: 0, bulge: 1 })).toMatch('다각형');
+    expect(err(base, { type: 'set_arc', sketch: 's', entity: 'p', edge: 4, bulge: 1 })).toMatch('e4');
+    const m = run([{ type: 'set_arc', sketch: 's', entity: 'p', edge: 1, bulge: 0.5 }], base);
+    expect(ent(m, 'p').arcs).toEqual([{ k: 1, bulge: 0.5 }]);
+    const m2 = run([{ type: 'set_arc', sketch: 's', entity: 'p', edge: 1, bulge: -0.25 }], m);
+    expect(ent(m2, 'p').arcs).toEqual([{ k: 1, bulge: -0.25 }]);
+    const off = run([{ type: 'set_arc', sketch: 's', entity: 'p', edge: 1, bulge: 0 }], m2);
+    expect(ent(off, 'p')).not.toHaveProperty('arcs');
+    expect(validateGraph(m2)).toEqual([]);
+  });
+
+  it('convert_to_polygon: 같은 id 의 반시계 다각형, 치수는 지운다', () => {
+    const withDim = run([{ type: 'set_dimension', sketch: 's', dimension: 'r.width', value: 30 }], base);
+    expect(withDim.sketches[0]!.dimensions.length).toBeGreaterThan(0);
+    const m = run([{ type: 'convert_to_polygon', sketch: 's', entity: 'r' }], withDim);
+    expect(ent(m, 'r')).toEqual({ id: 'r', type: 'polygon', points: [[35, -5], [65, -5], [65, 5], [35, 5]] });
+    expect(m.sketches[0]!.dimensions.filter((d) => d.entity === 'r')).toEqual([]);
+    expect(err(m, { type: 'convert_to_polygon', sketch: 's', entity: 'r' })).toMatch('사각형');
+    expect(err(base, { type: 'convert_to_polygon', sketch: 's', entity: 'c' })).toMatch('사각형');
   });
 });

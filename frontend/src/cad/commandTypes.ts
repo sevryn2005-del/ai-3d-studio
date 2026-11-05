@@ -184,6 +184,9 @@ export const CornerSchema = z.strictObject({
   size: z.number().min(LIMITS.minDimension / 10).max(LIMITS.maxDimension),
 });
 const corners = z.array(CornerSchema).max(LIMITS.maxPolygonPoints).optional();
+/** 변을 호로 (형식 v13): 변 k 의 볼록 정도 bulge = tan(호 각도/4), −1~1 (±1 = 반원, 양수 = 반시계) — cad/curves.ts */
+export const ArcSchema = z.strictObject({ k: z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1), bulge: z.number().min(-1).max(1) });
+const arcs = z.array(ArcSchema).max(LIMITS.maxPolygonPoints).optional();
 
 export const SketchEntitySchema = z.discriminatedUnion('type', [
   z.strictObject({ id: ObjectIdSchema, type: z.literal('rectangle'), center: Point2Schema }),
@@ -197,6 +200,7 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     type: z.literal('polygon'),
     points: z.array(Point2Schema).min(3).max(LIMITS.maxPolygonPoints),
     corners,
+    arcs,
   }),
   /**
    * 경로 (형식 v10): 열린 꺾은선. 스윕 중심선·리브(얇은 돌출) 선. 꼭짓점 `ID.pk`, 변 `ID.ek` (pk → p(k+1), 닫히지 않음).
@@ -207,6 +211,7 @@ export const SketchEntitySchema = z.discriminatedUnion('type', [
     type: z.literal('path'),
     points: z.array(Point2Schema).min(2).max(LIMITS.maxPolygonPoints),
     corners,
+    arcs,
   }),
   /**
    * 구성선 (형식 v7): 형상을 만들지 않는 보조 직선. 끝점 `ID.p0`·`ID.p1`, 변 `ID.e0` 으로 구속에 쓴다
@@ -298,6 +303,7 @@ export type FacePlane = z.infer<typeof FacePlaneSchema>;
 export const ConstraintTypeSchema = z.enum([
   'fix', 'coincident', 'concentric', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'equal', 'length', 'distance', 'tangent',
   'angle', // 형식 v7: 두 변 사이 각도(°, 첫 변 → 둘째 변 반시계)
+  'symmetric', // 형식 v13: 두 점이 대칭축(변)에 대해 대칭 [점, 점, 변]
 ]);
 export type ConstraintType = z.infer<typeof ConstraintTypeSchema>;
 export const GeomRefSchema = z
@@ -306,7 +312,7 @@ export const GeomRefSchema = z
 export const SketchConstraintSchema = z.strictObject({
   id: ObjectIdSchema,
   type: ConstraintTypeSchema,
-  refs: z.array(GeomRefSchema).min(1).max(2),
+  refs: z.array(GeomRefSchema).min(1).max(3),
   value: dimension.optional(),
 });
 export type SketchConstraint = z.infer<typeof SketchConstraintSchema>;
@@ -568,7 +574,7 @@ export const MateSchema = z.strictObject({
 export type Mate = z.infer<typeof MateSchema>;
 export const MAX_MATES = 200;
 
-export const MODEL_SCHEMA_VERSION = 12;
+export const MODEL_SCHEMA_VERSION = 13;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -784,6 +790,18 @@ export const SetThinCommandSchema = z.strictObject({
   thin: z.number().min(LIMITS.minDimension).max(LIMITS.maxDimension),
 });
 
+/** 변을 호로 (형식 v13): 다각형·경로의 변 edge 를 볼록 정도 bulge 의 원호로 (0 = 직선) */
+export const SetArcCommandSchema = z.strictObject({
+  type: z.literal('set_arc'),
+  sketch: ObjectIdSchema,
+  entity: ObjectIdSchema,
+  edge: z.number().int().min(0).max(LIMITS.maxPolygonPoints - 1),
+  bulge: z.number().min(-1).max(1),
+});
+
+/** 사각형을 같은 모양의 다각형으로 바꾼다 (꼭짓점 이동·필렛·호를 쓰려고). 중심 구속은 지워진다 */
+export const ConvertToPolygonCommandSchema = z.strictObject({ type: z.literal('convert_to_polygon'), sketch: ObjectIdSchema, entity: ObjectIdSchema });
+
 /** 스윕: 단면을 경로를 따라 쓸기 */
 export const SweepCommandSchema = z.strictObject({
   type: z.literal('sweep'),
@@ -835,7 +853,7 @@ export const AddConstraintCommandSchema = z.strictObject({
   sketch: ObjectIdSchema,
   id: ObjectIdSchema.optional(),
   constraint: ConstraintTypeSchema,
-  refs: z.array(GeomRefSchema).min(1).max(2),
+  refs: z.array(GeomRefSchema).min(1).max(3),
   value: dimension.optional(),
 });
 
@@ -1090,6 +1108,8 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddLineCommandSchema,
   AddPathCommandSchema,
   SetCornerCommandSchema,
+  SetArcCommandSchema,
+  ConvertToPolygonCommandSchema,
   AddSlotCommandSchema,
   SetEntityAngleCommandSchema,
   OffsetEntityCommandSchema,

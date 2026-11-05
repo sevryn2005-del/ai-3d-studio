@@ -452,6 +452,30 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 5 },
     ],
   },
+  'sketch-arc-edge': {
+    // 형식 v13 호 변: 정사각형 20×20 의 오른쪽 변(e1)을 반원(bulge 1)으로 → 넓이 400 + π·100/2, 높이 5
+    volume: (400 + (PI * 100) / 2) * 5,
+    roots: 1,
+    bbox: [[-10, -10, 0], [20, 10, 5]],
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_polygon', sketch: 's', id: 'p', points: [[-10, -10], [10, -10], [10, 10], [-10, 10]] },
+      { type: 'set_arc', sketch: 's', entity: 'p', edge: 1, bulge: 1 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'p', distance: 5 },
+    ],
+  },
+  'sketch-rect-to-polygon-fillet': {
+    // 사각형을 다각형으로 바꾼 뒤 꼭짓점 p0 만 필렛 R2: 넓이 300 − (1 − π/4)·4 (사각형 20×15), 높이 2
+    volume: (300 - (1 - PI / 4) * 4) * 2,
+    roots: 1,
+    commands: [
+      { type: 'create_sketch', id: 's', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_rectangle', sketch: 's', id: 'r', center: [0, 0], width: 20, height: 15 },
+      { type: 'convert_to_polygon', sketch: 's', entity: 'r' },
+      { type: 'set_corner', sketch: 's', entity: 'r', vertices: [0], corner: 'fillet', size: 2 },
+      { type: 'extrude', id: 'e', sketch: 's', profile: 'r', distance: 2 },
+    ],
+  },
   'rib-l-path': {
     // 리브: 꺾은 중심선 길이 30 × 두께 2 (마이터 이음은 넓이 = 두께 × 중심선 길이) × 높이 5
     volume: 30 * 2 * 5,

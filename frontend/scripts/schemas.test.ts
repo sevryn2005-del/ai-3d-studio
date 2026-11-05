@@ -37,6 +37,8 @@ describe('shared/schemas 동기화', () => {
       'add_line',
       'add_path',
       'set_corner',
+      'set_arc',
+      'convert_to_polygon',
       'add_slot',
       'set_entity_angle',
       'offset_entity',

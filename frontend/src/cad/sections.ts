@@ -11,7 +11,7 @@ import { roundedPoints } from './curves';
 
 export function outline(p: Profile): Point2[] {
   let pts: Point2[];
-  if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true);
+  if (p.type === 'polygon') pts = roundedPoints(p.points, p.corners, true, undefined, p.arcs);
   else if (p.type === 'rectangle') {
     const [cx, cy] = p.center;
     const [w, h] = [p.width / 2, p.height / 2];

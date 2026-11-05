@@ -1,6 +1,6 @@
-"""형식 v10 곡선 규칙 — frontend/src/cad/curves.ts 와 같은 계산·같은 점.
+"""형식 v10·v13 곡선 규칙 — frontend/src/cad/curves.ts 와 같은 계산·같은 점.
 
-꼭짓점 처리(corners: 필렛 = 접하는 호, 모따기 = 자른 직선), 경로(열린 꺾은선), 얇은 단면(리브), 스윕 고리(마이터 이음).
+꼭짓점 처리(corners: 필렛 = 접하는 호, 모따기 = 자른 직선), 호 변(arcs, v13: bulge), 경로(열린 꺾은선), 얇은 단면(리브), 스윕 고리(마이터 이음).
 """
 
 from __future__ import annotations
@@ -67,7 +67,32 @@ def _cut_corner(prev, v, nxt, corner):
     return a, b, t, ("arc", a, b, c, r, ccw, math.pi - theta, mid)
 
 
-def corner_segments(points, corners, closed: bool) -> list[tuple]:
+def _arc_k(a):
+    return a["k"] if isinstance(a, dict) else a.k
+
+
+def _arc_bulge(a):
+    return a["bulge"] if isinstance(a, dict) else a.bulge
+
+
+def bulge_arc(a, b, bulge: float) -> tuple:
+    """볼록 정도 bulge(= tan(호 각도/4), 양수 = 반시계) 로 a → b 를 잇는 호 — curves.ts bulgeArc"""
+    chord = _len(_sub(b, a))
+    d = _unit(_sub(b, a))
+    nl = (-d[1], d[0])
+    m = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    s = bulge * chord / 2
+    r = chord * (1 + bulge * bulge) / (4 * abs(bulge))
+    c = _at(m, nl, math.copysign(1, bulge) * (r - abs(s)))
+    mid = _at(m, nl, -s)
+    return ("arc", tuple(a), tuple(b), c, r, bulge > 0, 4 * math.atan(abs(bulge)), mid)
+
+
+def _bulges(arcs) -> dict[int, float]:
+    return {_arc_k(x): _arc_bulge(x) for x in (arcs or []) if abs(_arc_bulge(x)) > 1e-9}
+
+
+def corner_segments(points, corners, closed: bool, arcs=None) -> list[tuple]:
     pts = [tuple(p) for p in points]
     n = len(pts)
     by_k = {_corner_k(c): c for c in (corners or [])}
@@ -79,20 +104,27 @@ def corner_segments(points, corners, closed: bool) -> list[tuple]:
             cuts.append(_cut_corner(pts[(k - 1) % n], v, pts[(k + 1) % n], by_k.get(k)))
     segs = []
     last = n if closed else n - 1
+    bulges = _bulges(arcs)
     for k in range(last):
         frm, to = cuts[k], cuts[(k + 1) % n]
-        if _len(_sub(to[0], frm[1])) > 1e-12:
+        if k in bulges:
+            segs.append(bulge_arc(frm[1], to[0], bulges[k]))
+        elif _len(_sub(to[0], frm[1])) > 1e-12:
             segs.append(("line", frm[1], to[0]))
         if to[3] is not None and (closed or k + 1 < n - 1):
             segs.append(to[3])
     return segs
 
 
-def corner_error(points, corners, closed: bool) -> str | None:
-    if not corners:
-        return None
+def corner_error(points, corners, closed: bool, arcs=None) -> str | None:
     pts = [tuple(p) for p in points]
     n = len(pts)
+    arc_edges = set(_bulges(arcs))
+    for a in arcs or []:
+        if _arc_k(a) >= (n if closed else n - 1):
+            return f"변 e{_arc_k(a)} 이(가) 없습니다"
+    if not corners:
+        return None
     seen = set()
     for c in corners:
         k = _corner_k(c)
@@ -101,6 +133,8 @@ def corner_error(points, corners, closed: bool) -> str | None:
         if k in seen:
             return f"꼭짓점 p{k} 의 모서리 처리가 중복되었습니다"
         seen.add(k)
+        if k in arc_edges or (k - 1) % n in arc_edges:
+            return f"꼭짓점 p{k} 은(는) 호 변에 붙어 있어 필렛·모따기를 할 수 없습니다"
     by_k = {_corner_k(c): c for c in corners}
     cut = [0.0 if (not closed and k in (0, n - 1)) else _cut_corner(pts[(k - 1) % n], v, pts[(k + 1) % n], by_k.get(k))[2]
            for k, v in enumerate(pts)]
@@ -132,10 +166,10 @@ def sample_segments(segs, closed: bool, step: float = OUTLINE_STEP) -> list[Pt]:
     return out
 
 
-def rounded_points(points, corners, closed: bool) -> list[Pt]:
-    if not corners:
+def rounded_points(points, corners, closed: bool, arcs=None) -> list[Pt]:
+    if not corners and not _bulges(arcs):
         return [(p[0], p[1]) for p in points]
-    return sample_segments(corner_segments(points, corners, closed), closed)
+    return sample_segments(corner_segments(points, corners, closed, arcs), closed)
 
 
 def thin_polygon(pts, t: float) -> list[Pt]:

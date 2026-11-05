@@ -1087,6 +1087,64 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "set_arc"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "edge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "bulge": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "entity",
+        "edge",
+        "bulge"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "convert_to_polygon"
+        },
+        "sketch": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        }
+      },
+      "required": [
+        "type",
+        "sketch",
+        "entity"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "add_slot"
         },
         "sketch": {
@@ -1272,12 +1330,13 @@
             "length",
             "distance",
             "tangent",
-            "angle"
+            "angle",
+            "symmetric"
           ]
         },
         "refs": {
           "minItems": 1,
-          "maxItems": 2,
+          "maxItems": 3,
           "type": "array",
           "items": {
             "type": "string",
@@ -2231,6 +2290,30 @@
                                 ],
                                 "additionalProperties": false
                               }
+                            },
+                            "arcs": {
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "k": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 63
+                                  },
+                                  "bulge": {
+                                    "type": "number",
+                                    "minimum": -1,
+                                    "maximum": 1
+                                  }
+                                },
+                                "required": [
+                                  "k",
+                                  "bulge"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -2302,6 +2385,30 @@
                                   "k",
                                   "type",
                                   "size"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "arcs": {
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "k": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 63
+                                  },
+                                  "bulge": {
+                                    "type": "number",
+                                    "minimum": -1,
+                                    "maximum": 1
+                                  }
+                                },
+                                "required": [
+                                  "k",
+                                  "bulge"
                                 ],
                                 "additionalProperties": false
                               }
@@ -2485,12 +2592,13 @@
                             "length",
                             "distance",
                             "tangent",
-                            "angle"
+                            "angle",
+                            "symmetric"
                           ]
                         },
                         "refs": {
                           "minItems": 1,
-                          "maxItems": 2,
+                          "maxItems": 3,
                           "type": "array",
                           "items": {
                             "type": "string",
