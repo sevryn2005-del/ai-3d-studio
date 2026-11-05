@@ -1,4 +1,7 @@
-"""묶음 엔진(사이드카) 스모크 테스트: 실행 → 상태 확인 → 기준 판 계산 → STL 내보내기 → 부모 종료 시 함께 종료.
+"""묶음 엔진(사이드카) 스모크 테스트: 실행 → 상태 확인 → 기준 판 계산 → STL 내보내기 →
+공유 픽스처 전체(헬릭스·스플라인·영역·필렛·STEP 가져오기 …)를 묶인 엔진으로 계산해 부피 대조 →
+도면(숨은선·단면)·위상·간섭 API → 부모 종료 시 함께 종료.
+묶음(PyInstaller)이 새로 쓰는 OCCT 모듈을 빠뜨리면 여기서 드러난다 (개발 환경 pytest 로는 알 수 없음).
 
   python packaging/smoke_test.py <ai3d-engine 실행 파일 경로>
 
@@ -30,6 +33,53 @@ def request(url: str, body: dict | None = None, timeout: float = 120) -> tuple[i
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"} if data else {})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.status, r.read(), dict(r.headers)
+
+
+def stl_volume(stl: bytes) -> float:
+    count = struct.unpack_from("<I", stl, 80)[0]
+    vol = 0.0
+    for i in range(count):
+        a, b, c = (struct.unpack_from("<3f", stl, 84 + i * 50 + 12 + v * 12) for v in range(3))
+        vol += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6
+    return vol
+
+
+def shared_cases(base: str) -> None:
+    """공유 픽스처: 묶인 엔진의 STL 부피가 해석값과 같은지 (tests/test_features.py 와 같은 기준 3e-3)"""
+    cases = json.loads((ROOT / "shared/schemas/examples/feature-cases.json").read_text(encoding="utf-8"))
+    bad = []
+    t0 = time.time()
+    for name, case in cases.items():
+        try:
+            status, stl, _ = request(f"{base}/api/export/stl", case["model"])
+            vol = stl_volume(stl)
+            if status != 200 or abs(vol - case["volume"]) / case["volume"] > 3e-3:
+                bad.append(f"{name}: 부피 {vol:.3f} ≠ {case['volume']:.3f}")
+        except Exception as e:  # noqa: BLE001 — 실패 목록으로 모아 한 번에 보여 준다
+            bad.append(f"{name}: {e}")
+    assert not bad, "공유 픽스처 실패:\n" + "\n".join(bad)
+    print(f"공유 픽스처 {len(cases)}가지 ✓ {time.time() - t0:.1f}초")
+
+    drawings = json.loads((ROOT / "shared/schemas/examples/drawing-cases.json").read_text(encoding="utf-8"))
+    for name, case in drawings.items():
+        body = {"model": case["model"], "views": list(case["views"]), **({"section": case["section"]} if "section" in case else {})}
+        _, data, _ = request(f"{base}/api/model/drawing", body)
+        r = json.loads(data)
+        assert r["ok"] and len(r["views"]) == len(case["views"]), (name, r.get("issues"))
+        for v in r["views"]:
+            exp = case["views"][v["name"]]["bounds"]
+            assert all(abs(a - b) < 1e-3 for a, b in zip(v["bounds"], exp)), (name, v["name"], v["bounds"], exp)
+    print(f"도면 {len(drawings)}가지 ✓ (숨은선·단면)")
+
+    model = cases["fillet-box-all"]["model"]  # 정밀 피처(필렛)의 B-rep 면·모서리
+    oid = model["objects"][-1]["id"]
+    _, data, _ = request(f"{base}/api/model/topology", {"model": model, "id": oid})
+    topo = json.loads(data)
+    assert topo["ok"] and topo["faces"] and topo["edges"], topo.get("issues")
+    assembly = json.loads((ROOT / "shared/schemas/examples/model-assembly.json").read_text(encoding="utf-8"))
+    _, data, _ = request(f"{base}/api/model/interference", assembly)
+    assert json.loads(data)["ok"]
+    print(f"위상({len(topo['faces'])}면·{len(topo['edges'])}모서리)·간섭 ✓")
 
 
 def main(exe: str) -> int:
@@ -76,6 +126,8 @@ def main(exe: str) -> int:
             status, data, _ = request(f"{base}/api/export/{fmt}", model)
             assert status == 200 and len(data) > 100, fmt
         print("3MF·STEP·GLB ✓")
+
+        shared_cases(base)
 
         parent.kill()
         parent.wait()
