@@ -1,6 +1,6 @@
 /** 백엔드 엔드포인트별 타입과 호출 함수. 응답 스키마는 backend/app/api/*.py 와 일치해야 한다. */
 import { z } from 'zod';
-import type { ModelDefinition } from '../cad/commandTypes';
+import type { DrawingSection, ModelDefinition } from '../cad/commandTypes';
 import { apiGet, apiPost, apiPostBlob } from './client';
 
 export const HealthSchema = z.object({
@@ -67,13 +67,15 @@ export const DrawingSchema = z.object({
       visible: z.array(z.array(z.number())),
       hidden: z.array(z.array(z.number())),
       circles: z.array(z.object({ center: P2Schema, radius: z.number(), full: z.boolean(), visible: z.boolean() })),
+      axes: z.array(z.array(z.number())),
+      section: z.array(z.array(z.number())).optional(),
       bounds: z.tuple([z.number(), z.number(), z.number(), z.number()]),
     }),
   ),
 });
 /** 도면 투상 (숨은선 제거) */
-export const drawingModel = (model: ModelDefinition, views: readonly string[], signal?: AbortSignal) =>
-  apiPost('/model/drawing', { model, views }, DrawingSchema, signal, 70_000);
+export const drawingModel = (model: ModelDefinition, views: readonly string[], section: DrawingSection | undefined, signal?: AbortSignal) =>
+  apiPost('/model/drawing', { model, views, ...(section ? { section } : {}) }, DrawingSchema, signal, 70_000);
 
 /** 간섭 검사 (조립품): 서로 파고드는 최상위 객체 쌍 */
 export const interferenceModel = (model: ModelDefinition, signal?: AbortSignal) =>

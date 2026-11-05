@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 13
+      "const": 14
     },
     "units": {
       "type": "string",
@@ -3101,6 +3101,88 @@
         ],
         "additionalProperties": false
       }
+    },
+    "drawing": {
+      "type": "object",
+      "properties": {
+        "paper": {
+          "type": "string",
+          "enum": [
+            "A4",
+            "A3"
+          ]
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "auto"
+            },
+            {
+              "type": "number",
+              "minimum": 0.0001,
+              "maximum": 100
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "views": {
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "front",
+              "top",
+              "right",
+              "iso"
+            ]
+          }
+        },
+        "dimensions": {
+          "type": "boolean"
+        },
+        "centerlines": {
+          "type": "boolean"
+        },
+        "section": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "enum": [
+                "front",
+                "right"
+              ]
+            },
+            "offset": {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "view",
+            "offset"
+          ],
+          "additionalProperties": false
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "paper",
+        "scale",
+        "views",
+        "dimensions",
+        "centerlines"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

@@ -24,9 +24,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 11: + 조립 메이트(model.mates). v10 내용은 그대로 유효
  * - 12: + 고른 모서리(fillet.edges.at)·고른 면 평면(plane 'frame')·고른 메이트 참조. v11 내용은 그대로 유효
  * - 13: + 호 모서리(polygon·path arcs)·대칭 구속(symmetric). v12 내용은 그대로 유효
- * 읽기는 1~13 모두, 쓰기는 항상 최신(13). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 14: + 도면 설정(model.drawing). v13 내용은 그대로 유효
+ * 읽기는 1~14 모두, 쓰기는 항상 최신(14). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 13;
+export const PROJECT_FORMAT_VERSION = 14;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -163,8 +164,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 13) {
     // v12 → v13: 선택 항목(arcs)·구속 종류만 늘어남 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 12 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 12 ? { ...model, schemaVersion: 13 } : model;
     file = { ...file, formatVersion: 13, model: migrated };
+  }
+  if ((file.formatVersion as number) < 14) {
+    // v13 → v14: 도면 설정(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 13 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 14, model: migrated };
   }
   return file;
 }

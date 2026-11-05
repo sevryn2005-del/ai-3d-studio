@@ -9,7 +9,7 @@
  * 메시 계약 (모든 엔진 공통): 최상위 객체마다 하나, 객체 로컬 좌표계(mm), 형상 키 캐시에 저장된다.
  */
 import type { Issue } from '../../api/backend';
-import type { ModelDefinition } from '../../cad/commandTypes';
+import type { DrawingSection, ModelDefinition } from '../../cad/commandTypes';
 
 export type EngineId = 'server' | 'browser';
 export type ExportFormat = 'stl' | '3mf' | 'step' | 'glb';
@@ -46,7 +46,7 @@ export interface CadEngine {
   /** 화면 선택용 위상 (형식 v12): 객체 하나의 B-rep 면·모서리 (객체 변환 적용 = 부모 좌표계). 계산 실패는 EngineError */
   topology(model: ModelDefinition, objectId: string, signal?: AbortSignal): Promise<Topology>;
   /** 도면 투상 (숨은선 제거): 보이는 최상위 객체를 보기마다 투상한 선. 계산 실패는 EngineError */
-  drawing(model: ModelDefinition, views: readonly DrawingViewName[], signal?: AbortSignal): Promise<DrawingView[]>;
+  drawing(model: ModelDefinition, views: readonly DrawingViewName[], section?: DrawingSection, signal?: AbortSignal): Promise<DrawingView[]>;
 }
 
 type V3 = [number, number, number];
@@ -98,12 +98,16 @@ export interface DrawingCircle {
   full: boolean;
   visible: boolean;
 }
-/** 보기 하나: 꺾은선 [x0, y0, x1, y1, …] (보기 평면 좌표 mm, x 오른쪽 · y 위). 보이는 선·숨은선 */
+/** 보기 하나 (단면도는 숨은선 없음): 꺾은선 [x0, y0, x1, y1, …] (보기 평면 좌표 mm, x 오른쪽 · y 위). 보이는 선·숨은선 */
 export interface DrawingView {
   name: DrawingViewName;
   visible: number[][];
   hidden: number[][];
   circles: DrawingCircle[];
+  /** 원통 축선 (축이 보기 평면에 누운 원통·구멍): 두 점 [x0, y0, x1, y1] — 중심선 */
+  axes: number[][];
+  /** 단면도일 때: 잘린 면의 경계 (해칭할 영역, 짝수-홀수 규칙) */
+  section?: number[][];
   /** 보이는 선의 범위 [xmin, ymin, xmax, ymax] (선이 없으면 0) */
   bounds: [number, number, number, number];
 }

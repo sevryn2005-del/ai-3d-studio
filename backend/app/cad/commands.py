@@ -773,12 +773,36 @@ class Mate(Strict):
     flip: Annotated[StrictBool | None, Field(exclude_if=lambda v: v is None)] = None
 
 
+DrawingViewName = Literal["front", "top", "right", "iso"]
+
+
+class DrawingSection(Strict):
+    """전단면도 (형식 v14): 정면도 = 평면 y = offset(앞쪽을 걷어냄), 우측면도 = 평면 x = offset(오른쪽을 걷어냄)"""
+
+    view: Literal["front", "right"]
+    offset: Coordinate
+
+
+class DrawingSettings(Strict):
+    """도면 설정 (형식 v14) — frontend commandTypes.ts DrawingSettingsSchema. 형상에는 영향 없음"""
+
+    paper: Literal["A4", "A3"]
+    scale: Literal["auto"] | Annotated[float, _num(0.0001, 100)]
+    title: Annotated[str | None, Field(max_length=80, exclude_if=lambda v: v is None)] = None
+    views: Annotated[list[DrawingViewName], Field(max_length=4)]
+    dimensions: StrictBool
+    centerlines: StrictBool
+    section: Annotated[DrawingSection | None, Field(exclude_if=lambda v: v is None)] = None
+    notes: Annotated[str | None, Field(max_length=500, exclude_if=lambda v: v is None)] = None
+
+
 class ModelDefinition(Strict):
-    schemaVersion: Literal[13]
+    schemaVersion: Literal[14]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
     mates: Annotated[list[Mate] | None, Field(max_length=MAX_MATES, exclude_if=lambda v: v is None)] = None
+    drawing: Annotated[DrawingSettings | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------
@@ -942,6 +966,13 @@ class SetMate(Strict):
 class DeleteMate(Strict):
     type: Literal["delete_mate"]
     mate: ObjectId
+
+
+class SetDrawing(Strict):
+    """도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다"""
+
+    type: Literal["set_drawing"]
+    drawing: DrawingSettings
 
 
 class PartData(Strict):
@@ -1297,6 +1328,7 @@ CadCommand = Annotated[
         AddMate,
         SetMate,
         DeleteMate,
+        SetDrawing,
         InsertPart,
         ImportMesh,
         EdgeFeatureCommand,
@@ -1363,6 +1395,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddMate,
     SetMate,
     DeleteMate,
+    SetDrawing,
     InsertPart,
     ImportMesh,
     EdgeFeatureCommand,

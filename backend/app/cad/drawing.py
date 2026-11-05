@@ -1,7 +1,9 @@
 """도면 투상 (숨은선 제거, OCCT HLRBRep_Algo) — 브라우저 occt/occtDrawing.ts 와 같은 호출·같은 규칙.
 
 보기 방향 표(VIEWS)는 frontend/src/features/drawing/views.ts 와 같다 (toward = 보는 사람 쪽, right = 보기 오른쪽).
-결과: 보기마다 보이는 선·숨은선 꺾은선 [x0, y0, x1, y1, …] (보기 평면 mm), 정면으로 보이는 원, 보이는 선 범위.
+결과: 보기마다 보이는 선·숨은선 꺾은선 [x0, y0, x1, y1, …] (보기 평면 mm), 정면으로 보이는 원, 원통 축선, 보이는 선 범위.
+단면도 (형식 v14): 정면 = 평면 y = offset 앞쪽을, 우측면 = 평면 x = offset 오른쪽을 걷어내고 투상, 숨은선 없음,
+잘린 면(절단 평면 위의 평면) 경계를 section 으로 (해칭은 프론트엔드 시트).
 숨은선은 보이는 선·앞서 남긴 숨은선과 같은 직선 위에서 겹치는 부분을 지운다 (clean_hidden ↔ features/drawing/clean.ts).
 """
 
@@ -10,13 +12,19 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.Bnd import Bnd_Box
+from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+from OCP.BRepBndLib import BRepBndLib
+from OCP.BRepGProp import BRepGProp
 from OCP.BRepLib import BRepLib
-from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Plane
 from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
+from OCP.GProp import GProp_GProps
 from OCP.HLRAlgo import HLRAlgo_Projector
 from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
-from OCP.TopAbs import TopAbs_EDGE
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS
 
@@ -36,23 +44,35 @@ def _round(v: float) -> float:
     return round(v, 6) + 0.0
 
 
+def _explore(s, kind):
+    ex = TopExp_Explorer(s, kind)
+    while ex.More():
+        yield TopoDS.Edge_s(ex.Current()) if kind == TopAbs_EDGE else TopoDS.Face_s(ex.Current())
+        ex.Next()
+
+
+def _samples(e):
+    """모서리 위 점 (occtDrawing.ts edgeSamples 와 같은 표본) → (점, 종류, 어댑터)"""
+    a = BRepAdaptor_Curve(e)
+    t = a.GetType()
+    u0, u1 = a.FirstParameter(), a.LastParameter()
+    n = 1 if t == GeomAbs_Line else max(4, math.ceil(abs(u1 - u0) / ARC_STEP)) if t == GeomAbs_Circle else SPLINE_SEGMENTS
+    pts = []
+    for i in range(n + 1):
+        p = a.Value(u0 + (u1 - u0) * i / n)
+        pts.append((p.X(), p.Y(), p.Z()))
+    return pts, t, a
+
+
 def _polylines(s, circles: list | None, visible: bool) -> list[list[float]]:
     if s is None or s.IsNull():
         return []
     BRepLib.BuildCurves3d_s(s)
     out = []
-    ex = TopExp_Explorer(s, TopAbs_EDGE)
-    while ex.More():
-        e = TopoDS.Edge_s(ex.Current())
-        ex.Next()
-        a = BRepAdaptor_Curve(e)
-        t = a.GetType()
+    for e in _explore(s, TopAbs_EDGE):
+        raw, t, a = _samples(e)
         u0, u1 = a.FirstParameter(), a.LastParameter()
-        n = 1 if t == GeomAbs_Line else max(4, math.ceil(abs(u1 - u0) / ARC_STEP)) if t == GeomAbs_Circle else SPLINE_SEGMENTS
-        pts: list[float] = []
-        for i in range(n + 1):
-            p = a.Value(u0 + (u1 - u0) * i / n)
-            pts += [_round(p.X()), _round(p.Y())]
+        pts: list[float] = [v for p in raw for v in (_round(p[0]), _round(p[1]))]
         if len(pts) >= 4 and math.hypot(pts[-2] - pts[0], pts[-1] - pts[1]) + abs(u1 - u0) > 1e-9:
             out.append(pts)
         if circles is not None and t == GeomAbs_Circle:
@@ -150,20 +170,122 @@ def dedupe_circles(cs: list[dict]) -> list[dict]:
     return [{k: v for k, v in c.items() if k != "_arcs"} for c in out]
 
 
-def project(shapes: list, views: list[str]) -> list[dict[str, Any]]:
+def _dot(a, b) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _bounds(shapes) -> list[float]:
+    b = Bnd_Box()
+    for s in shapes:
+        BRepBndLib.AddOptimal_s(s, b, False, False)
+    return list(b.Get())
+
+
+def _volume(s) -> float:
+    p = GProp_GProps()
+    BRepGProp.VolumeProperties_s(s, p)
+    return p.Mass()
+
+
+def _section_box(bounds, sec):
+    """걷어낼 쪽 상자 (모델 범위보다 1mm 크게). 걷어낼 것이 없으면 None (occtDrawing.ts sectionBox)"""
+    x0, y0, z0, x1, y1, z1 = bounds[0] - 1, bounds[1] - 1, bounds[2] - 1, bounds[3] + 1, bounds[4] + 1, bounds[5] + 1
+    lo, hi = ((x0, y0, z0), (x1, sec["offset"], z1)) if sec["view"] == "front" else ((sec["offset"], y0, z0), (x1, y1, z1))
+    if hi[0] - lo[0] < 1e-9 or hi[1] - lo[1] < 1e-9:
+        return None
+    return BRepPrimAPI_MakeBox(gp_Pnt(*lo), gp_Pnt(*hi)).Shape()
+
+
+def _section_lines(s, sec, proj) -> list[list[float]]:
+    axis = (0, 1, 0) if sec["view"] == "front" else (1, 0, 0)
+    out = []
+    for f in _explore(s, TopAbs_FACE):
+        a = BRepAdaptor_Surface(f, True)
+        if a.GetType() != GeomAbs_Plane:
+            continue
+        ax = a.Plane().Axis()
+        d, o = ax.Direction(), ax.Location()
+        if abs(_dot((d.X(), d.Y(), d.Z()), axis)) < 1 - 1e-9 or abs(_dot((o.X(), o.Y(), o.Z()), axis) - sec["offset"]) > 1e-6:
+            continue
+        for e in _explore(f, TopAbs_EDGE):
+            out.append([_round(v) for p in _samples(e)[0] for v in proj(p)])
+    return out
+
+
+def _cylinder_axes(shapes, toward, proj) -> list[list[float]]:
+    out: list[list[float]] = []
+    for s in shapes:
+        for f in _explore(s, TopAbs_FACE):
+            a = BRepAdaptor_Surface(f, True)
+            if a.GetType() != GeomAbs_Cylinder:
+                continue
+            ax = a.Cylinder().Axis()
+            d = (ax.Direction().X(), ax.Direction().Y(), ax.Direction().Z())
+            o = (ax.Location().X(), ax.Location().Y(), ax.Location().Z())
+            if abs(_dot(d, toward)) > 0.999:
+                continue
+            ts = [_dot((p[0] - o[0], p[1] - o[1], p[2] - o[2]), d) for e in _explore(f, TopAbs_EDGE) for p in _samples(e)[0]]
+            if not ts or max(ts) - min(ts) <= 1e-6:
+                continue
+            t0, t1 = min(ts), max(ts)
+            seg = [_round(v) for v in (*proj(tuple(o[k] + d[k] * t0 for k in range(3))), *proj(tuple(o[k] + d[k] * t1 for k in range(3))))]
+            if math.hypot(seg[2] - seg[0], seg[3] - seg[1]) < 1e-6:
+                continue
+
+            def same(q, seg=seg):
+                fwd = math.hypot(q[0] - seg[0], q[1] - seg[1]) < 1e-4 and math.hypot(q[2] - seg[2], q[3] - seg[3]) < 1e-4
+                rev = math.hypot(q[0] - seg[2], q[1] - seg[3]) < 1e-4 and math.hypot(q[2] - seg[0], q[3] - seg[1]) < 1e-4
+                return fwd or rev
+
+            if not any(same(q) for q in out):
+                out.append(seg)
+    return out
+
+
+def project(shapes: list, views: list[str], section: dict | None = None) -> list[dict[str, Any]]:
     """월드 형상들 → 보기마다 투상 (서로 가리는 선도 숨은선으로)"""
+    from app.cad.primitives import GeometryError
+
+    bounds = _bounds(shapes)
     result = []
     for name in views:
         toward, right = VIEWS[name]
+        up = _cross(toward, right)
+
+        def proj(p, right=right, up=up):
+            return (_dot(p, right), _dot(p, up))
+
+        sec = section if section and section["view"] == name else None
+        view_shapes = shapes
+        if sec:
+            box = _section_box(bounds, sec)
+            if box is not None:
+                view_shapes = [r for r in (BRepAlgoAPI_Cut(s, box).Shape() for s in shapes) if _volume(r) > 1e-9]
+            if not view_shapes:
+                raise GeometryError("단면 위치가 형상 밖입니다 (자른 뒤 남는 것이 없음)")
         algo = HLRBRep_Algo()
-        for s in shapes:
+        for s in view_shapes:
             algo.Add(s, 0)
         algo.Projector(HLRAlgo_Projector(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(*toward), gp_Dir(*right))))
         algo.Update()
         algo.Hide()
         res = HLRBRep_HLRToShape(algo)
         circles: list[dict] = []
-        visible = _polylines(res.VCompound(), circles, True) + _polylines(res.OutLineVCompound(), circles, True)
-        hidden = _polylines(res.HCompound(), circles, False) + _polylines(res.OutLineHCompound(), circles, False)
-        result.append({"name": name, "visible": visible, "hidden": clean_hidden(visible, hidden), "circles": dedupe_circles(circles), "bounds": bounds_of(visible)})
+        visible = clean_hidden([], _polylines(res.VCompound(), circles, True) + _polylines(res.OutLineVCompound(), circles, True))
+        hidden_raw = _polylines(res.HCompound(), circles, False) + _polylines(res.OutLineHCompound(), circles, False)
+        view = {
+            "name": name,
+            "visible": visible,
+            "hidden": [] if sec else clean_hidden(visible, hidden_raw),
+            "circles": dedupe_circles([c for c in circles if c["visible"]] if sec else circles),
+            "axes": _cylinder_axes(view_shapes, toward, proj),
+            "bounds": bounds_of(visible),
+        }
+        if sec:
+            view["section"] = [line for s in view_shapes for line in _section_lines(s, sec, proj)]
+        result.append(view)
     return result

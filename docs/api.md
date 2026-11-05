@@ -56,8 +56,9 @@ ModelDefinition → 파일. 모든 최상위 객체를 월드 좌표로 배치. 
 
 ### `POST /api/model/drawing`
 도면 투상 (숨은선 제거, OCCT HLR — 브라우저 정밀 엔진 `occtDrawing.ts` 와 같은 규칙).
-요청: `{ "model": ModelDefinition, "views": ["front", "top", "right", "iso"] }`
-응답: `{ "ok": true, "issues": [], "views": [{ "name", "visible": [[x0, y0, x1, y1, …]], "hidden": [...], "circles": [{ "center", "radius", "full", "visible" }], "bounds": [xmin, ymin, xmax, ymax] }] }`
+요청: `{ "model": ModelDefinition, "views": ["front", "top", "right", "iso"], "section"?: { "view": "front" | "right", "offset": mm } }`
+응답: `{ "ok": true, "issues": [], "views": [{ "name", "visible": [[x0, y0, x1, y1, …]], "hidden": [...], "circles": [{ "center", "radius", "full", "visible" }], "axes": [[x0, y0, x1, y1]], "section"?: [[…]], "bounds": [xmin, ymin, xmax, ymax] }] }`
+단면도(section)는 걷어낸 뒤 투상하고 숨은선 없이, 잘린 면 경계를 `section` 으로 준다.
 좌표는 보기 평면 mm (x 오른쪽, y 위). 숨김·억제 객체는 빠지고, 숨은선은 보이는 선·다른 숨은선과 겹친 부분을 지운다.
 
 ## 로컬 서버 보호

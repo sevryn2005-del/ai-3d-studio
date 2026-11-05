@@ -574,7 +574,32 @@ export const MateSchema = z.strictObject({
 export type Mate = z.infer<typeof MateSchema>;
 export const MAX_MATES = 200;
 
-export const MODEL_SCHEMA_VERSION = 13;
+/**
+ * 도면 설정 (형식 v14): 도면은 모델에서 자동으로 만들어지고, 여기에는 보는 방법만 저장한다 (features/drawing/sheet.ts).
+ * - views: 그릴 표준 보기 (3각법), scale: 'auto' = 들어가는 가장 큰 표준 척도
+ * - section: 정면도(평면 y = offset, 앞쪽을 걷어냄) 또는 우측면도(평면 x = offset, 오른쪽을 걷어냄)를 전단면도 A-A 로
+ * - centerlines: 원 중심 표시·원통 축선, notes: 표제란 위 주기(여러 줄)
+ */
+export const DrawingViewNameSchema = z.enum(['front', 'top', 'right', 'iso']);
+export const DrawingSectionSchema = z.strictObject({
+  view: z.enum(['front', 'right']),
+  offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
+});
+export type DrawingSection = z.infer<typeof DrawingSectionSchema>;
+export const DrawingSettingsSchema = z.strictObject({
+  paper: z.enum(['A4', 'A3']),
+  scale: z.union([z.literal('auto'), z.number().min(0.0001).max(100)]),
+  title: z.string().max(80).optional(),
+  views: z.array(DrawingViewNameSchema).max(4),
+  dimensions: z.boolean(),
+  centerlines: z.boolean(),
+  section: DrawingSectionSchema.optional(),
+  notes: z.string().max(500).optional(),
+});
+export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
+export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
+
+export const MODEL_SCHEMA_VERSION = 14;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -582,6 +607,7 @@ export const ModelDefinitionSchema = z.strictObject({
   sketches: z.array(SketchSchema).max(LIMITS.maxSketches),
   objects: z.array(CadObjectSchema).max(LIMITS.maxObjects, `객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`),
   mates: z.array(MateSchema).max(MAX_MATES).optional(),
+  drawing: DrawingSettingsSchema.optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 
@@ -602,6 +628,9 @@ export const SetMateCommandSchema = z.strictObject({
   flip: z.boolean().optional(),
 });
 export const DeleteMateCommandSchema = z.strictObject({ type: z.literal('delete_mate'), mate: ObjectIdSchema });
+
+/** 도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다. 형상은 바뀌지 않는다 */
+export const SetDrawingCommandSchema = z.strictObject({ type: z.literal('set_drawing'), drawing: DrawingSettingsSchema });
 
 /**
  * 부품 삽입 (조립품): 다른 프로젝트(.ai3d)의 설계 원본을 복사해 넣는다. ID 는 겹치지 않게 다시 붙이고,
@@ -1128,6 +1157,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddMateCommandSchema,
   SetMateCommandSchema,
   DeleteMateCommandSchema,
+  SetDrawingCommandSchema,
   InsertPartCommandSchema,
   ImportMeshCommandSchema,
   EdgeFeatureCommandSchema,

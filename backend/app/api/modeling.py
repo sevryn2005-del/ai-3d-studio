@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, ValidationError
 
 from app.api.deps import get_cad_pool
-from app.cad.commands import CadCommandAdapter, ModelDefinition
+from app.cad.commands import CadCommandAdapter, DrawingSection, ModelDefinition
 from app.cad.mesh_cache import MeshCache, cache_key
 from app.cad.validation import Issue, active_top_level_ids, check_model, issues_from_validation_error
 from app.cad.worker_pool import CadEngineError, WorkerPool
@@ -182,7 +182,7 @@ def model_drawing(
     pool: Annotated[WorkerPool, Depends(get_cad_pool)],
     payload: Any = Body(...),
 ) -> dict[str, Any]:
-    """도면 투상 (숨은선 제거): {model, views} → {ok, views: [{name, visible, hidden, circles, bounds}]}"""
+    """도면 투상 (숨은선 제거): {model, views, section?} → {ok, views: [{name, visible, hidden, circles, bounds}]}"""
     try:
         model = ModelDefinition.model_validate(payload.get("model") if isinstance(payload, dict) else None)
     except ValidationError as e:
@@ -190,11 +190,18 @@ def model_drawing(
     views = payload.get("views") or list(DRAWING_VIEWS)
     if not isinstance(views, list) or any(v not in DRAWING_VIEWS for v in views) or len(views) > len(DRAWING_VIEWS):
         return {"ok": False, "issues": [Issue(path="views", message="보기는 front·top·right·iso 중에서 고릅니다").model_dump()], "views": []}
+    section = payload.get("section")
+    if section is not None:
+        try:
+            section = DrawingSection.model_validate(section).model_dump(mode="json")
+        except ValidationError as e:
+            return {"ok": False, "issues": [i.model_dump() for i in issues_from_validation_error(e)], "views": []}
     issues = [i for i in check_model(model) if i.severity == "error"]
     if issues:
         return {"ok": False, "issues": [i.model_dump() for i in issues], "views": []}
     try:
-        out = pool.run("drawing", {"model": model.model_dump(mode="json"), "views": views}, timeout=INTERFERENCE_TIMEOUT_S)
+        job = {"model": model.model_dump(mode="json"), "views": views, **({"section": section} if section else {})}
+        out = pool.run("drawing", job, timeout=INTERFERENCE_TIMEOUT_S)
     except CadEngineError as e:
         return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()], "views": []}
     return {"ok": True, "issues": [], "views": out}

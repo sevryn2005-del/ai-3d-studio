@@ -23,9 +23,13 @@ describe('도면 투상 (OCCT): 공유 픽스처', () => {
   it.each(Object.entries(cases))('%s', (_name, c) => {
     const model = ModelDefinitionSchema.parse(c.model);
     const names = Object.keys(c.views) as DrawingViewName[];
-    const views = occtDrawing(oc, model, names);
+    const section = 'section' in c ? (c.section as { view: 'front' | 'right'; offset: number }) : undefined;
+    const views = occtDrawing(oc, model, names, section);
     for (const v of views) {
-      const e = (c.views as Record<string, { visible?: number; hidden?: number; bounds: number[]; circles?: number[] }>)[v.name]!;
+      const e = (c.views as Record<string, { visible?: number; hidden?: number; bounds: number[]; circles?: number[]; axes?: number; section?: number }>)[v.name]!;
+      if (e.axes !== undefined) expect(lineLength(v.axes)).toBeCloseTo(e.axes, 3);
+      if (e.section !== undefined) expect(lineLength(v.section ?? [])).toBeCloseTo(e.section, 1);
+      else expect(v.section).toBeUndefined();
       if (e.visible !== undefined) expect(lineLength(v.visible)).toBeCloseTo(e.visible, 1);
       if (e.hidden !== undefined) expect(lineLength(v.hidden)).toBeCloseTo(e.hidden, 1);
       v.bounds.forEach((b, i) => expect(b).toBeCloseTo(e.bounds[i]!, 4));
@@ -38,6 +42,13 @@ describe('도면 투상 (OCCT): 공유 픽스처', () => {
     const hidden = { ...model, objects: model.objects.map((o) => (o.id === 'b' ? { ...o, hidden: true } : o)) };
     expect(lineLength(occtDrawing(oc, hidden, ['front'])[0]!.hidden)).toBeCloseTo(0, 6);
     expect(() => occtDrawing(oc, { ...model, objects: [] }, ['front'])).toThrow('그릴 객체가 없습니다');
+  });
+
+  it('단면 위치가 형상 밖이면 오류', () => {
+    const model = ModelDefinitionSchema.parse(cases['block-blind-hole'].model);
+    expect(() => occtDrawing(oc, model, ['front'], { view: 'front', offset: 50 })).toThrow('단면 위치');
+    // 형상 앞쪽 바깥 = 걷어낼 것이 없음 → 보통 정면도와 같은 선 (숨은선은 없음)
+    expect(lineLength(occtDrawing(oc, model, ['front'], { view: 'front', offset: -50 })[0]!.visible)).toBeCloseTo(100, 3);
   });
 
   it('같은 원 조각은 하나로', () => {

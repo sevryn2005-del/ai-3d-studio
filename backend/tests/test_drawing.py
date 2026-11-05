@@ -22,9 +22,15 @@ def length(lines) -> float:
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_shared_drawing_cases(name):
     case = CASES[name]
-    views = drawing({"model": case["model"], "views": list(case["views"])})
+    views = drawing({"model": case["model"], "views": list(case["views"]), **({"section": case["section"]} if "section" in case else {})})
     for v in views:
         e = case["views"][v["name"]]
+        if "axes" in e:
+            assert length(v["axes"]) == pytest.approx(e["axes"], abs=1e-3)
+        if "section" in e:
+            assert length(v["section"]) == pytest.approx(e["section"], abs=0.05)
+        else:
+            assert "section" not in v
         if "visible" in e:
             assert length(v["visible"]) == pytest.approx(e["visible"], abs=0.05)
         if "hidden" in e:
@@ -45,6 +51,14 @@ def test_hidden_object_skipped_and_empty_rejected():
         drawing({"model": model, "views": ["front"]})
 
 
+def test_section_outside_shape():
+    model = CASES["block-blind-hole"]["model"]
+    with pytest.raises(Exception, match="단면 위치"):
+        drawing({"model": model, "views": ["front"], "section": {"view": "front", "offset": 50}})
+    v = drawing({"model": model, "views": ["front"], "section": {"view": "front", "offset": -50}})[0]
+    assert length(v["visible"]) == pytest.approx(100, abs=1e-3) and v["hidden"] == []
+
+
 def test_clean_hidden_rules():
     visible = [[0, 0, 10, 0]]
     # 보이는 선과 겹친 부분은 지우고, 같은 숨은선은 한 번만
@@ -61,3 +75,7 @@ def test_api_drawing(client):
     assert r["ok"] and [v["name"] for v in r["views"]] == ["top"]
     bad = client.post("/api/model/drawing", json={"model": case["model"], "views": ["side"]}).json()
     assert not bad["ok"] and "front" in bad["issues"][0]["message"]
+    sec = client.post("/api/model/drawing", json={"model": case["model"], "views": ["front"], "section": {"view": "front", "offset": 0}}).json()
+    assert sec["ok"] and sec["views"][0]["section"]
+    bad_sec = client.post("/api/model/drawing", json={"model": case["model"], "views": ["front"], "section": {"view": "top", "offset": 0}}).json()
+    assert not bad_sec["ok"]

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingView } from '../engine/types';
 import { cleanHidden } from './clean';
 import { dxfText, sheetToDxf, sheetToSvg } from './exportSheet';
-import { buildSheet, scaleLabel, type SheetOptions } from './sheet';
+import { buildSheet, hatch, scaleLabel, type SheetOptions } from './sheet';
 import { projectPoint } from './views';
 
 const rectLine = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
 /** 40×20×10 블록 + 윗면 지름 6 구멍 두 개 (엔진 투상 결과 모양) */
 const VIEWS: DrawingView[] = [
-  { name: 'front', visible: [rectLine(-20, 0, 20, 10)], hidden: [[-13, 10, -13, 5]], circles: [], bounds: [-20, 0, 20, 10] },
+  { name: 'front', visible: [rectLine(-20, 0, 20, 10)], hidden: [[-13, 10, -13, 5]], circles: [], axes: [], bounds: [-20, 0, 20, 10] },
   {
     name: 'top',
     visible: [rectLine(-20, -10, 20, 10)],
@@ -17,10 +17,11 @@ const VIEWS: DrawingView[] = [
       { center: [-10, 0], radius: 3, full: true, visible: true },
       { center: [10, 0], radius: 3, full: true, visible: true },
     ],
+    axes: [],
     bounds: [-20, -10, 20, 10],
   },
-  { name: 'right', visible: [rectLine(-10, 0, 10, 10)], hidden: [], circles: [], bounds: [-10, 0, 10, 10] },
-  { name: 'iso', visible: [[0, 0, 10, 10]], hidden: [], circles: [], bounds: [0, 0, 10, 10] },
+  { name: 'right', visible: [rectLine(-10, 0, 10, 10)], hidden: [], circles: [], axes: [], bounds: [-10, 0, 10, 10] },
+  { name: 'iso', visible: [[0, 0, 10, 10]], hidden: [], circles: [], axes: [], bounds: [0, 0, 10, 10] },
 ];
 const OPT: SheetOptions = { paper: 'A4', scale: 'auto', title: '받침 블록', date: '2026-11-05', dimensions: true };
 const texts = (s: ReturnType<typeof buildSheet>) => s.items.flatMap((i) => (i.kind === 'text' ? [i.text] : []));
@@ -98,8 +99,73 @@ describe('숨은선 정리 (서버 test_drawing.py 와 같은 규칙)', () => {
 
 describe('등각도', () => {
   it('숨은선을 그리지 않는다', () => {
-    const iso: DrawingView = { name: 'iso', visible: [[0, 0, 10, 10]], hidden: [[0, 5, 10, 5]], circles: [], bounds: [0, 0, 10, 10] };
+    const iso: DrawingView = { name: 'iso', visible: [[0, 0, 10, 10]], hidden: [[0, 5, 10, 5]], circles: [], axes: [], bounds: [0, 0, 10, 10] };
     const s = buildSheet([iso], OPT);
     expect(s.items.some((i) => i.layer === 'hidden')).toBe(false);
+  });
+});
+
+describe('도면 2단계: 해칭·절단선·중심선·주기', () => {
+  it('해칭: 짝수-홀수 규칙 (구멍은 비움), 선 길이 합 ≈ 넓이 / 간격', () => {
+    const outer = rectLine(0, 0, 20, 20);
+    const hole = rectLine(5, 5, 15, 15);
+    const lines = hatch([outer, hole], 1);
+    const total = lines.reduce((s, l) => s + Math.hypot(l[2]! - l[0]!, l[3]! - l[1]!), 0);
+    expect(total).toBeCloseTo((400 - 100) / 1, -1);
+    // 구멍 가운데 (10, 10) 을 지나는 해칭은 없다
+    const crosses = lines.some(([ax, ay, bx, by]) => {
+      const t = ((10 - ax!) * (bx! - ax!) + (10 - ay!) * (by! - ay!)) / ((bx! - ax!) ** 2 + (by! - ay!) ** 2);
+      return t > 0 && t < 1 && Math.hypot(ax! + (bx! - ax!) * t - 10, ay! + (by! - ay!) * t - 10) < 0.3;
+    });
+    expect(crosses).toBe(false);
+    expect(hatch([])).toEqual([]);
+  });
+
+  const SECTIONED: DrawingView[] = VIEWS.map((v) => (v.name === 'front' ? { ...v, hidden: [], section: [rectLine(-20, 0, 20, 10)] } : v));
+  const OPT2 = { ...OPT, section: { view: 'front' as const, offset: 0 } };
+
+  it('정면 단면: 해칭·"단면 A-A", 평면도에 절단선과 A 두 개', () => {
+    const s = buildSheet(SECTIONED, OPT2);
+    expect(s.items.filter((i) => i.layer === 'hatch').length).toBeGreaterThan(5);
+    const t = texts(s);
+    expect(t).toContain('단면 A-A');
+    expect(t).not.toContain('정면도');
+    expect(t.filter((x) => x === 'A')).toHaveLength(2);
+    // 단면 설정이 없으면 해칭·절단선 없음
+    const plain = buildSheet(SECTIONED, OPT);
+    expect(plain.items.some((i) => i.layer === 'hatch')).toBe(false);
+    expect(texts(plain)).not.toContain('A');
+  });
+
+  it('우측면 단면: 정면도에 세로 절단선', () => {
+    const views = VIEWS.map((v) => (v.name === 'right' ? { ...v, section: [rectLine(-10, 0, 10, 10)] } : v));
+    const s = buildSheet(views, { ...OPT, section: { view: 'right', offset: 5 } });
+    const center = s.items.filter((i) => i.kind === 'line' && i.layer === 'center') as { points: number[] }[];
+    expect(center.some((c) => Math.abs(c.points[0]! - c.points[2]!) < 1e-9)).toBe(true);
+    expect(texts(s)).toContain('단면 A-A');
+  });
+
+  it('중심선: 원마다 + 표시 2개, 축선은 2mm 넘김, 끄면 없음', () => {
+    const views = VIEWS.map((v) => (v.name === 'front' ? { ...v, axes: [[0, 0, 0, 10]] } : v));
+    const s = buildSheet(views, { ...OPT, centerlines: true });
+    const center = s.items.filter((i) => i.kind === 'line' && i.layer === 'center') as { points: number[] }[];
+    expect(center).toHaveLength(2 * 2 + 1);
+    const axis = center.find((c) => Math.abs(c.points[0]! - c.points[2]!) < 1e-9 && Math.abs(c.points[3]! - c.points[1]! - (10 * s.scale + 4)) < 1e-9);
+    expect(axis).toBeTruthy();
+    expect(buildSheet(views, { ...OPT, centerlines: false }).items.some((i) => i.layer === 'center')).toBe(false);
+  });
+
+  it('주기: 빈 줄은 빼고 최대 6줄', () => {
+    const t = texts(buildSheet(VIEWS, { ...OPT, notes: '지시 없는 모따기 C0.5\n\n재질 SS400\n3\n4\n5\n6\n7' }));
+    expect(t).toEqual(expect.arrayContaining(['주기', '지시 없는 모따기 C0.5', '재질 SS400', '6']));
+    expect(t).not.toContain('7');
+    expect(texts(buildSheet(VIEWS, OPT))).not.toContain('주기');
+  });
+
+  it('DXF: CENTER 선 종류·HATCH 층', () => {
+    const dxf = sheetToDxf(buildSheet(SECTIONED, { ...OPT2, centerlines: true }));
+    expect(dxf).toMatch(/LTYPE\r\n {2}2\r\nCENTER\r\n/);
+    expect(dxf).toContain('HATCH');
+    expect(sheetToSvg(buildSheet(SECTIONED, OPT2))).toContain('class="hatch"');
   });
 });

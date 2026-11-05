@@ -6,6 +6,9 @@
  *   평면도·정면도는 가로 위치가, 정면도·우측면도는 높이가 맞춰진다.
  * - 척도: 표준 척도(10:1 … 1:1000) 중 용지에 들어가는 가장 큰 것 (직접 고를 수도 있음).
  * - 등각도는 숨은선을 그리지 않는다.
+ * - 단면도(형식 v14): 정면도·우측면도를 전단면 A-A 로 — 잘린 면 45° 해칭(2.5mm), 다른 보기에 절단선(가는 1점 쇄선 + 굵은 끝 + 보는 방향 화살표 + A).
+ * - 중심선: 정면으로 보이는 원의 중심 표시(+ 자형), 원통 축선 (가는 1점 쇄선, 2mm 넘게). 등각도에는 그리지 않는다.
+ * - 주기: 표제란 왼쪽 칸에 여러 줄 (최대 6줄).
  * - 자동 치수: 정면도 전체 너비·높이, 우측면도 전체 깊이(우측면도가 없으면 평면도), 정면으로 보이는 원의 지름(같은 지름은 n×Ø).
  * 좌표: 용지 mm, 원점 = 왼쪽 아래, y 위쪽 (DXF 와 같음. SVG 는 뒤집어 그린다).
  */
@@ -17,7 +20,7 @@ export const PAPERS: Record<Paper, [number, number]> = { A4: [297, 210], A3: [42
 /** 표준 척도 (용지 mm / 실제 mm), 큰 것부터 */
 export const STANDARD_SCALES = [10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100, 1 / 200, 1 / 500, 1 / 1000] as const;
 
-export type Layer = 'visible' | 'hidden' | 'dim' | 'frame' | 'text';
+export type Layer = 'visible' | 'hidden' | 'dim' | 'frame' | 'text' | 'center' | 'hatch';
 export type SheetItem =
   | { kind: 'line'; layer: Layer; points: number[] }
   | { kind: 'fill'; layer: Layer; points: number[] }
@@ -31,6 +34,12 @@ export interface SheetOptions {
   date: string;
   /** 자동 치수 넣기 */
   dimensions: boolean;
+  /** 중심선 (원 중심 표시·원통 축선) */
+  centerlines?: boolean;
+  /** 단면도 (엔진에 같은 값을 넘겨 투상한 결과여야 한다) */
+  section?: { view: 'front' | 'right'; offset: number };
+  /** 주기 (여러 줄) */
+  notes?: string;
 }
 
 export interface Sheet {
@@ -49,6 +58,9 @@ const GAP = 24; // 보기 사이 (치수 자리 포함)
 const PAD = 14; // 바깥쪽 치수 자리
 const TEXT = 3.5;
 const ARROW = 3;
+const HATCH = 2.5;
+const MAX_NOTE_LINES = 6;
+const SECTION_LABEL = 'A';
 
 export function scaleLabel(s: number): string {
   if (s >= 1) return `${round2(s)}:1`;
@@ -91,6 +103,7 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
   // 테두리·표제란
   items.push({ kind: 'line', layer: 'frame', points: rect(MARGIN, MARGIN, W - MARGIN, H - MARGIN) });
   titleBlock(items, W - MARGIN - TITLE_W, MARGIN, opt, scale);
+  notes(items, opt.notes);
 
   // 배치 원점 (가운데 정렬)
   const ox = area.x + Math.max(0, (area.w - L.w) / 2) + PAD;
@@ -113,12 +126,17 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     if (!at) continue;
     const map = (x: number, y: number): [number, number] => [at[0] + (x - v.bounds[0]) * scale, at[1] + (y - v.bounds[1]) * scale];
     const mapLine = (l: number[]) => l.flatMap((_, k) => (k % 2 ? [] : map(l[k]!, l[k + 1]!)));
+    const sectioned = !!v.section && opt.section?.view === v.name;
+    if (sectioned) for (const l of hatch(v.section!.map(mapLine))) items.push({ kind: 'line', layer: 'hatch', points: l });
     // 등각도는 숨은선 없이 (일반 도면 관례: 입체 모양만 보여 준다)
     if (v.name !== 'iso') for (const l of v.hidden) items.push({ kind: 'line', layer: 'hidden', points: mapLine(l) });
     for (const l of v.visible) items.push({ kind: 'line', layer: 'visible', points: mapLine(l) });
     const [x0, y0] = map(v.bounds[0], v.bounds[1]);
     const [x1, y1] = map(v.bounds[2], v.bounds[3]);
-    items.push({ kind: 'text', layer: 'text', x: (x0 + x1) / 2, y: y0 - (v.name === 'front' || v.name === 'right' ? (opt.dimensions ? 17 : 6) : 6), size: 2.5, text: DRAWING_VIEWS[v.name].label, anchor: 'middle' });
+    if (opt.centerlines && v.name !== 'iso') centerLines(items, v, map, scale);
+    if (opt.section && !sectioned) cuttingLine(items, v, opt.section, map, [x0, y0, x1, y1]);
+    const label = sectioned ? `단면 ${SECTION_LABEL}-${SECTION_LABEL}` : DRAWING_VIEWS[v.name].label;
+    items.push({ kind: 'text', layer: 'text', x: (x0 + x1) / 2, y: y0 - (v.name === 'front' || v.name === 'right' ? (opt.dimensions ? 17 : 6) : 6), size: sectioned ? 3.5 : 2.5, text: label, anchor: 'middle' });
     if (!opt.dimensions || v.name === 'iso') continue;
     const w = v.bounds[2] - v.bounds[0];
     const h = v.bounds[3] - v.bounds[1];
@@ -213,5 +231,113 @@ function diameterDims(items: SheetItem[], v: DrawingView, map: (x: number, y: nu
     items.push({ kind: 'line', layer: 'dim', points: [...edge, ...knee, knee[0] + tail, knee[1]] });
     arrow(items, edge, [-u[0], -u[1]]);
     items.push({ kind: 'text', layer: 'dim', x: knee[0] + 0.5, y: knee[1] + 1, size: TEXT, text: label, anchor: 'start' });
+  }
+}
+
+/** 주기: 표제란 왼쪽 칸 (테두리 안 아래쪽) */
+function notes(items: SheetItem[], text: string | undefined) {
+  const lines = (text ?? '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(0, MAX_NOTE_LINES);
+  if (!lines.length) return;
+  const x = MARGIN + 3;
+  let y = MARGIN + TITLE_H - 4;
+  items.push({ kind: 'text', layer: 'text', x, y, size: 3, text: '주기', anchor: 'start' });
+  for (const l of lines) {
+    y -= 4.4;
+    items.push({ kind: 'text', layer: 'text', x: x + 2, y, size: 3, text: l, anchor: 'start' });
+  }
+}
+
+/**
+ * 45° 해칭 (짝수-홀수 규칙): 경계 꺾은선 조각을 순서 없이 받아, 간격 HATCH 의 평행선마다 교차점을 정렬해 둘씩 잇는다.
+ * 꼭짓점을 지나는 선은 반열림 규칙(한쪽 끝만 셈)으로 두 번 세지 않는다.
+ */
+export function hatch(boundary: number[][], spacing = HATCH): number[][] {
+  const segs: [number, number, number, number][] = [];
+  for (const l of boundary) for (let k = 2; k + 1 < l.length; k += 2) segs.push([l[k - 2]!, l[k - 1]!, l[k]!, l[k + 1]!]);
+  if (!segs.length) return [];
+  const d = [Math.SQRT1_2, Math.SQRT1_2];
+  const n = [-Math.SQRT1_2, Math.SQRT1_2];
+  const dn = (x: number, y: number) => x * n[0]! + y * n[1]!;
+  const dd = (x: number, y: number) => x * d[0]! + y * d[1]!;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const [ax, ay, bx, by] of segs) {
+    lo = Math.min(lo, dn(ax, ay), dn(bx, by));
+    hi = Math.max(hi, dn(ax, ay), dn(bx, by));
+  }
+  const out: number[][] = [];
+  for (let c = Math.floor(lo / spacing) * spacing + spacing / 2; c < hi; c += spacing) {
+    const ts: number[] = [];
+    for (const [ax, ay, bx, by] of segs) {
+      const sa = dn(ax, ay) - c;
+      const sb = dn(bx, by) - c;
+      if (sa >= 0 === sb >= 0) continue;
+      const u = sa / (sa - sb);
+      ts.push(dd(ax, ay) + (dd(bx, by) - dd(ax, ay)) * u);
+    }
+    ts.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < ts.length; k += 2) {
+      const p = (t: number) => [c * n[0]! + t * d[0]!, c * n[1]! + t * d[1]!];
+      out.push([...p(ts[k]!), ...p(ts[k + 1]!)]);
+    }
+  }
+  return out;
+}
+
+/** 중심선: 온전히 보이는 원의 중심 표시(+), 원통 축선 — 끝을 2mm 넘긴다 */
+function centerLines(items: SheetItem[], v: DrawingView, map: (x: number, y: number) => [number, number], scale: number) {
+  const seen: number[][] = [];
+  for (const c of v.circles) {
+    if (!c.full || !c.visible || c.radius * scale < 1) continue;
+    if (seen.some((q) => Math.hypot(q[0]! - c.center[0], q[1]! - c.center[1]) < 1e-6)) continue;
+    seen.push([...c.center]);
+    const [cx, cy] = map(c.center[0], c.center[1]);
+    const r = c.radius * scale + 2;
+    items.push({ kind: 'line', layer: 'center', points: [cx - r, cy, cx + r, cy] });
+    items.push({ kind: 'line', layer: 'center', points: [cx, cy - r, cx, cy + r] });
+  }
+  for (const a of v.axes) {
+    const [ax, ay] = map(a[0]!, a[1]!);
+    const [bx, by] = map(a[2]!, a[3]!);
+    const L = Math.hypot(bx - ax, by - ay);
+    if (L < 1e-6) continue;
+    const ux = ((bx - ax) / L) * 2;
+    const uy = ((by - ay) / L) * 2;
+    items.push({ kind: 'line', layer: 'center', points: [ax - ux, ay - uy, bx + ux, by + uy] });
+  }
+}
+
+/**
+ * 절단선: 단면 평면이 이 보기에 선으로 보이면 (정면 단면 → 평면도의 y = offset, 우측면 단면 → 정면도의 x = offset)
+ * 가는 1점 쇄선 + 양 끝 굵은 선 + 보는 방향 화살표 + 기호 A
+ */
+function cuttingLine(
+  items: SheetItem[],
+  v: DrawingView,
+  sec: { view: 'front' | 'right'; offset: number },
+  map: (x: number, y: number) => [number, number],
+  [x0, y0, x1, y1]: number[],
+) {
+  // 정면 단면: 평면 y = c 는 평면도에서 가로선 (보는 쪽 +Y = 종이 위쪽). 우측면 단면: 평면 x = c 는 정면도에서 세로선 (보는 쪽 −X = 왼쪽)
+  let a: [number, number];
+  let b: [number, number];
+  let look: [number, number];
+  if (sec.view === 'front' && v.name === 'top') {
+    const y = map(0, sec.offset)[1];
+    [a, b, look] = [[x0! - 6, y], [x1! + 6, y], [0, 1]];
+  } else if (sec.view === 'right' && v.name === 'front') {
+    const x = map(sec.offset, 0)[0];
+    [a, b, look] = [[x, y0! - 6], [x, y1! + 6], [-1, 0]];
+  } else return;
+  items.push({ kind: 'line', layer: 'center', points: [...a, ...b] });
+  const along: [number, number] = [(b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]), (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1])];
+  for (const [p, sign] of [[a, 1], [b, -1]] as const) {
+    const q: [number, number] = [p[0] + along[0] * 5 * sign, p[1] + along[1] * 5 * sign];
+    items.push({ kind: 'line', layer: 'visible', points: [...p, ...q] });
+    // 화살표: 끝에서 보는 방향으로 6mm
+    const tip: [number, number] = [p[0] + look[0] * 6, p[1] + look[1] * 6];
+    items.push({ kind: 'line', layer: 'dim', points: [...p, ...tip] });
+    arrow(items, tip, look);
+    items.push({ kind: 'text', layer: 'text', x: tip[0] + look[0] * 1.5, y: tip[1] + (look[1] > 0 ? 1.5 : -1.2), size: 3.5, text: SECTION_LABEL, anchor: look[0] < 0 ? 'end' : 'middle' });
   }
 }

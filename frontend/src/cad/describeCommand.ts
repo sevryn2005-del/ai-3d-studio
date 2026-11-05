@@ -126,6 +126,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 변경${cmd.value !== undefined ? ` → ${formatMm(cmd.value)}` : ''}${cmd.flip !== undefined ? ' (방향 뒤집기)' : ''}`;
     case 'delete_mate':
       return `메이트 ${cmd.mate} 삭제`;
+    case 'set_drawing':
+      return `도면 설정 (${cmd.drawing.paper}${cmd.drawing.section ? ', 단면도' : ''})`;
     case 'insert_part':
       return `부품 삽입 "${cmd.name}" (객체 ${cmd.part.objects.length}개)`;
     case 'set_thin':

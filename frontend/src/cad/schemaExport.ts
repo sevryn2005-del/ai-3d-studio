@@ -646,8 +646,8 @@ export const ASSEMBLY_COMMANDS: unknown[] = [
  * 도면 투상 (숨은선 제거) 공유 픽스처: 브라우저 OCCT(occtDrawing.test.ts)·서버(test_drawing.py)가 같은 값을 낸다.
  * 보기마다 보이는 선·숨은선 길이 합(mm, 원은 π/48 표본), 보이는 선 범위, 정면으로 보이는 원 반지름.
  */
-type DrawingExpect = { visible?: number; hidden?: number; bounds: number[]; circles?: number[] };
-export const DRAWING_CASES: Record<string, { commands: unknown[]; views: Record<string, DrawingExpect> }> = {
+type DrawingExpect = { visible?: number; hidden?: number; bounds: number[]; circles?: number[]; axes?: number; section?: number };
+export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { view: 'front' | 'right'; offset: number }; views: Record<string, DrawingExpect> }> = {
   'block-blind-hole': {
     // 40×20×10 블록 윗면에 지름 6 깊이 5 막힌 구멍: 정면·우측면 숨은선 = 구멍 양옆 5 × 2 + 바닥 6
     commands: [
@@ -655,9 +655,10 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; views: Record<
       { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 5 },
     ],
     views: {
-      front: { visible: 100, hidden: 16, bounds: [-20, 0, 20, 10] },
-      top: { visible: 120 + 6 * Math.PI, hidden: 0, bounds: [-20, -10, 20, 10], circles: [3] },
-      right: { visible: 60, hidden: 16, bounds: [-10, 0, 10, 10] },
+      // 축선: 구멍 축 (z 5~10), 평면도에서는 축이 보는 방향이라 없음
+      front: { visible: 100, hidden: 16, bounds: [-20, 0, 20, 10], axes: 5 },
+      top: { visible: 120 + 6 * Math.PI, hidden: 0, bounds: [-20, -10, 20, 10], circles: [3], axes: 0 },
+      right: { visible: 60, hidden: 16, bounds: [-10, 0, 10, 10], axes: 5 },
       // 등각: 오른쪽 = (x + y)/√2, 위 = (−x + y + 2z)/√6
       iso: { bounds: [-30 / Math.SQRT2, -30 / Math.sqrt(6), 30 / Math.SQRT2, 50 / Math.sqrt(6)] },
     },
@@ -666,8 +667,21 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; views: Record<
     // 원통 R5 × 20: 정면 = 윤곽선(실루엣) 둘 + 위·아래 원이 선으로, 평면 = 원 하나 (아래 원은 겹쳐서 지워짐)
     commands: [{ type: 'create_cylinder', id: 'c', radius: 5, height: 20 }],
     views: {
-      front: { visible: 60, hidden: 0, bounds: [-5, 0, 5, 20] },
-      top: { visible: 10 * Math.PI, hidden: 0, bounds: [-5, -5, 5, 5], circles: [5] },
+      front: { visible: 60, hidden: 0, bounds: [-5, 0, 5, 20], axes: 20 },
+      top: { visible: 10 * Math.PI, hidden: 0, bounds: [-5, -5, 5, 5], circles: [5], axes: 0 },
+    },
+  },
+  'block-hole-front-section': {
+    // 같은 블록의 정면 전단면 A-A (y = 0 앞쪽 걷어냄): 잘린 면 둘레 110 (위 변 40 − 6 + 구멍 벽 5 × 2 + 바닥 6 + 나머지 세 변)
+    // 보이는 선 = 그 둘레 + 단면 뒤로 보이는 구멍 위 테두리 반원(정면에서 길이 6), 숨은선 없음
+    commands: [
+      { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 },
+      { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 5 },
+    ],
+    section: { view: 'front', offset: 0 },
+    views: {
+      front: { visible: 116, hidden: 0, bounds: [-20, 0, 20, 10], axes: 5, section: 110 },
+      top: { visible: 120 + 6 * Math.PI, hidden: 0, bounds: [-20, -10, 20, 10], circles: [3] },
     },
   },
   'object-behind-object': {
@@ -684,7 +698,9 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; views: Record<
 };
 
 export function buildDrawingFixture() {
-  return Object.fromEntries(Object.entries(DRAWING_CASES).map(([name, c]) => [name, { views: c.views, model: buildSketchPlateFixture(c.commands) }]));
+  return Object.fromEntries(
+    Object.entries(DRAWING_CASES).map(([name, c]) => [name, { views: c.views, ...(c.section ? { section: c.section } : {}), model: buildSketchPlateFixture(c.commands) }]),
+  );
 }
 
 /** 파일명(shared/schemas 기준 상대 경로) → 내용 */

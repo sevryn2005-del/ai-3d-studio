@@ -1,6 +1,6 @@
 /** 메인 스레드 ↔ 브라우저 CAD 워커 메시지 형식 */
 import type { Issue } from '../../../api/backend';
-import type { ModelDefinition } from '../../../cad/commandTypes';
+import type { DrawingSection, ModelDefinition } from '../../../cad/commandTypes';
 import type { DrawingView, DrawingViewName, ExportFormat, Topology } from '../types';
 
 export type WorkerRequest =
@@ -8,7 +8,7 @@ export type WorkerRequest =
   | { id: number; type: 'export'; model: ModelDefinition; format: ExportFormat }
   | { id: number; type: 'interference'; model: ModelDefinition }
   | { id: number; type: 'topology'; model: ModelDefinition; objectId: string }
-  | { id: number; type: 'drawing'; model: ModelDefinition; views: DrawingViewName[] };
+  | { id: number; type: 'drawing'; model: ModelDefinition; views: DrawingViewName[]; section?: DrawingSection };
 
 export interface WorkerEvaluation {
   ok: boolean;

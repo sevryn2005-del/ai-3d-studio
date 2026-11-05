@@ -1,7 +1,7 @@
 /**
  * 도면 시트 → 파일 (로컬에서 만든다, 의존성 없음).
  * - SVG: 용지 크기(mm) 그대로. 글꼴은 시스템 글꼴(원격 글꼴 없음).
- * - DXF: R12(AC1009) — 거의 모든 CAD 가 읽는다. 층 VISIBLE·HIDDEN(파선)·DIM·FRAME·TEXT, 한글은 \U+XXXX.
+ * - DXF: R12(AC1009) — 거의 모든 CAD 가 읽는다. 층 VISIBLE·HIDDEN(파선)·CENTER(1점 쇄선)·HATCH·DIM·FRAME·TEXT, 한글은 \U+XXXX.
  */
 import type { Layer, Sheet } from './sheet';
 
@@ -11,6 +11,8 @@ const STROKE: Record<Layer, { w: number; color: string; dash?: string }> = {
   dim: { w: 0.18, color: '#000' },
   frame: { w: 0.5, color: '#000' },
   text: { w: 0.18, color: '#000' },
+  center: { w: 0.18, color: '#000', dash: '6 1.2 1 1.2' },
+  hatch: { w: 0.13, color: '#000' },
 };
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -53,6 +55,8 @@ const LAYERS: Record<Layer, { name: string; color: number; ltype: string }> = {
   dim: { name: 'DIM', color: 3, ltype: 'CONTINUOUS' },
   frame: { name: 'FRAME', color: 7, ltype: 'CONTINUOUS' },
   text: { name: 'TEXT', color: 7, ltype: 'CONTINUOUS' },
+  center: { name: 'CENTER', color: 1, ltype: 'CENTER' },
+  hatch: { name: 'HATCH', color: 8, ltype: 'CONTINUOUS' },
 };
 
 export function sheetToDxf(sheet: Sheet): string {
@@ -75,7 +79,7 @@ export function sheetToDxf(sheet: Sheet): string {
   g(2, 'TABLES');
   g(0, 'TABLE');
   g(2, 'LTYPE');
-  g(70, '2');
+  g(70, '3');
   g(0, 'LTYPE');
   g(2, 'CONTINUOUS');
   g(70, '0');
@@ -91,6 +95,17 @@ export function sheetToDxf(sheet: Sheet): string {
   g(73, '2');
   g(40, 3.7);
   g(49, 2.5);
+  g(49, -1.2);
+  g(0, 'LTYPE');
+  g(2, 'CENTER');
+  g(70, '0');
+  g(3, 'Center ____ _ ____');
+  g(72, '65');
+  g(73, '4');
+  g(40, 9.4);
+  g(49, 6);
+  g(49, -1.2);
+  g(49, 1);
   g(49, -1.2);
   g(0, 'ENDTAB');
   g(0, 'TABLE');

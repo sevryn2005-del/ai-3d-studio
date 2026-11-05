@@ -29,8 +29,12 @@ for (const engine of ['server', 'browser'] as const) {
     for (const t of ['40', '10', '20', '정면도', '평면도', '우측면도', '등각도', '2:1', '3각법']) await expect(sheet.locator('text', { hasText: t }).first()).toBeAttached();
     expect(await sheet.locator('polyline.hidden').count()).toBeGreaterThan(0); // 구멍 숨은선
 
-    // 제목·척도·보기·치수 바꾸기
+    // 중심선: 기본으로 켜짐 (평면도 구멍 중심 + 정면·우측면 구멍 축)
+    expect(await sheet.locator('polyline.center').count()).toBeGreaterThanOrEqual(4);
+
+    // 제목·척도·보기·치수 바꾸기 (설정은 set_drawing 명령으로 모델에 저장)
     await page.getByTestId('drawing-title').fill('받침 블록');
+    await page.getByTestId('drawing-title').press('Enter');
     await expect(sheet.locator('text', { hasText: '받침 블록' })).toBeAttached();
     await page.getByTestId('drawing-scale').selectOption('1');
     await expect(sheet).toHaveAttribute('data-scale', '1');
@@ -39,6 +43,34 @@ for (const engine of ['server', 'browser'] as const) {
     await page.getByTestId('drawing-dims').uncheck();
     await expect(sheet.locator('text', { hasText: 'Ø6' })).toHaveCount(0);
     await page.getByTestId('drawing-dims').check();
+    await page.getByTestId('drawing-centerlines').uncheck();
+    await expect(sheet.locator('polyline.center')).toHaveCount(0);
+    await page.getByTestId('drawing-centerlines').check();
+
+    // 단면도: 정면을 A-A 로 (가운데 y = 0) → 해칭·절단선 (단면도에 숨은선이 없는 것은 공유 픽스처가 검사)
+    await page.getByTestId('drawing-section').selectOption('front');
+    await expect(page.getByTestId('drawing-section-offset')).toHaveValue('0');
+    await expect(sheet.locator('text', { hasText: '단면 A-A' })).toBeAttached({ timeout: 40_000 });
+    expect(await sheet.locator('polyline.hatch').count()).toBeGreaterThan(5);
+    await expect(sheet.locator('text', { hasText: /^A$/ })).toHaveCount(2);
+    // 형상 밖으로 자르면 안내
+    await page.getByTestId('drawing-section-offset').fill('50');
+    await page.getByTestId('drawing-section-offset').press('Enter');
+    await expect(page.getByRole('alert').filter({ hasText: '단면 위치' })).toBeVisible({ timeout: 40_000 });
+    await page.getByTestId('drawing-section').selectOption('');
+    await expect(sheet.locator('text', { hasText: '정면도' })).toBeAttached({ timeout: 40_000 });
+
+    // 주기
+    await page.getByTestId('drawing-notes').fill('지시 없는 모따기 C0.5');
+    await page.getByTestId('drawing-title').focus();
+    await expect(sheet.locator('text', { hasText: '지시 없는 모따기 C0.5' })).toBeAttached();
+
+    // 설정은 창을 닫았다 열어도 남는다 (모델에 저장)
+    await page.getByTestId('drawing-close').click();
+    await page.getByTestId('cmd-drawing').click();
+    await expect(page.getByTestId('drawing-title')).toHaveValue('받침 블록');
+    await expect(page.getByTestId('drawing-view-iso')).not.toBeChecked();
+    await expect(page.getByTestId('drawing-sheet')).toHaveAttribute('data-scale', '1', { timeout: 40_000 });
 
     // 모델을 고치면 도면이 따라 바뀐다 (폭 40 → 60)
     await dispatch(page, { type: 'set_params', target: 'b', params: { width: 60 } });

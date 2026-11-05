@@ -391,6 +391,12 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       return done(model, rest.length ? { ...base, mates: rest } : base, cmd, null);
     }
 
+    case 'set_drawing': {
+      const v = cmd.drawing.views;
+      if (new Set(v).size !== v.length) return fail('도면 보기가 중복되었습니다');
+      return done(model, { ...model, drawing: cmd.drawing }, cmd, null);
+    }
+
     case 'insert_part':
       return insertPart(model, cmd);
 

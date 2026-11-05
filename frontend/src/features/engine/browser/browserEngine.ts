@@ -3,7 +3,7 @@
  * 워커는 처음 사용할 때 만든다. 작업이 제한 시간을 넘기면 워커를 종료하고 다음 요청 때 새로 만든다
  * (서버 WorkerPool 과 같은 격리 원칙).
  */
-import type { ModelDefinition } from '../../../cad/commandTypes';
+import type { DrawingSection, ModelDefinition } from '../../../cad/commandTypes';
 import { validateMesh } from '../../backend/renderMesh';
 import { EngineError, type CadEngine, type EngineEvaluation, type ExportFormat, type DrawingViewName } from '../types';
 import type { WorkerRequest, WorkerResponse } from './protocol';
@@ -98,8 +98,8 @@ export function createBrowserEngine(
       return r.pairs;
     },
 
-    async drawing(model: ModelDefinition, views: readonly DrawingViewName[], signal?: AbortSignal) {
-      const r = await request({ type: 'drawing', model, views: [...views] }, signal);
+    async drawing(model: ModelDefinition, views: readonly DrawingViewName[], section?: DrawingSection, signal?: AbortSignal) {
+      const r = await request({ type: 'drawing', model, views: [...views], ...(section ? { section } : {}) }, signal);
       if (!r.ok) throw new EngineError(r.error);
       if (r.type !== 'drawing') throw new EngineError('잘못된 응답입니다');
       return r.views;
