@@ -60,6 +60,9 @@ interface ModelingState {
   mouse: [number, number];
   sculpt: SculptSettings;
   setSculpt: (p: Partial<SculptSettings>) => void;
+  /** 비례 편집 (O): 편집 모드 G/R/S 에서 반지름(mm) 안 점도 매끈하게 따라온다 */
+  proportional: { enabled: boolean; radius: number };
+  setProportional: (p: Partial<{ enabled: boolean; radius: number }>) => void;
 
   setMode: (m: ModelingMode) => void;
   setSelectMode: (m: SelectMode) => void;
@@ -84,6 +87,8 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   mouse: [0, 0],
   sculpt: { brush: 'draw', radiusPx: 50, strength: 0.5, symmetryX: false },
   setSculpt: (p) => set((s) => ({ sculpt: { ...s.sculpt, ...p } })),
+  proportional: { enabled: false, radius: 10 },
+  setProportional: (p) => set((s) => ({ proportional: { ...s.proportional, ...p } })),
 
   setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null }),
   setSelectMode: (selectMode) => set({ selectMode }),

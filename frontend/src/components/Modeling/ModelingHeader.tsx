@@ -83,6 +83,7 @@ export function ModelingHeader() {
           <button onClick={mergeSelected} title="가운데로 병합 (M)">병합 M</button>
           <button onClick={fillSelected} title="고른 점으로 면 만들기 (F)">면 F</button>
           <button onClick={() => selectAll()} title="전체 선택 (A) · 해제 (Alt+A)">전체 A</button>
+          <ProportionalToggle />
         </>
       )}
       {mode !== 'sculpt' && (
@@ -133,6 +134,25 @@ function SculptBar() {
       <button onClick={densify} title="세분 표면 1단계를 메시에 적용해 점을 늘립니다 (스컬프트가 더 부드럽게)" data-testid="sculpt-densify">
         촘촘하게
       </button>
+    </>
+  );
+}
+
+/** 비례 편집 (O): 켜면 G/R/S 때 반지름 안 점도 부드럽게 따라온다. 반지름은 조작 중 휠 */
+function ProportionalToggle() {
+  const p = useModelingStore((s) => s.proportional);
+  const set = useModelingStore.getState().setProportional;
+  return (
+    <>
+      <button aria-pressed={p.enabled} onClick={() => set({ enabled: !p.enabled })} title="비례 편집 (O) — G/R/S 때 주변 점도 부드럽게 (조작 중 휠·PageUp/Down 으로 반지름)" data-testid="proportional">
+        비례 편집 O
+      </button>
+      {p.enabled && (
+        <label className="slider" title="비례 편집 반지름 (mm)">
+          <input type="number" min={0.1} step={1} value={Math.round(p.radius * 10) / 10} onChange={(e) => Number(e.target.value) > 0 && set({ radius: Number(e.target.value) })} data-testid="proportional-radius" style={{ width: 56 }} />
+          <span>mm</span>
+        </label>
+      )}
     </>
   );
 }

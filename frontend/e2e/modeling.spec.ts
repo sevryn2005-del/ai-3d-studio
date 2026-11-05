@@ -207,3 +207,40 @@ test('편집 모드: 선 클릭 → Ctrl+B 베벨 2mm → 면 7, Ctrl+L 연결 �
   await page.keyboard.up('Alt');
   await expect(page.getByTestId('edit-selection')).toContainText('점 48/');
 });
+
+test('비례 편집: 격자 가운데 점 하나 G Z 5 → 주변 점이 부드럽게 따라온다', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('add-menu-button').click();
+  await page.getByRole('menuitem', { name: '격자' }).click(); // 20×20, 10칸, 바닥 z = 0
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Numpad7');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 0, -1]);
+  const c = await page.evaluate(() => window.__AI3D_DEV__!.project(0, 0, 0));
+  await page.mouse.click(c.x, c.y);
+  await expect(page.getByTestId('edit-selection')).toContainText('점 1/121');
+  await page.keyboard.press('o');
+  await expect(page.getByTestId('proportional')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('proportional-radius').fill('6');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (const k of ['g', 'z', '5']) await page.keyboard.press(k);
+  await expect(page.getByTestId('modeling-hint')).toContainText('비례 6mm');
+  await page.keyboard.press('Enter');
+
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const verts: number[][] = JSON.parse(readFileSync((await dl.path())!, 'utf8')).model.objects[0].polymesh.verts;
+  const z = (x: number, y: number) => verts.find((v) => Math.abs(v[0]! - x) < 1e-6 && Math.abs(v[1]! - y) < 1e-6)![2]!;
+  expect(z(0, 0)).toBeCloseTo(5);
+  expect(z(2, 0)).toBeGreaterThan(0);
+  expect(z(2, 0)).toBeLessThan(5);
+  expect(z(4, 0)).toBeLessThan(z(2, 0));
+  expect(z(10, 10)).toBe(0); // 반지름 밖은 그대로
+});

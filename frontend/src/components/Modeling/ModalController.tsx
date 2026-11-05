@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Line } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { Plane, Raycaster, Vector2, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -7,7 +8,8 @@ import { centroid, extrudeFaces, faceNormal, insetFaces, transformVerts, type V3
 import { formatMm } from '../../cad/units';
 import { useModelingStore, type ModelingPreview } from '../../features/modeling/modelingStore';
 import { activeObject, selectedEdges, selectedFaceIds } from '../../features/modeling/modelingOps';
-import { bevelEdges } from '../../cad/polymeshSelect';
+import { bevelEdges, proportionalTransform, proportionalWeights } from '../../cad/polymeshSelect';
+import { strokeEdit } from '../../cad/sculpt';
 import {
   AXIS_VEC, dirToWorld, grabDelta, localMatrix, modalLabel, movedTransform, parseTyped, screenAngle, screenScale, toWorld, worldMatrix,
 } from '../../features/modeling/modalMath';
@@ -23,6 +25,8 @@ export function ModalController() {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
+  const [ring, setRing] = useState<{ center: V3; camDir: V3 } | null>(null);
+  const radius = useModelingStore((s) => s.proportional.radius);
 
   useEffect(() => {
     const st0 = useModelingStore.getState();
@@ -67,6 +71,7 @@ export function ModalController() {
     }
     const nWorld = dirToWorld(nLocal, t);
 
+    let weights: { r: number; w: Map<number, number> } | null = null;
     const update = () => {
       const { modal, mouse } = useModelingStore.getState();
       if (!modal || modal.seq !== modal0.seq) return;
@@ -122,6 +127,16 @@ export function ModalController() {
         if (!editing && modal.kind !== 'scale') {
           const tr = movedTransform(world, t);
           preview = { objectId: obj.id, transform: tr, label, command: { type: 'set_transform', target: obj.id, position: tr.position, rotation: tr.rotation } };
+        } else if (mesh && editing && useModelingStore.getState().proportional.enabled) {
+          // 비례 편집: 반지름 안 점도 감쇠만큼 → 바뀐 점만 set_verts
+          const R = useModelingStore.getState().proportional.radius;
+          if (!weights || weights.r !== R) weights = { r: R, w: proportionalWeights(mesh, sel, R) };
+          const moved = proportionalTransform(mesh, weights.w, localMatrix(world, t));
+          const edit = strokeEdit(mesh, moved);
+          preview = {
+            objectId: obj.id, mesh: moved, afterSel: sel, label: `${label} · 비례 ${formatMm(R)}mm (휠로 반지름)`,
+            command: edit ? { type: 'mesh_edit', target: obj.id, edit: { op: 'set_verts', ...edit } } : null,
+          };
         } else if (mesh) {
           const verts = editing ? sel : mesh.verts.map((_, i) => i);
           const matrix = localMatrix(world, t);
@@ -135,16 +150,37 @@ export function ModalController() {
     };
     update();
     const unsub = useModelingStore.subscribe((s, prev) => {
-      if (s.mouse !== prev.mouse || s.modal !== prev.modal) update();
+      if (s.mouse !== prev.mouse || s.modal !== prev.modal || s.proportional !== prev.proportional) update();
     });
+    // 비례 편집 반지름: 모달 중 휠 (블렌더와 같음)
+    const onWheel = (e: WheelEvent) => {
+      const st = useModelingStore.getState();
+      if (!st.modal || !st.proportional.enabled || st.mode !== 'edit') return;
+      e.preventDefault();
+      st.setProportional({ radius: Math.max(0.1, Math.min(5000, st.proportional.radius * (e.deltaY < 0 ? 1.1 : 1 / 1.1))) });
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    setRing(editing && useModelingStore.getState().proportional.enabled ? { center: pivot, camDir: [camDir.x, camDir.y, camDir.z] } : null);
     return () => {
       unsub();
+      window.removeEventListener('wheel', onWheel);
+      setRing(null);
       if (controls) controls.enabled = true;
     };
     // 새 모달(seq)마다 한 번 준비한다. 모델·카메라는 모달 동안 바뀌지 않는다
   }, [seq]);
 
-  return null;
+  if (!ring) return null;
+  // 비례 편집 반지름 원 (화면과 나란하게, 피벗 둘레)
+  const n = new Vector3(...ring.camDir);
+  const u = new Vector3(0, 0, 1).cross(n).lengthSq() > 1e-6 ? new Vector3(0, 0, 1).cross(n).normalize() : new Vector3(1, 0, 0);
+  const v = n.clone().cross(u);
+  const c = new Vector3(...ring.center);
+  const pts = Array.from({ length: 65 }, (_, i) => {
+    const a = (i / 64) * Math.PI * 2;
+    return c.clone().addScaledVector(u, Math.cos(a) * radius).addScaledVector(v, Math.sin(a) * radius).toArray() as [number, number, number];
+  });
+  return <Line points={pts} color="#9fc2ff" lineWidth={1} dashed dashSize={radius * 0.08} gapSize={radius * 0.05} depthTest={false} raycast={() => null} />;
 }
 
 /** 모달 확정: 미리보기 명령을 보내고 선택을 이어 간다 */

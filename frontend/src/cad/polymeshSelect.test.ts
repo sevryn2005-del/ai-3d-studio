@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, edges, polyMeshError, polyVolume, primitiveMesh } from './polymesh';
-import { bevelEdges, edgeLoop, faceRing, growSelection, selectLinked } from './polymeshSelect';
+import { bevelEdges, edgeLoop, faceRing, growSelection, proportionalTransform, proportionalWeights, selectLinked } from './polymeshSelect';
 import { arrayMesh } from './polymeshModifiers';
 
 const cube = () => primitiveMesh('cube', { size: 2 });
@@ -65,5 +65,21 @@ describe('베벨 (Ctrl+B)', () => {
     expect(r.mesh.faces).toHaveLength(6 + 4); // 베벨 면 4 (모서리마다 부채 2개 → 메울 구멍 없음)
     expect(polyMeshError(r.mesh)).toBeNull();
     expect(typeof bevelEdges(primitiveMesh('plane'), [[0, 1]], 0.1)).toBe('string');
+  });
+});
+
+describe('비례 편집', () => {
+  it('고른 점 1, 반지름 안은 매끈하게 줄고 밖은 0', () => {
+    const g = primitiveMesh('grid', { size: 10, subdivisions: 10 }); // 1mm 간격
+    const c = g.verts.findIndex((v) => v[0] === 0 && v[1] === 0);
+    const w = proportionalWeights(g, [c], 3);
+    expect(w.get(c)).toBe(1);
+    const at = (x: number) => w.get(g.verts.findIndex((v) => v[0] === x && v[1] === 0)) ?? 0;
+    expect(at(1)).toBeCloseTo(3 * (2 / 3) ** 2 - 2 * (2 / 3) ** 3);
+    expect(at(1)).toBeGreaterThan(at(2));
+    expect(at(3)).toBe(0);
+    const up = proportionalTransform(g, w, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 2, 1]);
+    expect(up.verts[c]![2]).toBe(2);
+    expect(up.verts[g.verts.findIndex((v) => v[0] === 1 && v[1] === 0)]![2]).toBeCloseTo(2 * at(1), 5);
   });
 });

@@ -179,3 +179,38 @@ export function bevelEdges(m: PolyMesh, edgeList: [number, number][], width: num
   const selPos = new Set([...sel].map((i) => verts[i]!.join(',')));
   return { mesh: out, sel: out.verts.flatMap((p, i) => (selPos.has(p.join(',')) ? [i] : [])) };
 }
+
+/**
+ * 비례 편집 (블렌더 O): 고른 점은 1, 안 고른 점은 가장 가까운 고른 점까지 거리 d 에 따라 매끈한 감쇠
+ * t = 1 − d/R, w = 3t² − 2t³ (블렌더 "Smooth" 감쇠). 반지름 밖은 0 (목록에 없음)
+ */
+export function proportionalWeights(m: PolyMesh, sel: number[], radius: number): Map<number, number> {
+  const w = new Map<number, number>();
+  const s = new Set(sel);
+  for (const i of sel) w.set(i, 1);
+  if (radius <= 0) return w;
+  m.verts.forEach((p, i) => {
+    if (s.has(i)) return;
+    let d = Infinity;
+    for (const j of sel) {
+      const q = m.verts[j]!;
+      d = Math.min(d, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    }
+    if (d >= radius) return;
+    const t = 1 - d / radius;
+    w.set(i, 3 * t * t - 2 * t * t * t);
+  });
+  return w;
+}
+
+/** 비례 변환: 점마다 p + w·(M·p − p) (M = 4×4 열 우선, 객체 로컬) */
+export function proportionalTransform(m: PolyMesh, weights: Map<number, number>, e: number[]): PolyMesh {
+  const verts = m.verts.map((p, i): V3 => {
+    const w = weights.get(i);
+    if (!w) return p;
+    const [x, y, z] = p;
+    const q: V3 = [e[0]! * x + e[4]! * y + e[8]! * z + e[12]!, e[1]! * x + e[5]! * y + e[9]! * z + e[13]!, e[2]! * x + e[6]! * y + e[10]! * z + e[14]!];
+    return [r6(x + w * (q[0] - x)), r6(y + w * (q[1] - y)), r6(z + w * (q[2] - z))];
+  });
+  return { verts, faces: m.faces };
+}
