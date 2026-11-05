@@ -8,6 +8,7 @@ import { degreesOfFreedom } from '../../cad/solver';
 import { sketchWorldMatrix } from '../../cad/sketchPlane';
 import { useSketchView } from '../../features/sketch/sketchSettings';
 import { useActiveSketch } from '../../features/sketch/activeSketch';
+import { useSketchDrag } from '../../features/sketch/sketchDrag';
 
 /**
  * 스케치 윤곽 표시 (보기 전용, 선택·편집은 속성 패널).
@@ -18,7 +19,12 @@ import { useActiveSketch } from '../../features/sketch/activeSketch';
 export function SketchOutlines() {
   const model = useSceneStore(selectModel);
   const selectedId = useSceneStore((s) => s.selectedId);
-  const visible = useMemo(() => visibleSketches(model, selectedId), [model, selectedId]);
+  // 꼭짓점을 끄는 중이면 다시 푼 미리보기 스케치로 그린다
+  const preview = useSketchDrag((s) => s.preview);
+  const visible = useMemo(
+    () => visibleSketches(model, selectedId).map((v) => (preview && v.sketch.id === preview.id ? { ...v, sketch: preview } : v)),
+    [model, selectedId, preview],
+  );
   // 스케치 중 종이 위: 솔리드웍스 색 (덜 정의 = 파랑, 완전 정의 = 검정), 어두운 화면: 밝은 파랑 / 흰색
   const paperOn = useSketchView((s) => s.paper);
   const active = useActiveSketch();

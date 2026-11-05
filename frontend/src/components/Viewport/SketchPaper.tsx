@@ -6,6 +6,10 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { autoGridStep, sketchSnapPoints } from '../../cad/sketchSnap';
 import { gridSteps, useSketchView } from '../../features/sketch/sketchSettings';
 import { useActiveSketch } from '../../features/sketch/activeSketch';
+import { useSketchDrag } from '../../features/sketch/sketchDrag';
+import { groupBadges, sketchBadges } from '../../cad/sketchRelations';
+import type { Sketch } from '../../cad/commandTypes';
+import { Html } from '@react-three/drei';
 
 /** 종이 + 격자 (모눈종이처럼): 잔 칸·굵은 칸 선을 화면 해상도에 맞춰 부드럽게 (fwidth) */
 const VERT = /* glsl */ `
@@ -53,6 +57,7 @@ void main() {
 export function SketchPaper() {
   const active = useActiveSketch();
   const view = useSketchView();
+  const preview = useSketchDrag((s) => s.preview);
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
@@ -134,7 +139,8 @@ export function SketchPaper() {
       <Line points={[[place.cx - h, 0, 0.015], [place.cx + h, 0, 0.015]]} color="#d0646a" lineWidth={1} dashed dashSize={px * 14} gapSize={px * 5} transparent opacity={0.7} raycast={() => null} />
       <Line points={[[0, place.cy - h, 0.015], [0, place.cy + h, 0.015]]} color="#4f9d62" lineWidth={1} dashed dashSize={px * 14} gapSize={px * 5} transparent opacity={0.7} raycast={() => null} />
       <OriginMark px={px} />
-      <SketchPoints sketch={active.sketch} px={px} paper={view.paper} />
+      <SketchPoints sketch={preview && preview.id === active.sketch?.id ? preview : active.sketch} px={px} paper={view.paper} />
+      {view.relations && active.sketch && <SketchBadges sketch={preview && preview.id === active.sketch.id ? preview : active.sketch} paper={view.paper} />}
     </group>
   );
 }
@@ -185,6 +191,26 @@ function SketchPoints({ sketch, px, paper }: { sketch: import('../../cad/command
       <points geometry={dotGeo} raycast={() => null}>
         <pointsMaterial color={color} size={5} sizeAttenuation={false} depthTest={false} />
       </points>
+    </>
+  );
+}
+
+/** 구속 기호·치수 (솔리드웍스처럼 선·점 옆) — 같은 자리는 한 묶음 */
+function SketchBadges({ sketch, paper }: { sketch: Sketch; paper: boolean }) {
+  const groups = useMemo(() => groupBadges(sketchBadges(sketch)).slice(0, 150), [sketch]);
+  return (
+    <>
+      {groups.map((g) => (
+        <Html key={g.at.join(',')} position={[g.at[0], g.at[1], 0]} style={{ pointerEvents: 'none' }} zIndexRange={[5, 0]}>
+          <div className={`sk-badges${paper ? ' on-paper' : ''}`} data-testid="sketch-badge">
+            {g.items.map((b, i) => (
+              <span key={i} className={b.kind} title={b.title}>
+                {b.text}
+              </span>
+            ))}
+          </div>
+        </Html>
+      ))}
     </>
   );
 }

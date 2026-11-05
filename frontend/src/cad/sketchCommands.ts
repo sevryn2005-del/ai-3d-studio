@@ -515,9 +515,16 @@ export function executeSketchCommand(model: ModelDefinition, cmd: SketchCommand)
         if (e.id !== id) return e;
         if (e.type === 'polygon' || e.type === 'path') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) };
         if (e.type === 'line') return { ...e, points: e.points.map((p, k) => (`p${k}` === part ? cmd.to : p)) as [[number, number], [number, number]] };
+        if (e.type === 'rectangle' && part.startsWith('p')) {
+          // 사각형 모서리 (형식 v21): 모서리가 to 에 오도록 중심을 옮긴다 (폭·높이는 그대로)
+          const dim = (k: 'width' | 'height') => sketch.dimensions.find((d) => d.entity === e.id && d.kind === k)?.value ?? 0;
+          const [sx, sy] = [[-1, -1], [1, -1], [1, 1], [-1, 1]][Number(part.slice(1))]!;
+          return { ...e, center: [cmd.to[0] - (sx! * dim('width')) / 2, cmd.to[1] - (sy! * dim('height')) / 2] as [number, number] };
+        }
+        if (e.type === 'region') return e;
         return { ...e, center: cmd.to };
       });
-      return solvedResult(model, { ...sketch, entities }, cmd, null, new Set([cmd.point]));
+      return solvedResult(model, { ...sketch, entities }, cmd, null, new Set([pointVariable(sketch, cmd.point)]));
     }
 
     case 'add_constraint': {

@@ -142,3 +142,38 @@ test('사각형 모서리에 일치, 변 가운데에 중간점 구속이 자동
     ]),
   );
 });
+
+test('꼭짓점 끌기: 사각형 모서리를 끌면 치수를 지키며 옮겨지고, 구속·치수 기호가 보인다', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-design').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-start-sketch').click();
+  await page.locator('[data-plane="XY"]').click();
+  await page.getByRole('tab', { name: '스케치' }).click();
+  await page.getByRole('button', { name: /^사각형/ }).click();
+  await page.waitForTimeout(500);
+  const at = (x: number, y: number) => page.evaluate(([x, y]) => window.__AI3D_DEV__!.project(x!, y!, 0), [x, y]);
+  const drag = async (from: [number, number], to: [number, number]) => {
+    const a = await at(...from);
+    const b = await at(...to);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 8 });
+    await page.mouse.up();
+  };
+  await drag([-20, -10], [20, 10]);
+  await page.keyboard.press('Escape'); // 그리기만 끝 (스케치는 선택된 채)
+  await expect(page.getByTestId('sketch-badge').filter({ hasText: '40' })).toHaveCount(1);
+  await expect(page.getByTestId('sketch-badge').filter({ hasText: '20' })).toHaveCount(1);
+  const center = async () => (await page.evaluate(() => window.__AI3D_DEV__!.scene())).sketches[0]!.entities[0]!.center;
+  expect(await center()).toEqual([0, 0]);
+  // 오른쪽 위 모서리 (20, 10) → (25, 15): 폭·높이는 그대로, 사각형이 옮겨진다
+  await drag([20, 10], [25, 15]);
+  await expect.poll(center).toEqual([5, 5]);
+  await page.keyboard.press('Control+z');
+  await expect.poll(center).toEqual([0, 0]);
+  // 구속 표시 끄기
+  await page.getByTestId('sketch-opt-relations').click();
+  await expect(page.getByTestId('sketch-badge')).toHaveCount(0);
+});

@@ -11,6 +11,7 @@ import { ViewportToolbar } from './ViewportToolbar';
 import { DevProbe } from './DevProbe';
 import { SketchOutlines } from './SketchOutlines';
 import { SketchPaper } from './SketchPaper';
+import { SketchPointDrag } from './SketchPointDrag';
 import { SketchOptionsBar } from './SketchOptionsBar';
 import { useActiveSketch } from '../../features/sketch/activeSketch';
 import { useSketchView } from '../../features/sketch/sketchSettings';
@@ -81,6 +82,7 @@ export function Viewport() {
         <SketchPaper />
         <SketchOutlines />
         <SketchDrawTool />
+        <SketchPointDrag />
         <PlanePicker />
         <PendingPreview />
         <SectionClip />

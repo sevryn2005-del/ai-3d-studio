@@ -14,11 +14,13 @@ interface Prefs {
   inference: boolean;
   /** 그릴 때 자동 구속 (일치·수평·수직·고정·입력 길이) */
   autoRelations: boolean;
+  /** 구속 기호·치수 표시 */
+  relations: boolean;
   gridStep: GridStepPref;
 }
 
 const KEY = 'ai3d.sketchView';
-const DEFAULTS: Prefs = { paper: true, grid: true, gridSnap: true, inference: true, autoRelations: true, gridStep: 'auto' };
+const DEFAULTS: Prefs = { paper: true, grid: true, gridSnap: true, inference: true, autoRelations: true, relations: true, gridStep: 'auto' };
 
 function load(): Prefs {
   try {
@@ -29,6 +31,7 @@ function load(): Prefs {
       gridSnap: typeof v.gridSnap === 'boolean' ? v.gridSnap : DEFAULTS.gridSnap,
       inference: typeof v.inference === 'boolean' ? v.inference : DEFAULTS.inference,
       autoRelations: typeof v.autoRelations === 'boolean' ? v.autoRelations : DEFAULTS.autoRelations,
+      relations: typeof v.relations === 'boolean' ? v.relations : DEFAULTS.relations,
       gridStep: GRID_STEP_OPTIONS.includes(v.gridStep as GridStepPref) ? (v.gridStep as GridStepPref) : DEFAULTS.gridStep,
     };
   } catch {
@@ -51,9 +54,9 @@ export const useSketchView = create<SketchViewState>((set, get) => ({
   auto: { minor: 1, major: 10 },
   set: (p) => {
     set(p);
-    const { paper, grid, gridSnap, inference, autoRelations, gridStep } = get();
+    const { paper, grid, gridSnap, inference, autoRelations, relations, gridStep } = get();
     try {
-      localStorage.setItem(KEY, JSON.stringify({ paper, grid, gridSnap, inference, autoRelations, gridStep }));
+      localStorage.setItem(KEY, JSON.stringify({ paper, grid, gridSnap, inference, autoRelations, relations, gridStep }));
     } catch {
       /* 저장소가 막혀 있으면 이번 세션에만 */
     }
