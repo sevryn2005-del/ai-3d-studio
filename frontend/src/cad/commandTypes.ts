@@ -1091,6 +1091,12 @@ export const MeshEditSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('merge'), verts: vertIds.min(2) }),
   /** F: 고른 점들로 면 */
   z.strictObject({ op: z.literal('fill'), verts: vertIds.min(3).max(256) }),
+  /** 점 위치 바꾸기 (스컬프트 한 획): 고른 점들을 새 좌표로 (객체 로컬, mm) */
+  z.strictObject({
+    op: z.literal('set_verts'),
+    verts: vertIds.min(1),
+    positions: z.array(Vec3Schema).min(1).max(MAX_POLY_VERTS),
+  }),
 ]);
 export type MeshEdit = z.infer<typeof MeshEditSchema>;
 export const MeshEditCommandSchema = z.strictObject({ type: z.literal('mesh_edit'), target: ObjectIdSchema, edit: MeshEditSchema });

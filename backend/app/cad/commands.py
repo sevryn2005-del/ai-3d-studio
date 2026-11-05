@@ -1366,8 +1366,16 @@ class MeshEditFill(Strict):
     verts: Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]
 
 
+class MeshEditSetVerts(Strict):
+    """점 위치 바꾸기 (스컬프트 한 획)"""
+
+    op: Literal["set_verts"]
+    verts: Annotated[list[PolyIndex], Field(min_length=1, max_length=MAX_POLY_VERTS)]
+    positions: Annotated[list[Vec3], Field(min_length=1, max_length=MAX_POLY_VERTS)]
+
+
 MeshEdit = Annotated[
-    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill],
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditSetVerts],
     Field(discriminator="op"),
 ]
 

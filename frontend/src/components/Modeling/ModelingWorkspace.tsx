@@ -16,6 +16,7 @@ import { useModelingKeys } from '../../features/modeling/useModelingKeys';
 import { PolyMeshView } from './PolyMeshView';
 import { ModalController } from './ModalController';
 import { ModelingPicker } from './ModelingPicker';
+import { SculptController } from './SculptController';
 import { AddMenu, ModelingEmptyGuide, ModelingHint, ModelingProperties, Outliner } from './ModelingPanels';
 
 const NONE = -1 as unknown as MOUSE;
@@ -31,7 +32,7 @@ export function ModelingWorkspace() {
     () =>
       useSceneStore.subscribe((s) => {
         const st = useModelingStore.getState();
-        if (st.mode !== 'edit') return;
+        if (st.mode === 'object') return;
         const o = s.history.present.model.objects.find((x) => x.id === s.selectedId);
         if (!o || o.kind !== 'polymesh') st.setMode('object');
         else if (st.selVerts.some((v) => v >= o.polymesh.verts.length)) st.setSel(st.selVerts.filter((v) => v < o.polymesh.verts.length));
@@ -88,6 +89,7 @@ function ModelingViewport() {
         <SceneObjects />
         <ModalController />
         <ModelingPicker />
+        <SculptController />
         <CameraFitter />
         <ProjectionSwitch />
         {import.meta.env.DEV && <DevProbe />}
@@ -126,7 +128,8 @@ function SceneObjects() {
               object={o}
               mesh={p?.mesh}
               transform={p?.transform}
-              selected={o.id === selectedId}
+              selected={o.id === selectedId && mode !== 'sculpt'}
+              smoothDisplay={mode === 'sculpt' && o.id === selectedId}
               editing={editing}
               selVerts={editing ? (p?.afterSel && p.mesh ? p.afterSel : selVerts) : []}
               selectMode={selectMode}

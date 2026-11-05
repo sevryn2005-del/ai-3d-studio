@@ -122,3 +122,40 @@ test('모디파이어: Ctrl+2 세분 표면 → 미러 추가 → 부드러운 �
   expect(saved.model.objects[0]).toMatchObject({ smooth: true, modifiers: [{ type: 'subsurf', levels: 2 }, { type: 'mirror', axis: 'x', merge: true }] });
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+test('스컬프트: 구에 그리기 브러시로 한 획 → 부풀어 오름, 실행 취소 1번', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-uv_sphere').click();
+  await page.getByTestId('mode-sculpt').click();
+  await expect(page.getByTestId('modeling-hint')).toContainText('스컬프트 모드');
+  await page.getByTestId('sculpt-densify').click();
+  await expect(page.getByTestId('notice')).toContainText('촘촘하게');
+  // 위에서 보고 구 가운데를 가로지르는 한 획 (그리기 브러시, 세기 100%)
+  await page.getByTestId('sculpt-strength').fill('1');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // 단축키가 슬라이더가 아니라 화면으로
+  await page.keyboard.press('Numpad7');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 0, -1]);
+  const a = await page.evaluate(() => window.__AI3D_DEV__!.project(-4, 0, 20));
+  const b = await page.evaluate(() => window.__AI3D_DEV__!.project(4, 0, 20));
+  await page.mouse.move(a.x, a.y);
+  await expect(page.locator('[data-testid="modeling-hint"]')).toBeVisible();
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 12 });
+  await page.mouse.up();
+
+  const save = async () => {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+    const obj = JSON.parse(readFileSync((await dl.path())!, 'utf8')).model.objects[0];
+    return Math.max(...obj.polymesh.verts.map((v: number[]) => Math.hypot(v[0]!, v[1]!, v[2]!)));
+  };
+  const after = await save();
+  expect(after).toBeGreaterThan(10.05); // 반지름 10 구가 획 자리에서 부풀었다
+  await page.keyboard.press('Control+z'); // 획 1번 = 실행 취소 1번
+  expect(await save()).toBeLessThanOrEqual(10.000001);
+});

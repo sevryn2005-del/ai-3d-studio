@@ -9,8 +9,17 @@
 import { create } from 'zustand';
 import type { CadCommand, ObjectId, Transform } from '../../cad/commandTypes';
 import type { PolyMesh } from '../../cad/polymesh';
+import type { Brush } from '../../cad/sculpt';
 
-export type ModelingMode = 'object' | 'edit';
+export type ModelingMode = 'object' | 'edit' | 'sculpt';
+export interface SculptSettings {
+  brush: Brush;
+  /** 화면 픽셀 반지름 (확대해도 화면에서 같은 크기 — 블렌더 기본) */
+  radiusPx: number;
+  /** 0~1 */
+  strength: number;
+  symmetryX: boolean;
+}
 export type SelectMode = 'vert' | 'edge' | 'face';
 export type ModalKind = 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset';
 export type Axis = 'x' | 'y' | 'z';
@@ -49,6 +58,8 @@ interface ModelingState {
   addMenu: [number, number] | null;
   /** 마지막으로 본 마우스 위치 (뷰포트 기준 px) — 키로 시작하는 모달·메뉴의 기준점 */
   mouse: [number, number];
+  sculpt: SculptSettings;
+  setSculpt: (p: Partial<SculptSettings>) => void;
 
   setMode: (m: ModelingMode) => void;
   setSelectMode: (m: SelectMode) => void;
@@ -71,6 +82,8 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   preview: null,
   addMenu: null,
   mouse: [0, 0],
+  sculpt: { brush: 'draw', radiusPx: 50, strength: 0.5, symmetryX: false },
+  setSculpt: (p) => set((s) => ({ sculpt: { ...s.sculpt, ...p } })),
 
   setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null }),
   setSelectMode: (selectMode) => set({ selectMode }),

@@ -186,7 +186,9 @@ export function ModelingHint() {
   const modal = useModelingStore((s) => s.modal);
   const label = useModelingStore((s) => s.preview?.label);
   let text: string;
-  if (modal) text = `${label ?? ''} · X/Y/Z: 축 고정 · 숫자: 값 입력 · 클릭/Enter: 확정 · 오른쪽 클릭/Esc: 취소`;
+  if (mode === 'sculpt' && !modal)
+    text = '스컬프트 모드 · 왼쪽 드래그: 브러시 · Shift: 매끈하게 · Ctrl: 반대로 · X 그리기 · I 부풀리기 · S 매끈하게 · G 잡아끌기 · Shift+T 평평하게 · [ ] 반지름 · Tab 편집 모드 · Esc 오브젝트 모드';
+  else if (modal) text = `${label ?? ''} · X/Y/Z: 축 고정 · 숫자: 값 입력 · 클릭/Enter: 확정 · 오른쪽 클릭/Esc: 취소`;
   else if (mode === 'edit')
     text = '편집 모드 · 1/2/3 점·선·면 · 클릭 선택(Shift 더하기) · A 전체 · G/R/S · E 돌출 · I 인셋 · Ctrl+R 루프 컷 · X 삭제 · M 병합 · F 면 · Tab 나가기';
   else text = '오브젝트 모드 · 클릭 선택 · Shift+A 추가 · G 이동 · R 회전 · S 크기 · X 삭제 · Tab 편집 모드 · 가운데 드래그 회전 · Shift+가운데 이동 · 휠 확대';

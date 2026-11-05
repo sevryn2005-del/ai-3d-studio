@@ -45,6 +45,7 @@ import { meshError } from './meshData';
 import {
   type MeshPrimitive,
   type PolyMesh,
+  type V3,
   deleteElements,
   extrudeFaces,
   fillFace,
@@ -566,6 +567,13 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       if (new Set(e.verts).size !== e.verts.length) return '같은 점을 두 번 골랐습니다';
       return fillFace(m, e.verts);
+    case 'set_verts': {
+      if (badV(e.verts)) return '없는 점을 가리킵니다';
+      if (e.positions.length !== e.verts.length) return '점 번호와 좌표 개수가 다릅니다';
+      const verts = [...m.verts];
+      e.verts.forEach((v, i) => (verts[v] = [...e.positions[i]!] as V3));
+      return { verts, faces: m.faces };
+    }
   }
 }
 

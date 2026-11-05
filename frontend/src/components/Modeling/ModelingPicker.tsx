@@ -43,6 +43,7 @@ export function ModelingPicker() {
     const ndc = ([x, y]: [number, number]) => new Vector2((x / el.clientWidth) * 2 - 1, -(y / el.clientHeight) * 2 + 1);
 
     const onDown = (e: PointerEvent) => {
+      if (useModelingStore.getState().mode === 'sculpt') return; // 스컬프트는 SculptController
       if (useModelingStore.getState().modal) {
         if (e.button === 0) confirmModal();
         else if (e.button === 2) cancelModal();

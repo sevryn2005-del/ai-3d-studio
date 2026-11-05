@@ -65,6 +65,8 @@ interface Props {
   editing: boolean;
   selVerts: number[];
   selectMode: SelectMode;
+  /** 스컬프트 모드: 부드러운 음영으로 보기 (저장된 음영 설정과 무관) */
+  smoothDisplay?: boolean;
   onPick?: (e: ThreeEvent<MouseEvent>) => void;
 }
 
@@ -73,14 +75,15 @@ interface Props {
  * - 오브젝트 모드: 회색 음영, 고른 객체는 주황 선
  * - 편집 모드: 모든 선(검정)·점, 고른 점·선·면은 주황
  */
-export function PolyMeshView({ object, mesh, transform, selected, editing, selVerts, selectMode, onPick }: Props) {
+export function PolyMeshView({ object, mesh, transform, selected, editing, selVerts, selectMode, onPick, smoothDisplay }: Props) {
+  const smooth = !!object.smooth || !!smoothDisplay;
   const m = mesh ?? object.polymesh;
   const t = transform ?? object.transform;
   const geo = useMemo(() => polyGeometry(m), [m]);
   // 모디파이어 스택 결과 (형식 v22). 편집 모드에서는 원본이 "케이지"(선·반투명 면)로, 결과가 음영으로 보인다
   const hasMods = !!object.modifiers?.length;
   const result = useMemo(() => (hasMods ? evaluateModifiers(m, object.modifiers) : m), [m, object.modifiers, hasMods]);
-  const shaded = useMemo(() => (object.smooth ? smoothGeometry(result) : hasMods ? polyGeometry(result) : geo), [result, object.smooth, hasMods, geo]);
+  const shaded = useMemo(() => (smooth ? smoothGeometry(result) : hasMods ? polyGeometry(result) : geo), [result, smooth, hasMods, geo]);
   const resultEdges = useMemo(() => (hasMods && selected && !editing ? edgeGeometry(result, edges(result)) : null), [hasMods, selected, editing, result]);
   const allEdges = useMemo(() => edges(m), [m]);
   const edgeGeo = useMemo(() => edgeGeometry(m, allEdges), [m, allEdges]);
@@ -105,7 +108,7 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
       userData={{ cadObject: object.id }}
     >
       {/* 음영 결과 (모디파이어·부드러운 음영 반영). 편집 모드에서 모디파이어가 있으면 고르기는 아래 케이지가 받는다 */}
-      {(!editing || hasMods || object.smooth) && (
+      {(!editing || hasMods || smooth) && (
         <mesh
           geometry={shaded}
           name={editing ? 'polymesh-result' : `polymesh-${object.id}`}
@@ -113,7 +116,7 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
           onClick={editing ? undefined : onPick}
           raycast={editing ? () => null : undefined}
         >
-          <meshStandardMaterial key={object.smooth ? 'smooth' : 'flat'} color={object.color ?? MESH_COLOR} flatShading={!object.smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+          <meshStandardMaterial key={smooth ? 'smooth' : 'flat'} color={object.color ?? MESH_COLOR} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
         </mesh>
       )}
       {editing && (

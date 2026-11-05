@@ -39,7 +39,7 @@ export function addMesh(primitive: MeshPrimitive) {
   if (r.status === 'applied') useModelingStore.getState().setMode('object');
 }
 
-/** Tab: 오브젝트 ↔ 편집 모드 (메시 객체만 편집 모드) */
+/** Tab: 오브젝트 ↔ 편집 모드 (메시 객체만 편집 모드). 스컬프트 모드에서는 편집 모드로 */
 export function toggleEditMode() {
   const st = useModelingStore.getState();
   if (st.mode === 'edit') return st.setMode('object');
@@ -159,4 +159,22 @@ export function setSubsurfLevel(level: number) {
   else if (i >= 0) next[i] = { type: 'subsurf', levels: level };
   else next = [...mods, { type: 'subsurf', levels: level }];
   useSceneStore.getState().submitNow({ type: 'set_modifiers', target: o.id, modifiers: next });
+}
+
+/** 스컬프트 모드 (블렌더 Ctrl+Tab 메뉴의 Sculpt Mode): 메시 객체를 브러시로 다듬는다 */
+export function enterSculpt() {
+  const st = useModelingStore.getState();
+  if (!editTarget()) return notify('스컬프트는 메시 객체에서만 됩니다 — 메시를 먼저 고르세요 (Shift+A 로 추가)');
+  st.setMode('sculpt');
+}
+
+/** 촘촘하게: 세분 표면 1단계를 메시에 굳힌다 (스컬프트할 점을 늘리기). 실행 취소 1번 */
+export function densify() {
+  const t = editTarget();
+  if (!t) return;
+  const r = useSceneStore.getState().dispatchBatch([
+    { type: 'set_modifiers', target: t.id, modifiers: [{ type: 'subsurf', levels: 1 }, ...(t.modifiers ?? [])] },
+    { type: 'apply_modifier', target: t.id },
+  ]);
+  if (r.ok) notify(`점 ${editTarget()?.polymesh.verts.length.toLocaleString() ?? ''}개로 촘촘하게 했습니다`);
 }

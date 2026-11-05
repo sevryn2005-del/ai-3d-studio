@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useModelingStore, type SelectMode } from '../../features/modeling/modelingStore';
 import {
-  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
+  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, densify, enterSculpt, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
 } from '../../features/modeling/modelingOps';
 import { useEditorStore } from '../../features/selection/editorStore';
+import { BRUSH_LABEL, type Brush } from '../../cad/sculpt';
 
 const SELECT_MODES: { id: SelectMode; label: string; key: string }[] = [
   { id: 'vert', label: '점', key: '1' },
@@ -35,7 +36,11 @@ export function ModelingHeader() {
         <button aria-pressed={mode === 'edit'} onClick={() => mode !== 'edit' && toggleEditMode()} data-testid="mode-edit" title="편집 모드 — 점·선·면 고치기 (Tab)">
           편집 모드
         </button>
+        <button aria-pressed={mode === 'sculpt'} onClick={() => mode !== 'sculpt' && enterSculpt()} data-testid="mode-sculpt" title="스컬프트 모드 — 브러시로 주물러 다듬기">
+          스컬프트
+        </button>
       </div>
+      {mode === 'sculpt' && <SculptBar />}
       {mode === 'edit' && (
         <div className="seg" role="group" aria-label="선택 모드">
           {SELECT_MODES.map((m) => (
@@ -60,9 +65,13 @@ export function ModelingHeader() {
           </div>
         )}
       </div>
-      <button onClick={() => modal('grab')} title="이동 (G) — X/Y/Z 로 축 고정, 숫자 입력, 클릭·Enter 확정">이동 G</button>
-      <button onClick={() => modal('rotate')} title="회전 (R)">회전 R</button>
-      <button onClick={() => modal('scale')} title="크기 (S)">크기 S</button>
+      {mode !== 'sculpt' && (
+        <>
+          <button onClick={() => modal('grab')} title="이동 (G) — X/Y/Z 로 축 고정, 숫자 입력, 클릭·Enter 확정">이동 G</button>
+          <button onClick={() => modal('rotate')} title="회전 (R)">회전 R</button>
+          <button onClick={() => modal('scale')} title="크기 (S)">크기 S</button>
+        </>
+      )}
       {mode === 'edit' && (
         <>
           <span className="sep" />
@@ -75,10 +84,54 @@ export function ModelingHeader() {
           <button onClick={() => selectAll()} title="전체 선택 (A) · 해제 (Alt+A)">전체 A</button>
         </>
       )}
-      <button onClick={deleteSelection} title="삭제 (X · Delete)" data-testid="op-delete">삭제 X</button>
+      {mode !== 'sculpt' && (
+        <button onClick={deleteSelection} title="삭제 (X · Delete)" data-testid="op-delete">삭제 X</button>
+      )}
       <span className="spacer" />
       <button onClick={editor.toggleProjection} title="원근/직교 (숫자패드 5)">{projection === 'perspective' ? '원근' : '직교'}</button>
       <button onClick={editor.requestFit} title="화면 맞춤 (Home · 숫자패드 .)">화면 맞춤</button>
     </div>
+  );
+}
+
+const BRUSHES: { id: Brush; key: string }[] = [
+  { id: 'draw', key: 'X' },
+  { id: 'inflate', key: 'I' },
+  { id: 'smooth', key: 'S' },
+  { id: 'grab', key: 'G' },
+  { id: 'flatten', key: 'Shift+T' },
+];
+
+/** 스컬프트 도구 막대: 브러시 · 반지름(화면 px) · 세기 · X 대칭 · 촘촘하게 */
+function SculptBar() {
+  const sc = useModelingStore((s) => s.sculpt);
+  const set = useModelingStore.getState().setSculpt;
+  return (
+    <>
+      <span className="sep" />
+      <div className="seg" role="group" aria-label="브러시">
+        {BRUSHES.map((b) => (
+          <button key={b.id} aria-pressed={sc.brush === b.id} onClick={() => set({ brush: b.id })} title={`${BRUSH_LABEL[b.id]} (${b.key})`} data-testid={`brush-${b.id}`}>
+            {BRUSH_LABEL[b.id]}
+          </button>
+        ))}
+      </div>
+      <label className="slider" title="브러시 반지름 (화면 픽셀, [ ] 키)">
+        반지름
+        <input type="range" min={5} max={400} value={sc.radiusPx} onChange={(e) => set({ radiusPx: Number(e.target.value) })} data-testid="sculpt-radius" />
+        <span>{sc.radiusPx}px</span>
+      </label>
+      <label className="slider" title="브러시 세기">
+        세기
+        <input type="range" min={0.05} max={1} step={0.05} value={sc.strength} onChange={(e) => set({ strength: Number(e.target.value) })} data-testid="sculpt-strength" />
+        <span>{Math.round(sc.strength * 100)}%</span>
+      </label>
+      <button aria-pressed={sc.symmetryX} onClick={() => set({ symmetryX: !sc.symmetryX })} title="X 대칭 — 객체 x = 0 평면 반대쪽에도" data-testid="sculpt-symmetry">
+        X 대칭
+      </button>
+      <button onClick={densify} title="세분 표면 1단계를 메시에 적용해 점을 늘립니다 (스컬프트가 더 부드럽게)" data-testid="sculpt-densify">
+        촘촘하게
+      </button>
+    </>
   );
 }
