@@ -388,3 +388,18 @@ label.check.small { font-size: 12px; }
 }
 .region-items { margin: 4px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
 .region-items li { display: flex; align-items: center; gap: 6px; }
+.drawing-sheet-wrap { position: relative; width: 100%; max-width: 1100px; }
+.drawing-sheet-wrap .drawing-sheet { max-width: none; }
+.drawing-pick { position: absolute; inset: 0; width: 100%; height: 100%; }
+.drawing-pick .pick-hover { fill: none; stroke: #e5534b; stroke-width: 0.5; }
+.drawing-pick .pick-done { fill: #e5534b; }
+.drawing-pick .pick-line { stroke: #e5534b; stroke-width: 0.3; stroke-dasharray: 1 1; }
+.drawing-dim-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.drawing-dim-kinds button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.drawing-dim-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.drawing-dim-list li { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.drawing-dim-list li span { flex: 1; }
+.drawing-dim-list li.broken strong { color: #e5534b; }
+.drawing-dim-list input { width: 54px; }
+.drawing-dims { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px 6px; }
+@media print { .drawing-pick { display: none !important; } }

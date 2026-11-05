@@ -394,6 +394,10 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
     case 'set_drawing': {
       const v = cmd.drawing.views;
       if (new Set(v).size !== v.length) return fail('도면 보기가 중복되었습니다');
+      const dims = cmd.drawing.dims ?? [];
+      if (new Set(dims.map((d) => d.id)).size !== dims.length) return fail('도면 치수 ID 가 중복되었습니다');
+      const bad = dims.find((d) => (d.kind === 'diameter') === !!d.b);
+      if (bad) return fail(`치수 ${bad.id}: ${bad.kind === 'diameter' ? '지름 치수는 끝점이 하나입니다' : '길이 치수는 끝점이 둘입니다'}`);
       return done(model, { ...model, drawing: cmd.drawing }, cmd, null);
     }
 

@@ -27,9 +27,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 14: + 도면 설정(model.drawing). v13 내용은 그대로 유효
  * - 15: + 영역 단면(sketch region: 요소 합치기·빼기). v14 내용은 그대로 유효
  * - 16: + 스플라인(polygon·path spline). v15 내용은 그대로 유효
- * 읽기는 1~16 모두, 쓰기는 항상 최신(16). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 17: + 도면 사용자 치수(model.drawing.dims). v16 내용은 그대로 유효
+ * 읽기는 1~17 모두, 쓰기는 항상 최신(17). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 16;
+export const PROJECT_FORMAT_VERSION = 17;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -184,8 +185,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 16) {
     // v15 → v16: 선택 항목(spline)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 15 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 15 ? { ...model, schemaVersion: 16 } : model;
     file = { ...file, formatVersion: 16, model: migrated };
+  }
+  if ((file.formatVersion as number) < 17) {
+    // v16 → v17: 도면 사용자 치수(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 16 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 17, model: migrated };
   }
   return file;
 }

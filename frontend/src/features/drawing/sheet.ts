@@ -9,10 +9,13 @@
  * - 단면도(형식 v14): 정면도·우측면도를 전단면 A-A 로 — 잘린 면 45° 해칭(2.5mm), 다른 보기에 절단선(가는 1점 쇄선 + 굵은 끝 + 보는 방향 화살표 + A).
  * - 중심선: 정면으로 보이는 원의 중심 표시(+ 자형), 원통 축선 (가는 1점 쇄선, 2mm 넘게). 등각도에는 그리지 않는다.
  * - 주기: 표제란 왼쪽 칸에 여러 줄 (최대 6줄).
+ * - 사용자 치수(형식 v17): 끝점을 투상 결과에 다시 붙여(dims.ts) 그린다. 붙을 곳이 없으면 값 뒤에 "?" (연결 끊김).
  * - 자동 치수: 정면도 전체 너비·높이, 우측면도 전체 깊이(우측면도가 없으면 평면도), 정면으로 보이는 원의 지름(같은 지름은 n×Ø).
  * 좌표: 용지 mm, 원점 = 왼쪽 아래, y 위쪽 (DXF 와 같음. SVG 는 뒤집어 그린다).
  */
+import type { DrawingDim } from '../../cad/commandTypes';
 import type { DrawingView, DrawingViewName } from '../engine/types';
+import { resolveDim, type ResolvedDim } from './dims';
 import { DRAWING_VIEWS } from './views';
 
 export type Paper = 'A4' | 'A3';
@@ -40,6 +43,15 @@ export interface SheetOptions {
   section?: { view: 'front' | 'right'; offset: number };
   /** 주기 (여러 줄) */
   notes?: string;
+  /** 사용자 치수 */
+  dims?: DrawingDim[];
+}
+
+/** 보기 배치: 보기 좌표 (x, y) → 종이 = at + (p − bounds 최소) × scale */
+export interface ViewPlacement {
+  at: [number, number];
+  bounds: [number, number, number, number];
+  scale: number;
 }
 
 export interface Sheet {
@@ -49,6 +61,10 @@ export interface Sheet {
   /** 고른 척도로는 용지에 다 들어가지 않음 */
   overflow: boolean;
   items: SheetItem[];
+  /** 화면에서 종이 좌표 ↔ 보기 좌표 바꾸기 (치수 고르기) */
+  placements: Partial<Record<DrawingViewName, ViewPlacement>>;
+  /** 사용자 치수가 붙은 결과 (목록 표시용) */
+  dims: ResolvedDim[];
 }
 
 const MARGIN = 10;
@@ -150,7 +166,22 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     }
     diameterDims(items, v, map);
   }
-  return { width: W, height: H, scale, overflow: L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items };
+  // 사용자 치수 (보기가 그려진 것만)
+  const placements: Sheet['placements'] = {};
+  for (const v of list) {
+    const at = place[v.name];
+    if (at) placements[v.name] = { at, bounds: v.bounds, scale };
+  }
+  const resolved: ResolvedDim[] = [];
+  for (const d of opt.dims ?? []) {
+    const v = views[d.view];
+    const pl = placements[d.view];
+    if (!v || !pl) continue;
+    const r = resolveDim(v, d);
+    resolved.push(r);
+    userDim(items, r, (p) => [pl.at[0] + (p[0] - pl.bounds[0]) * scale, pl.at[1] + (p[1] - pl.bounds[1]) * scale], scale);
+  }
+  return { width: W, height: H, scale, overflow: L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved };
 }
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
@@ -340,4 +371,63 @@ function cuttingLine(
     arrow(items, tip, look);
     items.push({ kind: 'text', layer: 'text', x: tip[0] + look[0] * 1.5, y: tip[1] + (look[1] > 0 ? 1.5 : -1.2), size: 3.5, text: SECTION_LABEL, anchor: look[0] < 0 ? 'end' : 'middle' });
   }
+}
+
+/** 치수선 하나: 보조선 A→A2, B→B2 (형상에서 1mm 띄우고 2mm 넘김), 치수선 A2–B2 + 화살표, 글자는 선 가운데 위 1mm (선 방향으로 돌려 읽기 쉽게) */
+function dimLine(items: SheetItem[], A: [number, number], B: [number, number], A2: [number, number], B2: [number, number], text: string) {
+  for (const [p, q] of [[A, A2], [B, B2]] as const) {
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (L < 1e-6) continue;
+    const u = [(q[0] - p[0]) / L, (q[1] - p[1]) / L];
+    if (L > 1) items.push({ kind: 'line', layer: 'dim', points: [p[0] + u[0]!, p[1] + u[1]!, q[0] + u[0]! * 2, q[1] + u[1]! * 2] });
+  }
+  items.push({ kind: 'line', layer: 'dim', points: [...A2, ...B2] });
+  const len = Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) || 1;
+  const d: [number, number] = [(B2[0] - A2[0]) / len, (B2[1] - A2[1]) / len];
+  arrow(items, B2, d);
+  arrow(items, A2, [-d[0], -d[1]]);
+  // 읽는 방향: 각도를 (−90°, 90°] 로
+  let ang = (Math.atan2(d[1], d[0]) * 180) / Math.PI;
+  if (ang > 90) ang -= 180;
+  if (ang <= -90) ang += 180;
+  const rad = (ang * Math.PI) / 180;
+  const up: [number, number] = [-Math.sin(rad), Math.cos(rad)];
+  const mx = (A2[0] + B2[0]) / 2 + up[0];
+  const my = (A2[1] + B2[1]) / 2 + up[1];
+  items.push({ kind: 'text', layer: 'dim', x: mx, y: my, size: TEXT, text, anchor: 'middle', ...(Math.abs(ang) > 1e-9 ? { angle: Math.round(ang * 1000) / 1000 } : {}) });
+}
+
+/** 사용자 치수 그리기. 연결이 끊기면 값 뒤에 "?" */
+function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) => [number, number], scale: number) {
+  const mark = r.ok ? '' : '?';
+  const off = r.dim.offset;
+  if (r.dim.kind === 'diameter') {
+    const [cx, cy] = map(r.a);
+    const rad = (r.radius ?? 0) * scale;
+    const u: [number, number] = [Math.SQRT1_2, Math.SQRT1_2];
+    const edge: [number, number] = [cx + u[0] * rad, cy + u[1] * rad];
+    const knee: [number, number] = [edge[0] + u[0] * Math.max(3, Math.abs(off)), edge[1] + u[1] * Math.max(3, Math.abs(off))];
+    const label = r.ok ? `Ø${dimText(r.value)}` : 'Ø?';
+    items.push({ kind: 'line', layer: 'dim', points: [...edge, ...knee, knee[0] + label.length * TEXT * 0.62, knee[1]] });
+    arrow(items, edge, [-u[0], -u[1]]);
+    items.push({ kind: 'text', layer: 'dim', x: knee[0] + 0.5, y: knee[1] + 1, size: TEXT, text: label, anchor: 'start' });
+    return;
+  }
+  const A = map(r.a);
+  const B = map(r.b!);
+  let A2: [number, number];
+  let B2: [number, number];
+  if (r.dim.kind === 'horizontal') {
+    const y = (off >= 0 ? Math.max(A[1], B[1]) : Math.min(A[1], B[1])) + off;
+    [A2, B2] = [[A[0], y], [B[0], y]];
+  } else if (r.dim.kind === 'vertical') {
+    const x = (off >= 0 ? Math.max(A[0], B[0]) : Math.min(A[0], B[0])) + off;
+    [A2, B2] = [[x, A[1]], [x, B[1]]];
+  } else {
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+    const n: [number, number] = [-(B[1] - A[1]) / L, (B[0] - A[0]) / L];
+    [A2, B2] = [[A[0] + n[0] * off, A[1] + n[1] * off], [B[0] + n[0] * off, B[1] + n[1] * off]];
+  }
+  if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < 1e-6) return; // 같은 점 (수평 치수인데 세로로 놓인 두 점 등)
+  dimLine(items, A, B, A2, B2, `${dimText(r.value)}${mark}`);
 }

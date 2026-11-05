@@ -600,6 +600,27 @@ export const DrawingSectionSchema = z.strictObject({
   offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
 });
 export type DrawingSection = z.infer<typeof DrawingSectionSchema>;
+/**
+ * 사용자 치수 끝점 (형식 v17): at = 보기 평면 좌표(mm), rel = 보기 범위 안 상대 위치(0~1).
+ * 다시 그릴 때 rel 위치(없으면 at) 가까운 꼭짓점·원에 다시 붙는다 (features/drawing/dims.ts) — 모델 크기가 바뀌어도 따라간다
+ */
+const coord = z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate);
+export const DrawingAnchorSchema = z.strictObject({ at: z.tuple([coord, coord]), rel: z.tuple([z.number().min(-10).max(11), z.number().min(-10).max(11)]) });
+export type DrawingAnchor = z.infer<typeof DrawingAnchorSchema>;
+/**
+ * 사용자 치수 (형식 v17): 수평·수직·평행(두 끝점 a·b, offset = 치수선까지 종이 mm, 부호 = 방향) 또는 지름(a = 원 중심, offset = 지시선 길이).
+ * 등각도에는 넣지 않는다
+ */
+export const DrawingDimSchema = z.strictObject({
+  id: ObjectIdSchema,
+  view: z.enum(['front', 'top', 'right']),
+  kind: z.enum(['horizontal', 'vertical', 'aligned', 'diameter']),
+  a: DrawingAnchorSchema,
+  b: DrawingAnchorSchema.optional(),
+  offset: z.number().min(-200).max(200),
+});
+export type DrawingDim = z.infer<typeof DrawingDimSchema>;
+export const MAX_DRAWING_DIMS = 100;
 export const DrawingSettingsSchema = z.strictObject({
   paper: z.enum(['A4', 'A3']),
   scale: z.union([z.literal('auto'), z.number().min(0.0001).max(100)]),
@@ -609,11 +630,12 @@ export const DrawingSettingsSchema = z.strictObject({
   centerlines: z.boolean(),
   section: DrawingSectionSchema.optional(),
   notes: z.string().max(500).optional(),
+  dims: z.array(DrawingDimSchema).max(MAX_DRAWING_DIMS).optional(),
 });
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
 
-export const MODEL_SCHEMA_VERSION = 16;
+export const MODEL_SCHEMA_VERSION = 17;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

@@ -857,6 +857,27 @@ class DrawingSection(Strict):
     offset: Coordinate
 
 
+class DrawingAnchor(Strict):
+    """사용자 치수 끝점 (형식 v17): at = 보기 평면 좌표, rel = 보기 범위 안 상대 위치 — frontend features/drawing/dims.ts 가 다시 붙인다"""
+
+    at: tuple[Coordinate, Coordinate]
+    rel: tuple[Annotated[float, _num(-10, 11)], Annotated[float, _num(-10, 11)]]
+
+
+class DrawingDim(Strict):
+    """사용자 치수 (형식 v17): 수평·수직·평행(a·b) 또는 지름(a = 원 중심). offset = 종이 mm"""
+
+    id: ObjectId
+    view: Literal["front", "top", "right"]
+    kind: Literal["horizontal", "vertical", "aligned", "diameter"]
+    a: DrawingAnchor
+    b: Annotated[DrawingAnchor | None, Field(exclude_if=lambda v: v is None)] = None
+    offset: Annotated[float, _num(-200, 200)]
+
+
+MAX_DRAWING_DIMS = 100
+
+
 class DrawingSettings(Strict):
     """도면 설정 (형식 v14) — frontend commandTypes.ts DrawingSettingsSchema. 형상에는 영향 없음"""
 
@@ -868,10 +889,11 @@ class DrawingSettings(Strict):
     centerlines: StrictBool
     section: Annotated[DrawingSection | None, Field(exclude_if=lambda v: v is None)] = None
     notes: Annotated[str | None, Field(max_length=500, exclude_if=lambda v: v is None)] = None
+    dims: Annotated[list[DrawingDim] | None, Field(max_length=MAX_DRAWING_DIMS, exclude_if=lambda v: v is None)] = None
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[16]
+    schemaVersion: Literal[17]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

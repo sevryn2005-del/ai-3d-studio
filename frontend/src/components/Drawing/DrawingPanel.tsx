@@ -3,14 +3,15 @@
  * 시트(features/drawing/sheet.ts)가 배치·척도·자동 치수·표제란을 만든다. SVG·DXF 저장, 인쇄(PDF 로 저장)는 모두 로컬.
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
-import { useEffect, useMemo, useState } from 'react';
-import { DEFAULT_DRAWING, type DrawingSettings } from '../../cad/commandTypes';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_DRAWING, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
+import { DIM_KIND_LABEL, makeAnchor, snapCircle, snapVertex } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import type { DrawingView, DrawingViewName } from '../../features/engine/types';
 import { sheetToDxf, sheetToSvg } from '../../features/drawing/exportSheet';
-import { buildSheet, PAPERS, scaleLabel, STANDARD_SCALES, type Paper } from '../../features/drawing/sheet';
+import { buildSheet, dimText, PAPERS, scaleLabel, STANDARD_SCALES, type Paper } from '../../features/drawing/sheet';
 import { ALL_VIEWS, DRAWING_VIEWS } from '../../features/drawing/views';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
@@ -20,6 +21,10 @@ interface DrawingState {
   setOpen: (open: boolean) => void;
 }
 export const useDrawingStore = create<DrawingState>((set) => ({ open: false, setOpen: (open) => set({ open }) }));
+
+type PickView = 'front' | 'top' | 'right';
+/** 고르기 허용 거리 (종이 mm) */
+const PICK_MM = 3;
 
 const today = () => {
   const d = new Date();
@@ -80,8 +85,21 @@ function DrawingWindow() {
     return () => ctl.abort();
   }, [geometry, engineId, chosen.join(','), sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 치수 추가 모드: 종류 → 끝점 클릭(꼭짓점에 붙음) → 치수선 위치 클릭. Esc 는 모드를 먼저 끝낸다
+  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | null>(null);
+  const [pending, setPending] = useState<{ view: PickView; p: [number, number] }[]>([]);
+  const [hover, setHover] = useState<{ view: PickView; p: [number, number]; paper: [number, number]; r?: number } | null>(null);
+  const modeRef = useRef(dimMode);
+  modeRef.current = dimMode;
   useEffect(() => {
-    const key = (ev: KeyboardEvent) => ev.key === 'Escape' && !(ev.target instanceof HTMLTextAreaElement) && close();
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape' || ev.target instanceof HTMLTextAreaElement) return;
+      if (modeRef.current) {
+        setDimMode(null);
+        setPending([]);
+        setHover(null);
+      } else close();
+    };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, []);
@@ -98,6 +116,7 @@ function DrawingWindow() {
             centerlines: settings.centerlines,
             ...(settings.section ? { section: settings.section } : {}),
             ...(settings.notes ? { notes: settings.notes } : {}),
+            ...(settings.dims?.length ? { dims: settings.dims } : {}),
           })
         : null,
     [views, chosen.length, settings, title],
@@ -111,6 +130,84 @@ function DrawingWindow() {
     const ref = views?.find((v) => v.name === (view === 'front' ? 'top' : 'front'));
     return ref ? Math.round(((view === 'front' ? ref.bounds[1] + ref.bounds[3] : ref.bounds[0] + ref.bounds[2]) / 2) * 1000) / 1000 : 0;
   };
+  const dims = settings.dims ?? [];
+  const viewOf = (name: PickView) => views?.find((v) => v.name === name);
+  /** 화면 → 종이 → 보기. 보기 배치 밖(6mm 여유)이면 null */
+  const pick = (ev: React.MouseEvent<SVGSVGElement>) => {
+    if (!sheet) return null;
+    const r = ev.currentTarget.getBoundingClientRect();
+    const paper: [number, number] = [((ev.clientX - r.left) / r.width) * sheet.width, sheet.height - ((ev.clientY - r.top) / r.height) * sheet.height];
+    for (const name of ['front', 'top', 'right'] as const) {
+      const pl = sheet.placements[name];
+      const v = viewOf(name);
+      if (!pl || !v) continue;
+      const w = (pl.bounds[2] - pl.bounds[0]) * pl.scale;
+      const h = (pl.bounds[3] - pl.bounds[1]) * pl.scale;
+      if (paper[0] < pl.at[0] - 6 || paper[0] > pl.at[0] + w + 6 || paper[1] < pl.at[1] - 6 || paper[1] > pl.at[1] + h + 6) continue;
+      const p: [number, number] = [pl.bounds[0] + (paper[0] - pl.at[0]) / pl.scale, pl.bounds[1] + (paper[1] - pl.at[1]) / pl.scale];
+      return { view: name, v, pl, paper, p, tol: PICK_MM / pl.scale };
+    }
+    return { view: null, paper } as const;
+  };
+  const toPaper = (view: PickView, p: [number, number]): [number, number] => {
+    const pl = sheet!.placements[view]!;
+    return [pl.at[0] + (p[0] - pl.bounds[0]) * pl.scale, pl.at[1] + (p[1] - pl.bounds[1]) * pl.scale];
+  };
+  const nextDimId = () => {
+    let n = 1;
+    while (dims.some((d) => d.id === `dim${n}`)) n++;
+    return `dim${n}`;
+  };
+  const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
+    const h = pick(ev);
+    if (!h || !dimMode) return setHover(null);
+    // 치수선 자리: 보기 밖이어도 된다
+    if (pending.length === 2 && dimMode !== 'diameter') return setHover({ view: pending[0]!.view, p: [0, 0], paper: h.paper });
+    if (!h.view) return setHover(null);
+    if (dimMode === 'diameter') {
+      const c = snapCircle(h.v, h.p, h.tol);
+      return setHover(c ? { view: h.view, p: c.center, paper: toPaper(h.view, c.center), r: c.radius * h.pl.scale } : null);
+    }
+    const q = snapVertex(h.v, h.p, h.tol);
+    setHover(q ? { view: h.view, p: q, paper: toPaper(h.view, q) } : null);
+  };
+  const onClick = (ev: React.MouseEvent<SVGSVGElement>) => {
+    const h = pick(ev);
+    if (!h || !dimMode) return;
+    if (pending.length === 2 && dimMode !== 'diameter') return placeDim(h.paper);
+    if (!h.view) return;
+    if (dimMode === 'diameter') {
+      const c = snapCircle(h.v, h.p, h.tol);
+      if (!c) return;
+      update({ dims: [...dims, { id: nextDimId(), view: h.view, kind: 'diameter', a: makeAnchor(h.v, c.center), offset: 8 }] });
+      return;
+    }
+    if (pending.length === 1 && pending[0]!.view !== h.view) return; // 두 끝점은 같은 보기에서
+    const q = snapVertex(h.v, h.p, h.tol);
+    if (q) setPending([...pending, { view: h.view, p: q }]);
+  };
+  /** 세 번째 클릭: 치수선 위치 (종이 mm, 부호 = 방향) */
+  const placeDim = (P: [number, number]) => {
+    if (!dimMode || dimMode === 'diameter') return;
+    const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
+    const A = toPaper(a.view, a.p);
+    const B = toPaper(b.view, b.p);
+    let offset: number;
+    if (dimMode === 'horizontal') offset = P[1] >= Math.max(A[1], B[1]) ? P[1] - Math.max(A[1], B[1]) : P[1] <= Math.min(A[1], B[1]) ? P[1] - Math.min(A[1], B[1]) : P[1] - Math.max(A[1], B[1]);
+    else if (dimMode === 'vertical') offset = P[0] >= Math.max(A[0], B[0]) ? P[0] - Math.max(A[0], B[0]) : P[0] <= Math.min(A[0], B[0]) ? P[0] - Math.min(A[0], B[0]) : P[0] - Math.max(A[0], B[0]);
+    else {
+      const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+      offset = ((P[0] - A[0]) * -(B[1] - A[1]) + (P[1] - A[1]) * (B[0] - A[0])) / L;
+    }
+    const v = viewOf(a.view)!;
+    offset = Math.max(-200, Math.min(200, Math.round(offset * 10) / 10));
+    update({ dims: [...dims, { id: nextDimId(), view: a.view, kind: dimMode, a: makeAnchor(v, a.p), b: makeAnchor(v, b.p), offset }] });
+    setPending([]);
+  };
+  const setDimOffset = (id: string, offset: number) => update({ dims: dims.map((d) => (d.id === id ? { ...d, offset: Math.max(-200, Math.min(200, offset)) } : d)) });
+  const removeDim = (id: string) => update({ dims: dims.filter((d) => d.id !== id) });
+  const resolved = new Map((sheet?.dims ?? []).map((r) => [r.dim.id, r]));
+
   const commitText = () => {
     const patch: Partial<DrawingSettings> = {};
     if (titleDraft !== title) patch.title = titleDraft.slice(0, 80);
@@ -226,7 +323,69 @@ function DrawingWindow() {
             인쇄 · PDF
           </button>
         </div>
-        <p className="muted small">숨은선은 파선, 접선 모서리는 그리지 않습니다. 숨긴 객체는 도면에서 빠집니다.</p>
+        <fieldset className="drawing-dims">
+          <legend>치수 추가 (클릭)</legend>
+          <div className="drawing-dim-kinds">
+            {(['horizontal', 'vertical', 'aligned', 'diameter'] as const).map((k) => (
+              <button
+                key={k}
+                aria-pressed={dimMode === k}
+                onClick={() => {
+                  setDimMode(dimMode === k ? null : k);
+                  setPending([]);
+                }}
+                data-testid={`dim-mode-${k}`}
+              >
+                {DIM_KIND_LABEL[k]}
+              </button>
+            ))}
+          </div>
+          {dimMode && (
+            <p className="muted small" data-testid="dim-hint">
+              {dimMode === 'diameter'
+                ? '원(가장자리·중심)을 클릭하세요'
+                : pending.length === 0
+                  ? '첫 꼭짓점을 클릭하세요 (가까운 꼭짓점에 붙음)'
+                  : pending.length === 1
+                    ? '둘째 꼭짓점을 클릭하세요 (같은 보기)'
+                    : '치수선을 놓을 자리를 클릭하세요'}
+              {' · Esc: 끝내기'}
+            </p>
+          )}
+          {dims.length > 0 && (
+            <ul className="drawing-dim-list">
+              {dims.map((d) => {
+                const r = resolved.get(d.id);
+                return (
+                  <li key={d.id} data-testid={`dim-row-${d.id}`} className={r && !r.ok ? 'broken' : undefined}>
+                    <span>
+                      {DIM_KIND_LABEL[d.kind]} · {DRAWING_VIEWS[d.view].label}{' '}
+                      <strong data-testid={`dim-value-${d.id}`}>{r ? (r.ok ? `${d.kind === 'diameter' ? 'Ø' : ''}${dimText(r.value)}` : '연결 끊김') : '보기 없음'}</strong>
+                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      aria-label={`${d.id} 간격 (종이 mm)`}
+                      title="치수선까지 간격 (종이 mm, 부호 = 방향)"
+                      key={`${d.id}:${d.offset}`}
+                      defaultValue={d.offset}
+                      onBlur={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v) && v !== d.offset) setDimOffset(d.id, v);
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                      data-testid={`dim-offset-${d.id}`}
+                    />
+                    <button className="cancel" onClick={() => removeDim(d.id)} title="치수 지우기" data-testid={`dim-delete-${d.id}`}>
+                      ✕
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </fieldset>
+        <p className="muted small">숨은선은 파선, 접선 모서리는 그리지 않습니다. 숨긴 객체는 도면에서 빠집니다. 추가한 치수는 모델을 고치면 가까운 꼭짓점에 다시 붙고, 붙을 곳이 없으면 "?" 로 표시됩니다.</p>
       </aside>
       <div className="drawing-paper" data-testid="drawing-paper-area" data-busy={busy}>
         {error && (
@@ -237,7 +396,34 @@ function DrawingWindow() {
         {!error && !chosen.length && <p className="drawing-message">보기를 하나 이상 고르세요</p>}
         {!error && chosen.length > 0 && !sheet && <p className="drawing-message">도면을 계산하는 중…</p>}
         {/* 글자는 sheetToSvg 가 이스케이프한다 */}
-        {sheet && !error && <div className="drawing-sheet drawing-print" data-testid="drawing-sheet" data-scale={sheet.scale} dangerouslySetInnerHTML={{ __html: svg }} />}
+        {sheet && !error && (
+          <div className="drawing-sheet-wrap">
+            <div className="drawing-sheet drawing-print" data-testid="drawing-sheet" data-scale={sheet.scale} dangerouslySetInnerHTML={{ __html: svg }} />
+            {/* 치수 고르기: 같은 종이 좌표의 투명 층 (인쇄·저장에는 들어가지 않음) */}
+            <svg
+              className="drawing-pick"
+              data-testid="drawing-pick"
+              data-mode={dimMode ?? ''}
+              data-placements={JSON.stringify(sheet.placements)}
+              data-paper={`${sheet.width},${sheet.height}`}
+              viewBox={`0 0 ${sheet.width} ${sheet.height}`}
+              style={{ pointerEvents: dimMode ? 'auto' : 'none', cursor: dimMode ? 'crosshair' : undefined }}
+              onMouseMove={onMove}
+              onMouseLeave={() => setHover(null)}
+              onClick={onClick}
+            >
+              {pending.map((q, i) => {
+                const [x, y] = toPaper(q.view, q.p);
+                return <circle key={i} cx={x} cy={sheet.height - y} r={1.2} className="pick-done" />;
+              })}
+              {pending.length > 0 && hover && (() => {
+                const [x0, y0] = toPaper(pending[pending.length - 1]!.view, pending[pending.length - 1]!.p);
+                return <line x1={x0} y1={sheet.height - y0} x2={hover.paper[0]} y2={sheet.height - hover.paper[1]} className="pick-line" />;
+              })()}
+              {hover && <circle cx={hover.paper[0]} cy={sheet.height - hover.paper[1]} r={hover.r ?? 1.5} className="pick-hover" />}
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   );
