@@ -42,10 +42,14 @@ replicad-opencascadejs 1.1.0 (브라우저 정밀 엔진 = Open CASCADE Technolo
   - OCCT 를 수정하지 않은 빌드를 그대로 쓰며 번들에는 압축(gzip)만 해서 넣는다 (`frontend/scripts/occtWasm.ts`).
   - LGPL-2.1 은 GPL-3.0 프로젝트와 함께 배포할 수 있다 (LGPL 2.1 3절: GPL 로 바꿔 적용 가능). 원본: https://github.com/sgenoud/replicad ,
     OCCT 원본: https://dev.opencascade.org (사용자는 같은 이름의 WASM 파일을 바꿔 넣어 다른 OCCT 빌드를 쓸 수 있다).
+opentype.js 1.3.4 (스케치 텍스트 — 글꼴 윤곽 읽기): MIT.
+Noto Sans KR Bold (스케치 텍스트 글꼴, `frontend/src/assets/fonts/`): SIL Open Font License 1.1 — 전문은 `frontend/src/assets/fonts/OFL-NotoSansKR.txt`.
+  - Copyright 2014-2021 Adobe (Reserved Font Name 'Source'). 원본에서 영문·숫자·기호와 KS X 1001 한글 2,350자만 남긴 서브셋(fonttools pyftsubset, 힌팅 제거)이며
+    글꼴 이름은 바꾸지 않았고 예약 이름 'Source' 를 쓰지 않는다. OFL 은 글꼴을 프로그램과 함께 배포하는 것을 허용한다 (글꼴 자체는 OFL 그대로).
 
 ## license-check (GPL-3.0 호환성, 2026-11-03)
 
-- 프론트엔드 런타임 의존성: three·@react-three/*·react·zod·zustand·fflate (MIT), manifold-3d (Apache-2.0 — GPL-3.0 과 호환, GPL-2.0 단독과는 비호환), replicad-opencascadejs (LGPL-2.1-only — GPL-3.0 과 호환).
+- 프론트엔드 런타임 의존성: three·@react-three/*·react·zod·zustand·fflate (MIT), manifold-3d (Apache-2.0 — GPL-3.0 과 호환, GPL-2.0 단독과는 비호환), replicad-opencascadejs (LGPL-2.1-only — GPL-3.0 과 호환), opentype.js (MIT). 글꼴 Noto Sans KR 은 OFL-1.1 (데이터로 함께 배포, 코드와 섞지 않음).
 - 백엔드: cadquery·cadquery-ocp (Apache-2.0), OCCT (LGPL-2.1 + 예외), casadi (LGPL-3.0+), FastAPI·Pydantic·uvicorn·anthropic (MIT/BSD).
 - 빌드 도구: PyInstaller (GPL-2.0-or-later + 부트로더 예외 — 묶은 프로그램의 라이선스에 영향 없음), Tauri (MIT/Apache-2.0).
 - 새 의존성을 추가할 때: GPL-3.0 과 호환되는 라이선스만 (CLAUDE.md 5장).

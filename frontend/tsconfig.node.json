@@ -23,6 +23,7 @@
     "vite.config.ts",
     "playwright.config.ts",
     "scripts",
-    "src/cad"
+    "src/cad",
+    "src/types/assets.d.ts"
   ]
 }

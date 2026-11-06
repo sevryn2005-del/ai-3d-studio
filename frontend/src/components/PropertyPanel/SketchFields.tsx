@@ -1,5 +1,6 @@
 import { importDxf } from '../../features/selection/featureFlow';
 import { SketchCopyPanel } from './SketchCopyPanel';
+import { SketchTextPanel } from './SketchTextPanel';
 import { useEffect, useState } from 'react';
 import type { AngledPlane, CadObject, DimensionKind, FaceName, ModelDefinition, Point2, Sketch, SketchEntity, SketchPlane, StandardPlane } from '../../cad/commandTypes';
 import { FACE_LABEL, PLANE_LABEL, facesOf, planeAxes } from '../../cad/sketchPlane';
@@ -290,6 +291,7 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
           DXF 가져오기
         </button>
       </div>
+      <SketchTextPanel sketch={sketch} />
       <SketchCopyPanel sketch={sketch} />
       <ConstraintPanel sketch={sketch} />
       {users.length > 0 && (

@@ -189,7 +189,7 @@ export const ArcSchema = z.strictObject({ k: z.number().int().min(0).max(LIMITS.
 const arcs = z.array(ArcSchema).max(LIMITS.maxPolygonPoints).optional();
 
 export const RegionItemSchema = z.strictObject({ entity: ObjectIdSchema, op: z.enum(['add', 'subtract']) });
-export const MAX_REGION_ITEMS = 20;
+export const MAX_REGION_ITEMS = 100; // 스케치 요소 한도와 같음 (텍스트 윤곽 전체를 한 영역으로)
 const RegionItemsSchema = z.array(RegionItemSchema).min(1).max(MAX_REGION_ITEMS);
 export type RegionItem = z.infer<typeof RegionItemSchema>;
 

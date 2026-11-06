@@ -269,7 +269,7 @@ class RegionItem(Strict):
     op: Literal["add", "subtract"]
 
 
-MAX_REGION_ITEMS = 20
+MAX_REGION_ITEMS = 100  # 스케치 요소 한도와 같음 (텍스트 윤곽 전체를 한 영역으로)
 RegionItems = Annotated[list[RegionItem], Field(min_length=1, max_length=MAX_REGION_ITEMS)]
 
 
