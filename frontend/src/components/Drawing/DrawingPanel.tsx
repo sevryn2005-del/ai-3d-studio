@@ -4,8 +4,8 @@
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_DRAWING, MAX_DRAWING_DETAILS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
-import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, snapCircle, snapVertex, tolInput } from '../../features/drawing/dims';
+import { DEFAULT_DRAWING, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
+import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, RA_VALUES, snapCircle, snapEdge, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
@@ -48,6 +48,7 @@ function DrawingWindow() {
     const next = { ...settings, ...patch };
     if (!next.section) delete next.section;
     if (!next.details?.length) delete next.details;
+    if (!next.marks?.length) delete next.marks;
     submitNow({ type: 'set_drawing', drawing: next });
   };
   const title = settings.title ?? projectName;
@@ -87,7 +88,8 @@ function DrawingWindow() {
   }, [geometry, engineId, chosen.join(','), sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 치수 추가 모드: 종류 → 끝점 클릭(꼭짓점에 붙음) → 치수선 위치 클릭. Esc 는 모드를 먼저 끝낸다
-  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | null>(null);
+  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | 'roughness' | null>(null);
+  const [ra, setRa] = useState(3.2);
   const [pending, setPending] = useState<{ view: PickView; p: [number, number] }[]>([]);
   const [hover, setHover] = useState<{ view: PickView; p: [number, number]; paper: [number, number]; r?: number } | null>(null);
   const modeRef = useRef(dimMode);
@@ -122,6 +124,7 @@ function DrawingWindow() {
             ...(settings.notes ? { notes: settings.notes } : {}),
             ...(shownDims?.length ? { dims: shownDims } : {}),
             ...(settings.details?.length ? { details: settings.details } : {}),
+            ...(settings.marks?.length ? { marks: settings.marks } : {}),
           })
         : null,
     [views, chosen.length, settings, title, shownDims],
@@ -179,9 +182,19 @@ function DrawingWindow() {
     while (details.some((d) => d.id === `detail${n}`)) n++;
     return `detail${n}`;
   };
+  const marks = settings.marks ?? [];
+  const nextMarkId = () => {
+    let n = 1;
+    while (marks.some((m) => m.id === `ra${n}`)) n++;
+    return `ra${n}`;
+  };
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return setHover(null);
+    if (dimMode === 'roughness') {
+      const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
+      return setHover(e && h.view ? { view: h.view, p: e.p, paper: toPaper(h.view, e.p) } : null);
+    }
     if (dimMode === 'detail') {
       // 상세도: 첫 클릭 = 가운데, 둘째 = 반지름 (원 미리보기)
       if (pending.length === 1) {
@@ -203,6 +216,13 @@ function DrawingWindow() {
   const onClick = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return;
+    if (dimMode === 'roughness') {
+      // 표면 거칠기: 보이는 선 위 점 (계속 찍을 수 있음, Esc 로 끝)
+      const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
+      if (!e || !h.view || marks.length >= MAX_DRAWING_MARKS) return;
+      update({ marks: [...marks, { id: nextMarkId(), view: h.view, at: makeAnchor(h.v, e.p), ra }] });
+      return;
+    }
     if (dimMode === 'detail') {
       if (pending.length === 0) {
         if (h.view) setPending([{ view: h.view, p: h.p }]);
@@ -234,7 +254,7 @@ function DrawingWindow() {
   };
   /** 세 번째 클릭: 치수선 위치 (종이 mm, 부호 = 방향) */
   const placeDim = (P: [number, number]) => {
-    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail') return;
+    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail' || dimMode === 'roughness') return;
     const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
     const offset = dimOffsetAt(dimMode, toPaper(a.view, a.p), toPaper(b.view, b.p), P);
     const v = viewOf(a.view)!;
@@ -381,7 +401,9 @@ function DrawingWindow() {
           </div>
           {dimMode && (
             <p className="muted small" data-testid="dim-hint">
-              {dimMode === 'detail'
+              {dimMode === 'roughness'
+                ? `표면(보이는 선)을 클릭하세요 — Ra ${ra}`
+                : dimMode === 'detail'
                 ? pending.length === 0
                   ? '확대할 곳의 가운데를 클릭하세요 (정면·평면·우측면도)'
                   : '원 크기를 정할 곳을 클릭하세요'
@@ -438,6 +460,60 @@ function DrawingWindow() {
                       data-testid={`dim-tol-${d.id}`}
                     />
                     <button className="cancel" onClick={() => removeDim(d.id)} title="치수 지우기" data-testid={`dim-delete-${d.id}`}>
+                      ✕
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </fieldset>
+        <fieldset className="drawing-dims">
+          <legend>표면 거칠기 (Ra, μm)</legend>
+          <div className="drawing-dim-kinds">
+            <select value={String(ra)} onChange={(e) => setRa(Number(e.target.value))} aria-label="새 기호의 Ra" data-testid="roughness-ra">
+              {RA_VALUES.map((v) => (
+                <option key={v} value={String(v)}>
+                  Ra {v}
+                </option>
+              ))}
+            </select>
+            <button
+              aria-pressed={dimMode === 'roughness'}
+              disabled={marks.length >= MAX_DRAWING_MARKS}
+              onClick={() => {
+                setDimMode(dimMode === 'roughness' ? null : 'roughness');
+                setPending([]);
+              }}
+              data-testid="roughness-mode"
+              title="보기의 선(표면)을 클릭해 √ 기호를 붙입니다. 기호는 형상 바깥쪽에 서고, 모델을 고쳐도 가까운 선에 다시 붙습니다"
+            >
+              + 거칠기 기호
+            </button>
+          </div>
+          {marks.length > 0 && (
+            <ul className="drawing-dim-list">
+              {marks.map((m) => {
+                const shown = sheet?.marks.find((x) => x.id === m.id);
+                return (
+                  <li key={m.id} data-testid={`mark-row-${m.id}`} className={shown && !shown.ok ? 'broken' : undefined}>
+                    <span>
+                      √ · {DRAWING_VIEWS[m.view].label}
+                      {shown && !shown.ok ? ' (연결 끊김)' : ''}
+                    </span>
+                    <select
+                      value={String(m.ra)}
+                      aria-label={`${m.id} Ra`}
+                      onChange={(e) => update({ marks: marks.map((x) => (x.id === m.id ? { ...x, ra: Number(e.target.value) } : x)) })}
+                      data-testid={`mark-ra-${m.id}`}
+                    >
+                      {[...new Set([...RA_VALUES, m.ra])].sort((a, b) => a - b).map((v) => (
+                        <option key={v} value={String(v)}>
+                          Ra {v}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="cancel" onClick={() => update({ marks: marks.filter((x) => x.id !== m.id) })} title="기호 지우기" data-testid={`mark-delete-${m.id}`}>
                       ✕
                     </button>
                   </li>

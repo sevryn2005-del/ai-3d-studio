@@ -6,7 +6,7 @@
  * 붙을 곳이 없으면 "연결 끊김"(ok = false, 저장된 자리로 그림).
  * 진짜 위상 이름(면·모서리 ID)이 아니라 위치로 다시 붙이는 방식이라, 모양이 크게 바뀌면 다른 꼭짓점에 붙을 수 있다.
  */
-import type { DrawingAnchor, DrawingDim } from '../../cad/commandTypes';
+import type { DrawingAnchor, DrawingDim, DrawingMark } from '../../cad/commandTypes';
 import type { DrawingView } from '../engine/types';
 
 type P2 = [number, number];
@@ -175,3 +175,41 @@ export function dimOffsetAt(kind: DrawingDim['kind'], A: P2, B: P2 | undefined, 
   }
   return Math.max(-200, Math.min(200, Math.round(off * 10) / 10));
 }
+
+/** 보이는 선 위에서 p 에 가장 가까운 점과 그 선의 방향 (tol 안) — 표면 거칠기 기호 붙이기 */
+export function snapEdge(v: DrawingView, p: P2, tol: number): { p: P2; dir: P2 } | null {
+  let best: { p: P2; dir: P2 } | null = null;
+  let bd = tol;
+  for (const l of v.visible)
+    for (let k = 2; k + 1 < l.length; k += 2) {
+      const [ax, ay, bx, by] = [l[k - 2]!, l[k - 1]!, l[k]!, l[k + 1]!];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const L2 = dx * dx + dy * dy;
+      if (L2 < 1e-18) continue;
+      const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / L2));
+      const q: P2 = [ax + dx * t, ay + dy * t];
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d <= bd) {
+        bd = d;
+        const L = Math.sqrt(L2);
+        best = { p: q, dir: [dx / L, dy / L] };
+      }
+    }
+  return best;
+}
+
+/** 표면 거칠기 기호 다시 붙이기 (형식 v24): rel 자리 → at 자리 순서로 가장 가까운 보이는 선 위 점. 기호가 설 바깥 방향 out 도 */
+export function resolveMark(v: DrawingView, m: DrawingMark): { ok: boolean; p: P2; out: P2 } {
+  const tol = snapTolerance(v);
+  const hit = snapEdge(v, relPoint(v, m.at), tol) ?? snapEdge(v, m.at.at, tol);
+  const p = hit?.p ?? m.at.at;
+  // 바깥 방향: 선의 법선 중 보기 가운데에서 멀어지는 쪽 (선이 없으면 위)
+  let out: P2 = hit ? [-hit.dir[1], hit.dir[0]] : [0, 1];
+  const c: P2 = [(v.bounds[0] + v.bounds[2]) / 2, (v.bounds[1] + v.bounds[3]) / 2];
+  if ((p[0] - c[0]) * out[0] + (p[1] - c[1]) * out[1] < 0) out = [-out[0], -out[1]];
+  return { ok: !!hit, p, out };
+}
+
+/** 표준 Ra 값 (ISO 1302 권장 수열의 흔히 쓰는 값) */
+export const RA_VALUES = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.3, 12.5, 25, 50];

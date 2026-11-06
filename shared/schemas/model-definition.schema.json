@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 23
+      "const": 24
     },
     "units": {
       "type": "string",
@@ -3741,6 +3741,85 @@
               "center",
               "radius",
               "scale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "marks": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "view": {
+                "type": "string",
+                "enum": [
+                  "front",
+                  "top",
+                  "right"
+                ]
+              },
+              "at": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "rel": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": -10,
+                        "maximum": 11
+                      },
+                      {
+                        "type": "number",
+                        "minimum": -10,
+                        "maximum": 11
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "at",
+                  "rel"
+                ],
+                "additionalProperties": false
+              },
+              "ra": {
+                "type": "number",
+                "minimum": 0.006,
+                "maximum": 400
+              }
+            },
+            "required": [
+              "id",
+              "view",
+              "at",
+              "ra"
             ],
             "additionalProperties": false
           }

@@ -16,7 +16,7 @@ from app.main import create_app
 from .fake_llm import ScriptedClient, response, tool
 
 KEY = "sk-ant-api03-TESTKEY-abcdef1234"
-MODEL = {"schemaVersion": 23, "units": "mm", "sketches": [], "objects": [
+MODEL = {"schemaVersion": 24, "units": "mm", "sketches": [], "objects": [
     {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
      "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}]}
 SET_HEIGHT = {"message": "높이를 50mm로 바꿨습니다.", "commands": [{"type": "set_params", "target": "box_1", "params": {"height": 50}}]}

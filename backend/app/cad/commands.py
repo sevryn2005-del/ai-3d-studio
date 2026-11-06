@@ -955,6 +955,18 @@ class DrawingDetail(Strict):
 MAX_DRAWING_DETAILS = 4
 
 
+class DrawingMark(Strict):
+    """표면 거칠기 기호 (형식 v24, Ra): 보기의 선 위 한 점 (치수 끝점과 같은 방식으로 다시 붙는다)"""
+
+    id: ObjectId
+    view: Literal["front", "top", "right"]
+    at: DrawingAnchor
+    ra: Annotated[float, _num(0.006, 400)]
+
+
+MAX_DRAWING_MARKS = 50
+
+
 class DrawingDim(Strict):
     """사용자 치수 (형식 v17): 수평·수직·평행(a·b) 또는 지름(a = 원 중심). offset = 종이 mm"""
 
@@ -983,10 +995,11 @@ class DrawingSettings(Strict):
     notes: Annotated[str | None, Field(max_length=500, exclude_if=lambda v: v is None)] = None
     dims: Annotated[list[DrawingDim] | None, Field(max_length=MAX_DRAWING_DIMS, exclude_if=lambda v: v is None)] = None
     details: Annotated[list[DrawingDetail] | None, Field(max_length=MAX_DRAWING_DETAILS, exclude_if=lambda v: v is None)] = None
+    marks: Annotated[list[DrawingMark] | None, Field(max_length=MAX_DRAWING_MARKS, exclude_if=lambda v: v is None)] = None
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[23]
+    schemaVersion: Literal[24]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

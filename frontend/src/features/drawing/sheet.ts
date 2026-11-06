@@ -12,12 +12,13 @@
  * - 사용자 치수(형식 v17): 끝점을 투상 결과에 다시 붙여(dims.ts) 그린다. 붙을 곳이 없으면 값 뒤에 "?" (연결 끊김).
  * - 공차(형식 v23): 사용자 치수 값 뒤에 ±0.1 또는 +0.1/−0.05.
  * - 상세도(형식 v23): 보기의 원 영역을 확대해 빈 자리(보기·표제란·주기·다른 상세도와 겹치지 않는 곳)에 — 원래 보기에는 가는 원과 기호 B, C, …
+ * - 표면 거칠기(형식 v24): 보이는 선 위 점에 √ 기호 + "Ra 값" — 형상 바깥쪽에 서고, 글자는 읽기 쉬운 방향으로.
  * - 자동 치수: 정면도 전체 너비·높이, 우측면도 전체 깊이(우측면도가 없으면 평면도), 정면으로 보이는 원의 지름(같은 지름은 n×Ø).
  * 좌표: 용지 mm, 원점 = 왼쪽 아래, y 위쪽 (DXF 와 같음. SVG 는 뒤집어 그린다).
  */
-import type { DrawingDetail, DrawingDim } from '../../cad/commandTypes';
+import type { DrawingDetail, DrawingDim, DrawingMark } from '../../cad/commandTypes';
 import type { DrawingView, DrawingViewName } from '../engine/types';
-import { resolveDim, type ResolvedDim } from './dims';
+import { resolveDim, resolveMark, type ResolvedDim } from './dims';
 import { DRAWING_VIEWS } from './views';
 
 export type Paper = 'A4' | 'A3';
@@ -49,6 +50,8 @@ export interface SheetOptions {
   dims?: DrawingDim[];
   /** 상세도 */
   details?: DrawingDetail[];
+  /** 표면 거칠기 기호 */
+  marks?: DrawingMark[];
 }
 
 /** 보기 배치: 보기 좌표 (x, y) → 종이 = at + (p − bounds 최소) × scale */
@@ -71,6 +74,8 @@ export interface Sheet {
   dims: ResolvedDim[];
   /** 사용자 치수 끌기 손잡이 (종이 mm): 끝점 A·B(지름은 원 가장자리 A) + 글자 자리 handle */
   dimHandles: { id: string; kind: DrawingDim['kind']; A: [number, number]; B?: [number, number]; handle: [number, number] }[];
+  /** 표면 거칠기 기호 (종이 mm: 붙은 점, 붙었는지) — 목록·시험용 */
+  marks: { id: string; ok: boolean; at: [number, number] }[];
   /** 상세도 자리 (종이 mm: 가운데·반지름, 기호) — 목록·시험용 */
   details: { id: string; label: string; center: [number, number]; radius: number; scale: number }[];
 }
@@ -251,10 +256,40 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     const h = userDim(items, r, (p) => [pl.at[0] + (p[0] - pl.bounds[0]) * scale, pl.at[1] + (p[1] - pl.bounds[1]) * scale], scale);
     if (h) dimHandles.push({ id: d.id, kind: d.kind, ...h });
   }
-  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details, dimHandles };
+  const marks: Sheet['marks'] = [];
+  for (const m of opt.marks ?? []) {
+    const v = views[m.view];
+    const pl = placements[m.view];
+    if (!v || !pl) continue;
+    const r = resolveMark(v, m);
+    const P: [number, number] = [pl.at[0] + (r.p[0] - pl.bounds[0]) * scale, pl.at[1] + (r.p[1] - pl.bounds[1]) * scale];
+    roughnessSymbol(items, P, r.out, `Ra ${dimText(m.ra)}${r.ok ? '' : '?'}`);
+    marks.push({ id: m.id, ok: r.ok, at: P });
+  }
+  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details, dimHandles, marks };
 }
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
+/**
+ * 표면 거칠기 기호 (ISO 1302 √, 제거 가공 = 삼각형 없이 열린 꼴): 끝 P 가 표면에 닿고, out 방향으로 선다.
+ * 짧은 다리·긴 다리(60°), 긴 다리 위 가로선 아래에 "Ra 값". 글자가 거꾸로 읽히지 않게 가로 방향을 고른다 (기호는 좌우가 뒤집힐 수 있음)
+ */
+function roughnessSymbol(items: SheetItem[], P: [number, number], out: [number, number], text: string) {
+  const u = out;
+  let r: [number, number] = [u[1], -u[0]];
+  if (r[0] < -1e-9 || (Math.abs(r[0]) <= 1e-9 && r[1] < 0)) r = [-r[0], -r[1]];
+  const h = 3.5;
+  const t = Math.tan(Math.PI / 6);
+  const at = (a: number, b: number): [number, number] => [P[0] + r[0] * a + u[0] * b, P[1] + r[1] * a + u[1] * b];
+  const S = at(-h * t, h);
+  const L = at(2 * h * t, 2 * h);
+  const w = Math.max(9, text.length * TEXT * 0.62 + 1.5);
+  items.push({ kind: 'line', layer: 'dim', points: [...S, ...P, ...L, ...at(2 * h * t + w, 2 * h)] });
+  const ang = (Math.atan2(r[1], r[0]) * 180) / Math.PI;
+  const [tx, ty] = at(2 * h * t + 0.8, 2 * h - TEXT - 0.6);
+  items.push({ kind: 'text', layer: 'dim', x: tx, y: ty, size: TEXT, text, anchor: 'start', ...(Math.abs(ang) > 1e-9 ? { angle: Math.round(ang * 1000) / 1000 } : {}) });
+}
+
 /** 원 꺾은선 (72 조각, 닫힘) */
 const circlePts = (cx: number, cy: number, r: number) => Array.from({ length: 73 }, (_, k) => [cx + r * Math.cos((k * Math.PI) / 36), cy + r * Math.sin((k * Math.PI) / 36)]).flat();
 

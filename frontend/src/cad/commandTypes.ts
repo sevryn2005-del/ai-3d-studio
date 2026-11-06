@@ -670,6 +670,18 @@ export const DrawingDetailSchema = z.strictObject({
 });
 export type DrawingDetail = z.infer<typeof DrawingDetailSchema>;
 export const MAX_DRAWING_DETAILS = 4;
+/**
+ * 표면 거칠기 기호 (형식 v24, ISO 1302 Ra): 보기 view 의 선(가장자리) 위 한 점에 붙는다. at·rel 은 치수 끝점과 같은 방식이고,
+ * 다시 그릴 때 가장 가까운 보이는 선 위 점으로 다시 붙는다. 기호는 형상 바깥쪽에 선다 (features/drawing/sheet.ts)
+ */
+export const DrawingMarkSchema = z.strictObject({
+  id: ObjectIdSchema,
+  view: z.enum(['front', 'top', 'right']),
+  at: DrawingAnchorSchema,
+  ra: z.number().min(0.006).max(400),
+});
+export type DrawingMark = z.infer<typeof DrawingMarkSchema>;
+export const MAX_DRAWING_MARKS = 50;
 export const MAX_DRAWING_DIMS = 100;
 export const DrawingSettingsSchema = z.strictObject({
   paper: z.enum(['A4', 'A3']),
@@ -682,6 +694,7 @@ export const DrawingSettingsSchema = z.strictObject({
   notes: z.string().max(500).optional(),
   dims: z.array(DrawingDimSchema).max(MAX_DRAWING_DIMS).optional(),
   details: z.array(DrawingDetailSchema).max(MAX_DRAWING_DETAILS).optional(),
+  marks: z.array(DrawingMarkSchema).max(MAX_DRAWING_MARKS).optional(),
 });
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
@@ -693,7 +706,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 23;
+export const MODEL_SCHEMA_VERSION = 24;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

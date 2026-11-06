@@ -24,6 +24,7 @@ const VIEWS: DrawingView[] = [
   { name: 'iso', visible: [[0, 0, 10, 10]], hidden: [], circles: [], axes: [], bounds: [0, 0, 10, 10] },
 ];
 const OPT: SheetOptions = { paper: 'A4', scale: 'auto', title: '받침 블록', date: '2026-11-05', dimensions: true };
+const lineItems = (s: ReturnType<typeof buildSheet>) => s.items.flatMap((i) => (i.kind === 'line' ? [i] : []));
 const texts = (s: ReturnType<typeof buildSheet>) => s.items.flatMap((i) => (i.kind === 'text' ? [i.text] : []));
 
 describe('도면 시트', () => {
@@ -207,5 +208,33 @@ describe('도면 2단계: 해칭·절단선·중심선·주기', () => {
       const nearY = Math.max(pl.at[1], Math.min(d.center[1], pl.at[1] + h));
       expect(Math.hypot(nearX - d.center[0], nearY - d.center[1]), name).toBeGreaterThan(d.radius);
     }
+  });
+
+  it('표면 거칠기: 선 위 점에 붙고 바깥쪽에 선다, 모델이 커져도 따라감, 선이 없으면 "?"', () => {
+    // 정면도 윗변 가운데 (0, 10) — 바깥 = 위
+    const mark = { id: 'ra1', view: 'front' as const, at: { at: [0, 10] as [number, number], rel: [0.5, 1] as [number, number] }, ra: 1.6 };
+    const s = buildSheet(VIEWS, { ...OPT, dimensions: false, scale: 1, marks: [mark] });
+    expect(texts(s)).toContain('Ra 1.6');
+    const m = s.marks[0]!;
+    expect(m.ok).toBe(true);
+    const pl = s.placements.front!;
+    expect(m.at[1]).toBeCloseTo(pl.at[1] + 10, 6);
+    // 기호 선: 끝점이 붙은 점이고 나머지 점은 모두 위쪽(바깥)
+    const sym = lineItems(s).find((i) => i.layer === 'dim' && Math.hypot(i.points[2]! - m.at[0], i.points[3]! - m.at[1]) < 1e-9)!;
+    expect(sym).toBeTruthy();
+    for (let k = 0; k < sym.points.length; k += 2) expect(sym.points[k + 1]!).toBeGreaterThanOrEqual(m.at[1] - 1e-9);
+    // 오른쪽 변 (20, 5) → 바깥 = 오른쪽
+    const side = buildSheet(VIEWS, { ...OPT, dimensions: false, scale: 1, marks: [{ ...mark, at: { at: [20, 5], rel: [1, 0.5] } }] });
+    const ms = side.marks[0]!;
+    const sym2 = lineItems(side).find((i) => i.layer === 'dim' && Math.hypot(i.points[2]! - ms.at[0], i.points[3]! - ms.at[1]) < 1e-9)!;
+    for (let k = 0; k < sym2.points.length; k += 2) expect(sym2.points[k]!).toBeGreaterThanOrEqual(ms.at[0] - 1e-9);
+    // 모델이 2배: rel 자리로 다시 붙는다
+    const big = VIEWS.map((v) => ({ ...v, visible: v.visible.map((l) => l.map((x) => x * 2)), bounds: v.bounds.map((b) => b * 2) as DrawingView['bounds'] }));
+    const s2 = buildSheet(big, { ...OPT, dimensions: false, scale: 1, marks: [mark] });
+    expect(s2.marks[0]!.ok).toBe(true);
+    expect(s2.marks[0]!.at[1]).toBeCloseTo(s2.placements.front!.at[1] + 20, 6);
+    // 선이 없는 보기 → 연결 끊김
+    const empty = VIEWS.map((v) => (v.name === 'front' ? { ...v, visible: [] } : v));
+    expect(texts(buildSheet(empty, { ...OPT, dimensions: false, marks: [mark] }))).toContain('Ra 1.6?');
   });
 });

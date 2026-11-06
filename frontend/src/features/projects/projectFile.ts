@@ -34,9 +34,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 21: + 중간점 구속(midpoint), 사각형 모서리·변 참조(사각형ID.p0..p3·e0..e3). v20 내용은 그대로 유효
  * - 22: + 메시 모디파이어 스택(polymesh modifiers: 세분 표면·미러·배열·두께)·부드러운 음영(smooth). v21 내용은 그대로 유효
  * - 23: + 도면 치수 공차(drawing.dims[].tol)·상세도(drawing.details). v22 내용은 그대로 유효
- * 읽기는 1~23 모두, 쓰기는 항상 최신(23). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 24: + 도면 표면 거칠기 기호(drawing.marks). v23 내용은 그대로 유효
+ * 읽기는 1~24 모두, 쓰기는 항상 최신(24). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 23;
+export const PROJECT_FORMAT_VERSION = 24;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -233,8 +234,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 23) {
     // v22 → v23: 도면 공차·상세도(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 22 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 22 ? { ...model, schemaVersion: 23 } : model;
     file = { ...file, formatVersion: 23, model: migrated };
+  }
+  if ((file.formatVersion as number) < 24) {
+    // v23 → v24: 도면 표면 거칠기 기호(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 23 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 24, model: migrated };
   }
   return file;
 }

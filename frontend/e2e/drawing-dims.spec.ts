@@ -73,7 +73,7 @@ test('도면 치수 직접 추가·따라가기·지우기', async ({ page }) =>
   await expect(page.getByTestId('dim-value-dim1')).toHaveText('60');
 });
 
-test('도면 공차·상세도 (형식 v23): ±·위아래 공차 글자, 구멍 둘레 상세도 B (2:1 → 배율 바꾸기), 저장 유지', async ({ page }) => {
+test('도면 공차·상세도·거칠기 (형식 v23·v24): ±·위아래 공차 글자, 구멍 둘레 상세도 B (2:1 → 배율 바꾸기), 저장 유지', async ({ page }) => {
   test.setTimeout(90_000);
   await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
   await page.goto('/');
@@ -122,6 +122,15 @@ test('도면 공차·상세도 (형식 v23): ±·위아래 공차 글자, 구멍
   await page.getByTestId('dim-tol-dim1').fill('abc');
   await page.getByTestId('dim-tol-dim1').press('Enter');
   await expect(page.getByTestId('dim-tol-dim1')).toHaveValue('±0.1');
+
+  // 표면 거칠기 (형식 v24): 정면도 윗변을 클릭 → √ Ra 3.2, 목록에서 Ra 1.6 으로
+  await page.getByTestId('roughness-mode').click();
+  await clickView(page, 'front', 2, 9.7);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('mark-row-ra1')).toBeVisible();
+  await expect(sheet.locator('text', { hasText: /^Ra 3\.2$/ })).toHaveCount(1);
+  await page.getByTestId('mark-ra-ra1').selectOption('1.6');
+  await expect(sheet.locator('text', { hasText: /^Ra 1\.6$/ })).toHaveCount(1);
 
   // 상세도: 평면도 구멍 가운데 → 반지름 6 → 상세 B (시트 2:1 × 2 = 4:1)
   await page.getByTestId('detail-mode').click();
