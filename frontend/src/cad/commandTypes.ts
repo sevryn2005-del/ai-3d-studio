@@ -1101,6 +1101,8 @@ export const MeshEditSchema = z.discriminatedUnion('op', [
     verts: vertIds.min(1),
     positions: z.array(Vec3Schema).min(1).max(MAX_POLY_VERTS),
   }),
+  /** 복셀 리메시 (스컬프트 Ctrl+R): 모양을 voxel(mm) 간격의 고른 사각형 그물로 다시 짠다. smooth = 다듬기 횟수 (생략 2) */
+  z.strictObject({ op: z.literal('remesh'), voxel: z.number().min(0.01).max(LIMITS.maxDimension), smooth: z.number().int().min(0).max(10).optional() }),
 ]);
 export type MeshEdit = z.infer<typeof MeshEditSchema>;
 export const MeshEditCommandSchema = z.strictObject({ type: z.literal('mesh_edit'), target: ObjectIdSchema, edit: MeshEditSchema });

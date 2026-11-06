@@ -13,7 +13,7 @@ const PARAM_LABEL: Record<string, string> = {
 
 const MESH_LABEL: Record<string, string> = { cube: '큐브', plane: '평면', uv_sphere: 'UV 구', cylinder: '원기둥', cone: '원뿔', torus: '도넛', grid: '격자' };
 const MESH_EDIT_LABEL: Record<string, string> = {
-  transform: '이동·회전·크기', extrude: '돌출', inset: '인셋', delete: '삭제', loop_cut: '루프 컷', subdivide: '세분', merge: '병합', fill: '면 채우기', set_verts: '스컬프트', bevel: '베벨', bisect: '나이프',
+  transform: '이동·회전·크기', extrude: '돌출', inset: '인셋', delete: '삭제', loop_cut: '루프 컷', subdivide: '세분', merge: '병합', fill: '면 채우기', set_verts: '스컬프트', bevel: '베벨', bisect: '나이프', remesh: '리메시',
 };
 
 const vec = (v: readonly number[]) => `(${v.map(formatMm).join(', ')})`;

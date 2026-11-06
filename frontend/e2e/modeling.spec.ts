@@ -386,3 +386,28 @@ test('나이프(K): 정면에서 가로선을 그어 큐브 옆면 4개를 둘�
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('mesh-stats')).toContainText('면6');
 });
+
+test('리메시 (스컬프트 Ctrl+R): 구를 고른 사각형 그물로, 복셀 크기 지정, 실행 취소 1번', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-uv_sphere').click();
+  await expect(page.getByTestId('mesh-stats')).toBeVisible();
+  const before = (await page.getByTestId('mesh-stats').textContent())!;
+  await page.getByTestId('mode-sculpt').click();
+  await page.getByTestId('sculpt-voxel').fill('1');
+  await page.getByTestId('sculpt-remesh').click();
+  await expect(page.getByTestId('notice')).toContainText('리메시 (복셀 1mm)');
+  await expect(page.getByTestId('mesh-stats')).not.toHaveText(before);
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toHaveText(before);
+  // 자동 복셀 (0) + 단축키
+  await page.getByTestId('sculpt-voxel').fill('0');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.keyboard.press('Control+r');
+  await expect(page.getByTestId('notice')).toContainText('리메시 (복셀 0.5mm)'); // 지름 20mm / 40
+});

@@ -5,7 +5,7 @@ import type { Brush } from '../../cad/sculpt';
 import { invertMask } from './modelingOps';
 import { typeKey } from './modalMath';
 import {
-  canStartModal, deleteSelection, growSelected, selectLinkedVerts, setSubsurfLevel, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
+  canStartModal, deleteSelection, remeshTarget, growSelected, selectLinkedVerts, setSubsurfLevel, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
 } from './modelingOps';
 import { cancelModal, confirmModal } from '../../components/Modeling/ModalController';
 
@@ -125,6 +125,7 @@ export function useModelingKeys() {
       if (mod && key === 'r') {
         e.preventDefault(); // 브라우저 새로 고침 대신
         if (st.mode === 'edit') loopCutSelected();
+        else if (st.mode === 'sculpt') remeshTarget(); // 블렌더 스컬프트 Ctrl+R = 복셀 리메시
         return;
       }
       if (mod || e.shiftKey) return;

@@ -2853,6 +2853,30 @@
                 "positions"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "remesh"
+                },
+                "voxel": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 1000
+                },
+                "smooth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10
+                }
+              },
+              "required": [
+                "op",
+                "voxel"
+              ],
+              "additionalProperties": false
             }
           ]
         }

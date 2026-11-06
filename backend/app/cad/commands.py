@@ -1393,8 +1393,16 @@ class MeshEditSetVerts(Strict):
     positions: Annotated[list[Vec3], Field(min_length=1, max_length=MAX_POLY_VERTS)]
 
 
+class MeshEditRemesh(Strict):
+    """복셀 리메시 (고른 사각형 그물로 다시 짜기)"""
+
+    op: Literal["remesh"]
+    voxel: Annotated[float, _num(0.01, Limits.MAX_DIMENSION)]
+    smooth: Annotated[int, Field(ge=0, le=10)] | None = Field(default=None, exclude_if=lambda v: v is None)
+
+
 MeshEdit = Annotated[
-    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBisect, MeshEditBevel, MeshEditSetVerts],
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBisect, MeshEditBevel, MeshEditSetVerts, MeshEditRemesh],
     Field(discriminator="op"),
 ]
 

@@ -59,6 +59,7 @@ import {
   transformVerts,
 } from './polymesh';
 import { bevelEdges, bisectFaces } from './polymeshSelect';
+import { voxelRemesh } from './remesh';
 import { MAX_EVALUATED_FACES, estimateFaces, evaluateModifiers } from './polymeshModifiers';
 import { helixError, helixProfilePoints } from './sections';
 import { profileOf, resolveProfile } from './sketch';
@@ -609,6 +610,8 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
       e.verts.forEach((v, i) => (verts[v] = [...e.positions[i]!] as V3));
       return { verts, faces: m.faces };
     }
+    case 'remesh':
+      return voxelRemesh(m, e.voxel, e.smooth ?? 2);
   }
 }
 

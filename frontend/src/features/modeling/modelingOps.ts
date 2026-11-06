@@ -2,6 +2,7 @@
  * 모델링 모드 동작 (블렌더 단축키에 대응) — 모델 변경은 전부 명령(submitNow)으로.
  * 키보드(ModelingKeys)·메뉴(ModelingHeader)·속성 패널이 같은 함수를 쓴다.
  */
+import { MAX_REMESH_CELLS, remeshCellCount } from '../../cad/remesh';
 import type { CadObject, MeshEdit, ObjectId } from '../../cad/commandTypes';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { edges, loopCut, selectedFaces, type MeshPrimitive, type PolyMesh, type PrimitiveParams } from '../../cad/polymesh';
@@ -185,6 +186,29 @@ export function densify() {
     { type: 'apply_modifier', target: t.id },
   ]);
   if (r.ok) notify(`점 ${editTarget()?.polymesh.verts.length.toLocaleString() ?? ''}개로 촘촘하게 했습니다`);
+}
+
+/** 리메시 자동 복셀: 가장 긴 변의 1/40 (보기 좋은 값으로) */
+export function autoVoxel(m: PolyMesh): number {
+  const size = Math.max(...[0, 1, 2].map((a) => Math.max(...m.verts.map((v) => v[a]!)) - Math.min(...m.verts.map((v) => v[a]!))));
+  const raw = size / 40;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 2.5, 5, 10].map((k) => k * p).find((v) => v >= raw * 0.8) ?? raw;
+}
+
+/** 복셀 리메시 (스컬프트 Ctrl+R): 고른 사각형 그물로 다시 짜기 — 실행 취소 1번 */
+export function remeshTarget() {
+  const t = editTarget();
+  if (!t) return;
+  const st = useModelingStore.getState();
+  const voxel = st.sculpt.voxel > 0 ? st.sculpt.voxel : autoVoxel(t.polymesh);
+  if (remeshCellCount(t.polymesh, voxel) > MAX_REMESH_CELLS) return notify(`리메시: 복셀 ${voxel}mm 는 이 크기에 너무 작습니다 — 키우세요`);
+  const r = useSceneStore.getState().submitNow({ type: 'mesh_edit', target: t.id, edit: { op: 'remesh', voxel } });
+  if (r.status === 'applied') {
+    st.setMask(null);
+    const m = editTarget()?.polymesh;
+    notify(`리메시 (복셀 ${voxel}mm): 점 ${m?.verts.length.toLocaleString() ?? ''} · 면 ${m?.faces.length.toLocaleString() ?? ''}`);
+  }
 }
 
 /** Ctrl+L: 고른 점과 이어진 조각 전체 */

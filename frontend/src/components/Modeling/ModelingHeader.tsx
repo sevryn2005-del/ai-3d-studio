@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useModelingStore, type SelectMode } from '../../features/modeling/modelingStore';
 import {
-  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, densify, enterSculpt, invertMask, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
+  ADD_MESH_ITEMS, addMesh, canStartModal, deleteSelection, densify, remeshTarget, enterSculpt, invertMask, fillSelected, loopCutSelected, mergeSelected, selectAll, subdivideSelected, toggleEditMode,
 } from '../../features/modeling/modelingOps';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { BRUSH_LABEL, type Brush } from '../../cad/sculpt';
@@ -140,6 +140,13 @@ function SculptBar() {
       <button onClick={invertMask} title="마스크 뒤집기 (Ctrl+I)" data-testid="mask-invert">뒤집기</button>
       <button onClick={densify} title="세분 표면 1단계를 메시에 적용해 점을 늘립니다 (스컬프트가 더 부드럽게)" data-testid="sculpt-densify">
         촘촘하게
+      </button>
+      <label className="slider" title="리메시 복셀 크기 (mm, 0 = 자동: 가장 긴 변의 1/40)">
+        복셀
+        <input type="number" min={0} step={0.5} value={sc.voxel} onChange={(e) => Number(e.target.value) >= 0 && set({ voxel: Number(e.target.value) })} data-testid="sculpt-voxel" style={{ width: 52 }} />
+      </label>
+      <button onClick={remeshTarget} title="복셀 리메시 (Ctrl+R): 고른 사각형 그물로 다시 짭니다 — 늘어난 면을 고르게, 겹친 조각은 하나로" data-testid="sculpt-remesh">
+        리메시
       </button>
     </>
   );
