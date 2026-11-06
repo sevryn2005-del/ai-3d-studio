@@ -52,3 +52,32 @@ test('DXF 가져오기 → 새 스케치 → 영역 돌출, 스케치에 더 가
   await page.keyboard.press('Control+z');
   await expect.poll(async () => (await sketches(page)).find((s) => s.id === sk.id)!.entities.length).toBe(3);
 });
+
+// 30×20mm 둥근 판(rx 3) + 가운데 구멍 + 베지어 물결 (열린 경로) — y 가 아래인 SVG 좌표
+const BADGE = `<svg xmlns="http://www.w3.org/2000/svg" width="30mm" height="20mm" viewBox="0 0 30 20">
+  <rect x="0" y="0" width="30" height="20" rx="3"/>
+  <circle cx="15" cy="10" r="4"/>
+  <path d="M2 18 C 8 14, 22 22, 28 18" fill="none"/>
+</svg>`;
+
+test('SVG 가져오기 → 둥근 판(호 변) + 구멍 → 영역 돌출', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await expect.poll(async () => (await sources(page)).box_1?.source, { timeout: 20_000 }).toBeTruthy();
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByTestId('import-mesh').click()]);
+  await chooser.setFiles({ name: 'badge.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(BADGE) });
+  await expect(page.getByTestId('notice')).toContainText('닫힌 윤곽 1 · 열린 경로 1 · 원 1');
+  const sk = (await sketches(page)).find((s) => s.entities.some((e) => e.type === 'polygon'))!;
+  expect(sk.entities.map((e) => e.type).sort()).toEqual(['circle', 'path', 'polygon']);
+  await page.getByTestId('add-region').click();
+  await page.getByTestId('extrude-region1').click();
+  const size = async () => {
+    const e = (await sources(page)).extrude_1;
+    return e ? [Math.round((e.max[0]! - e.min[0]!) * 100) / 100, Math.round((e.max[1]! - e.min[1]!) * 100) / 100] : [0, 0];
+  };
+  await expect.poll(size, { timeout: 30_000 }).toEqual([30, 20]);
+  const e = (await sources(page)).extrude_1!;
+  expect(e.max[1]).toBeCloseTo(0, 2); // SVG 위쪽(y 0) = 스케치 v 0, 아래로 갈수록 −
+});

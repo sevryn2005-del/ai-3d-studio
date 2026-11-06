@@ -7,6 +7,7 @@
  */
 import type { CadCommand, ObjectId, Point2 } from './commandTypes';
 import { LIMITS, MAX_REGION_ITEMS } from './commandTypes';
+import { simplifyToLimit } from './simplify';
 
 export interface PathCommand {
   type: 'M' | 'L' | 'Q' | 'C' | 'Z';
@@ -30,46 +31,6 @@ export interface TextOptions {
   center: Point2;
   /** 줄 간격 (글자 크기 배수) */
   lineHeight?: number;
-}
-
-/** 꺾은선 단순화 (Douglas–Peucker, 닫힌 고리): 첫 점과 가장 먼 점에서 둘로 나눠 각각 */
-function simplify(pts: Point2[], tol: number): Point2[] {
-  if (pts.length <= 3) return pts;
-  let far = 0;
-  let farD = -1;
-  pts.forEach((p, k) => {
-    const d = Math.hypot(p[0] - pts[0]![0], p[1] - pts[0]![1]);
-    if (d > farD) [far, farD] = [k, d];
-  });
-  const ka = simplify2(pts.slice(0, far + 1), tol);
-  const kb = simplify2([...pts.slice(far), pts[0]!], tol);
-  return pts.filter((_, k) => (k <= far ? ka[k] : kb[k - far]));
-}
-
-/** 열린 꺾은선 DP: 남길 점 표시 */
-function simplify2(pts: Point2[], tol: number): boolean[] {
-  const keep = new Array<boolean>(pts.length).fill(false);
-  keep[0] = keep[pts.length - 1] = true;
-  const rec = (i: number, j: number) => {
-    const [ax, ay] = pts[i]!;
-    const [bx, by] = pts[j]!;
-    const len = Math.hypot(bx - ax, by - ay) || 1e-12;
-    let best = -1;
-    let bestD = tol;
-    for (let k = i + 1; k < j; k++) {
-      const d = Math.abs((bx - ax) * (ay - pts[k]![1]) - (ax - pts[k]![0]) * (by - ay)) / len;
-      if (d > bestD) {
-        bestD = d;
-        best = k;
-      }
-    }
-    if (best < 0) return;
-    keep[best] = true;
-    rec(i, best);
-    rec(best, j);
-  };
-  rec(0, pts.length - 1);
-  return keep;
 }
 
 export function signedArea(pts: Point2[]): number {
@@ -152,10 +113,7 @@ export function textContours(font: GlyphSource, o: TextOptions): Point2[][] {
       const out: Point2[] = [];
       for (const p of pts) if (!out.length || Math.hypot(p[0] - out[out.length - 1]![0], p[1] - out[out.length - 1]![1]) > eps) out.push(p);
       while (out.length > 1 && Math.hypot(out[0]![0] - out[out.length - 1]![0], out[0]![1] - out[out.length - 1]![1]) <= eps) out.pop();
-      let tol = o.size * 0.002;
-      let s = simplify(out, tol);
-      while (s.length > LIMITS.maxPolygonPoints) s = simplify(out, (tol *= 1.5));
-      return s;
+      return simplifyToLimit(out, LIMITS.maxPolygonPoints, o.size * 0.002);
     })
     .filter((pts) => pts.length >= 3 && Math.abs(signedArea(pts)) > o.size * o.size * 1e-5);
   if (!cleaned.length) return [];

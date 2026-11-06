@@ -287,8 +287,8 @@ export function SketchProperties({ sketch, model }: { sketch: Sketch; model: Mod
             + 영역 (합치기·빼기)
           </button>
         )}
-        <button title="DXF 도면(선·호·원·폴리선·타원·스플라인)을 이 스케치에 가져옵니다 — 닫힌 윤곽은 돌출할 수 있는 다각형으로" data-testid="import-dxf" onClick={() => void importDxf(undefined, sketch.id)}>
-          DXF 가져오기
+        <button title="DXF 도면·SVG 도안(선·호·원·폴리선·타원·스플라인·경로)을 이 스케치에 가져옵니다 — 닫힌 윤곽은 돌출할 수 있는 다각형으로" data-testid="import-dxf" onClick={() => void importDxf(undefined, sketch.id)}>
+          DXF·SVG 가져오기
         </button>
       </div>
       <SketchTextPanel sketch={sketch} />

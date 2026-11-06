@@ -13,6 +13,7 @@ import { localSize } from '../../cad/objectKinds';
 import { helixError, helixProfilePoints } from '../../cad/sections';
 import { parseObj, parseStl, prepareImport, toBase64 } from '../../cad/meshData';
 import { dxfSketchCommands, parseDxf } from '../../cad/dxfImport';
+import { parseSvg } from '../../cad/svgImport';
 import { LIMITS } from '../../cad/commandTypes';
 import { pickFileWithInput } from '../projects/projectStorage';
 import { nameFromFileName, parseProject } from '../projects/projectFile';
@@ -365,12 +366,12 @@ export const MAX_STEP_BYTES = 12_000_000;
 export async function importMeshFile() {
   let file: File;
   try {
-    file = await pickFileWithInput('.stl,.obj,.step,.stp,.dxf,model/stl,model/step,image/vnd.dxf,text/plain');
+    file = await pickFileWithInput('.stl,.obj,.step,.stp,.dxf,.svg,model/stl,model/step,image/vnd.dxf,image/svg+xml,text/plain');
   } catch {
     return;
   }
   const scene = useSceneStore.getState();
-  if (/\.dxf$/i.test(file.name)) return importDxf(file);
+  if (/\.(dxf|svg)$/i.test(file.name)) return importDxf(file);
   if (/\.(step|stp)$/i.test(file.name)) {
     // STEP: 정확한 곡면 그대로 저장하고 정밀 엔진(OCCT)이 읽는다. 원점은 엔진이 바닥면 중심으로 맞춘다
     if (file.size > MAX_STEP_BYTES) {
@@ -406,21 +407,22 @@ export async function importMeshFile() {
 const MAX_DXF_BYTES = 20_000_000;
 
 /**
- * DXF 가져오기: 2D 도면을 스케치로 (선·호·원·폴리선·타원·스플라인 → 다각형·경로·원·타원).
+ * DXF·SVG 가져오기: 2D 도면·도안을 스케치로 (선·호·원·폴리선·타원·스플라인·SVG 경로 → 다각형·경로·원·타원).
  * sketchId 가 있으면 그 스케치에 더하고, 없으면 XY 평면에 새 스케치를 만든다. 전체 = 실행 취소 1번
  */
 export async function importDxf(file?: File, sketchId?: string) {
   if (!file) {
     try {
-      file = await pickFileWithInput('.dxf,image/vnd.dxf,application/dxf');
+      file = await pickFileWithInput('.dxf,.svg,image/vnd.dxf,application/dxf,image/svg+xml');
     } catch {
       return;
     }
   }
   const scene = useSceneStore.getState();
-  if (file.size > MAX_DXF_BYTES) return scene.reportError(`가져오기 실패: DXF 파일은 ${MAX_DXF_BYTES / 1_000_000}MB 까지 가져올 수 있습니다`);
+  if (file.size > MAX_DXF_BYTES) return scene.reportError(`가져오기 실패: DXF·SVG 파일은 ${MAX_DXF_BYTES / 1_000_000}MB 까지 가져올 수 있습니다`);
   try {
-    const shapes = parseDxf(await file.text());
+    const isSvg = /\.svg$/i.test(file.name);
+    const shapes = isSvg ? parseSvg(await file.text()) : parseDxf(await file.text());
     const model = selectModel(scene);
     const existing = sketchId ? model.sketches.find((k) => k.id === sketchId) : undefined;
     const sid = existing?.id ?? nextId(model, 'sketch');
@@ -428,7 +430,7 @@ export async function importDxf(file?: File, sketchId?: string) {
     const room = LIMITS.maxSketchEntities - (existing?.entities.length ?? 0);
     const r = dxfSketchCommands(shapes, sid, taken, room);
     if (!r.commands.length) return scene.reportError(`가져오기 실패: ${file.name} 에서 읽을 수 있는 선·호·원이 없습니다${r.warnings.length ? ` (${r.warnings.join(' · ')})` : ''}`);
-    const name = file.name.replace(/\.dxf$/i, '').slice(0, 100) || '가져온 DXF';
+    const name = file.name.replace(/\.(dxf|svg)$/i, '').slice(0, 100) || (isSvg ? '가져온 SVG' : '가져온 DXF');
     const head: CadCommand[] = existing ? [] : [{ type: 'create_sketch', id: sid, name, plane: { type: 'XY', offset: 0 } }];
     const res = scene.dispatchBatch([...head, ...r.commands]);
     if (!res.ok) return;

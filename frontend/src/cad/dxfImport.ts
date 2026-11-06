@@ -9,6 +9,7 @@
  */
 import type { CadCommand, ObjectId, Point2 } from './commandTypes';
 import { LIMITS } from './commandTypes';
+import { simplifyToLimit } from './simplify';
 
 export interface DxfSeg {
   a: Point2;
@@ -362,6 +363,17 @@ export function dxfSketchCommands(shapes: DxfShapes, sketch: ObjectId, taken: Se
       while (chain.length < 3) {
         const k = chain.reduce((best, s, i) => (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > Math.hypot(chain[best]!.b[0] - chain[best]!.a[0], chain[best]!.b[1] - chain[best]!.a[1]) ? i : best), 0);
         chain = [...chain.slice(0, k), ...splitSeg(chain[k]!), ...chain.slice(k + 1)];
+      }
+      if (chain.length > maxPts && chain.every((sg) => Math.abs(sg.bulge) < 1e-9)) {
+        // 곡선을 잘게 꺾은 윤곽 (SVG 베지어·스플라인): 모양이 거의 같도록 점을 줄인다
+        const pts = chain.map((sg) => sg.a);
+        let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+        for (const [x, y] of pts) [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
+        const simple = simplifyToLimit(pts, maxPts, Math.max(x1 - x0, y1 - y0) * 0.001);
+        if (simple.length >= 3) {
+          chain = simple.map((a, k) => ({ a, b: simple[(k + 1) % simple.length]!, bulge: 0 }));
+          warnings.push(`점이 많은 닫힌 윤곽은 ${maxPts}점 이하로 단순화했습니다`);
+        }
       }
       if (chain.length <= maxPts) {
         pushPoly(chain, true);

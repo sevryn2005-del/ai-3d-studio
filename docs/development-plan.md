@@ -553,3 +553,15 @@
   주름(Shift+C): 안쪽으로 파면서 둘레 점을 붓 가운데로 모아 날카로운 골 (Ctrl = 솟은 능선).
 - 검증: 단위(8단계 = 점이 반지름 0.5 원호 위·닫힘·부피가 모따기와 원호 사이, 큐브 모든 선 3단계 닫힘, 점토는 평면 위 점 그대로, 주름 골·모음·능선),
   E2E (베벨 중 휠 3번 = 4단계, PageDown = 3단계 → 면 9·닫힘 → 실행 취소, C·Shift+C 브러시 전환, 주름 획이 구를 판다).
+
+## 51. SVG 가져오기 (도안 → 스케치) — ✅ 완료
+
+- 툴바 "가져오기"·스케치 속성 "DXF·SVG 가져오기"가 .svg 도 받는다 (DXF 와 같은 흐름: 새 스케치 또는 고른 스케치, 실행 취소 1번).
+- 순수 함수 `cad/svgImport.ts` → DXF 와 같은 도형 묶음 → 같은 `dxfSketchCommands` (이어 붙이기·반시계·호 변). 저장 형식 그대로.
+  path(M L H V C S Q T A Z, 상대·절대, 이어지는 좌표, 붙은 호 플래그), rect(rx/ry 둥근 모서리), circle, ellipse, line, polyline, polygon.
+  transform(matrix·translate·scale·rotate·skewX·skewY)·중첩 g, viewBox + width 단위(mm·cm·in·pt·pc·px=96dpi) → mm, y 뒤집기.
+  원호(rx = ry, 닮음 변환)는 호 변, 원·타원은 원·타원 요소(닮음 변환일 때), 그 밖(베지어·타원 호·늘린 원)은 꺾은선.
+  defs·clipPath·mask·symbol·display:none 은 건너뛰고 text·image·use 는 알림.
+- 점이 64개 넘는 닫힌 꺾은선 윤곽은 Douglas–Peucker 로 단순화해 다각형으로 (돌출 가능) — 공용 `cad/simplify.ts` (글꼴 텍스트와 같은 함수).
+- 검증: 단위 6개 (mm viewBox·y 뒤집기, px 96dpi·둥근 rect 호 4개, 상대 경로·원호·베지어, transform 회전 타원·늘린 원, defs/숨김/알림·단순화, 형식 오류),
+  E2E (둥근 판 + 구멍 + 물결 경로 SVG → 영역 돌출 30×20mm).

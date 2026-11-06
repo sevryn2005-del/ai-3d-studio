@@ -85,7 +85,7 @@ export function Toolbar() {
             다시 실행
           </button>
           <span className="sep" />
-          <button onClick={() => void importMeshFile()} title="STL·OBJ·STEP 파일을 가져와 객체로 (다른 CAD·블렌더에서 만든 모델), DXF 도면은 새 스케치로" data-testid="import-mesh">
+          <button onClick={() => void importMeshFile()} title="STL·OBJ·STEP 파일을 가져와 객체로 (다른 CAD·블렌더에서 만든 모델), DXF 도면·SVG 도안은 새 스케치로" data-testid="import-mesh">
             가져오기
           </button>
           <ExportMenu />
