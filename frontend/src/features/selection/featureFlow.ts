@@ -12,6 +12,8 @@ import { childIds, topLevelObjects } from '../../cad/modelGraph';
 import { localSize } from '../../cad/objectKinds';
 import { helixError, helixProfilePoints } from '../../cad/sections';
 import { parseObj, parseStl, prepareImport, toBase64 } from '../../cad/meshData';
+import { dxfSketchCommands, parseDxf } from '../../cad/dxfImport';
+import { LIMITS } from '../../cad/commandTypes';
 import { pickFileWithInput } from '../projects/projectStorage';
 import { nameFromFileName, parseProject } from '../projects/projectFile';
 import { useProjectStore } from '../projects/projectStore';
@@ -363,11 +365,12 @@ export const MAX_STEP_BYTES = 12_000_000;
 export async function importMeshFile() {
   let file: File;
   try {
-    file = await pickFileWithInput('.stl,.obj,.step,.stp,model/stl,model/step,text/plain');
+    file = await pickFileWithInput('.stl,.obj,.step,.stp,.dxf,model/stl,model/step,image/vnd.dxf,text/plain');
   } catch {
     return;
   }
   const scene = useSceneStore.getState();
+  if (/\.dxf$/i.test(file.name)) return importDxf(file);
   if (/\.(step|stp)$/i.test(file.name)) {
     // STEP: 정확한 곡면 그대로 저장하고 정밀 엔진(OCCT)이 읽는다. 원점은 엔진이 바닥면 중심으로 맞춘다
     if (file.size > MAX_STEP_BYTES) {
@@ -395,6 +398,48 @@ export async function importMeshFile() {
       useProjectStore.getState().set({ notice: `${file.name}: 삼각형 ${r.triangles.toLocaleString()}개${meters ? ' (미터 → mm 로 1000배)' : ''}` });
       useEditorStore.getState().requestFit();
     }
+  } catch (e) {
+    scene.reportError(`가져오기 실패: ${(e as Error).message}`);
+  }
+}
+
+const MAX_DXF_BYTES = 20_000_000;
+
+/**
+ * DXF 가져오기: 2D 도면을 스케치로 (선·호·원·폴리선·타원·스플라인 → 다각형·경로·원·타원).
+ * sketchId 가 있으면 그 스케치에 더하고, 없으면 XY 평면에 새 스케치를 만든다. 전체 = 실행 취소 1번
+ */
+export async function importDxf(file?: File, sketchId?: string) {
+  if (!file) {
+    try {
+      file = await pickFileWithInput('.dxf,image/vnd.dxf,application/dxf');
+    } catch {
+      return;
+    }
+  }
+  const scene = useSceneStore.getState();
+  if (file.size > MAX_DXF_BYTES) return scene.reportError(`가져오기 실패: DXF 파일은 ${MAX_DXF_BYTES / 1_000_000}MB 까지 가져올 수 있습니다`);
+  try {
+    const shapes = parseDxf(await file.text());
+    const model = selectModel(scene);
+    const existing = sketchId ? model.sketches.find((k) => k.id === sketchId) : undefined;
+    const sid = existing?.id ?? nextId(model, 'sketch');
+    const taken = new Set(existing?.entities.map((e) => e.id) ?? []);
+    const room = LIMITS.maxSketchEntities - (existing?.entities.length ?? 0);
+    const r = dxfSketchCommands(shapes, sid, taken, room);
+    if (!r.commands.length) return scene.reportError(`가져오기 실패: ${file.name} 에서 읽을 수 있는 선·호·원이 없습니다${r.warnings.length ? ` (${r.warnings.join(' · ')})` : ''}`);
+    const name = file.name.replace(/\.dxf$/i, '').slice(0, 100) || '가져온 DXF';
+    const head: CadCommand[] = existing ? [] : [{ type: 'create_sketch', id: sid, name, plane: { type: 'XY', offset: 0 } }];
+    const res = scene.dispatchBatch([...head, ...r.commands]);
+    if (!res.ok) return;
+    scene.select(sid);
+    const c = r.counts;
+    const parts = [c.polygons && `닫힌 윤곽 ${c.polygons}`, c.paths && `열린 경로 ${c.paths}`, c.circles && `원 ${c.circles}`, c.ellipses && `타원 ${c.ellipses}`].filter(Boolean);
+    const unit = shapes.unitLabel !== 'mm' ? ` (${shapes.unitLabel} → mm)` : '';
+    useProjectStore.getState().set({ notice: `${file.name}: ${parts.join(' · ')}${unit}${r.warnings.length ? ` — ${r.warnings.join(' · ')}` : ''}` });
+    const ed = useEditorStore.getState();
+    if (!existing) ed.requestView('normal');
+    ed.requestFit();
   } catch (e) {
     scene.reportError(`가져오기 실패: ${(e as Error).message}`);
   }
