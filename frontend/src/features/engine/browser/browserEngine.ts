@@ -5,7 +5,7 @@
  */
 import type { DrawingSection, ModelDefinition } from '../../../cad/commandTypes';
 import { validateMesh } from '../../backend/renderMesh';
-import { EngineError, type CadEngine, type EngineEvaluation, type ExportFormat, type DrawingViewName } from '../types';
+import { EngineError, type CadEngine, type EngineEvaluation, type ExportFormat, type StandardViewName, type AuxDirection } from '../types';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 export const BROWSER_JOB_TIMEOUT_MS = 20_000;
@@ -98,8 +98,8 @@ export function createBrowserEngine(
       return r.pairs;
     },
 
-    async drawing(model: ModelDefinition, views: readonly DrawingViewName[], section?: DrawingSection, signal?: AbortSignal) {
-      const r = await request({ type: 'drawing', model, views: [...views], ...(section ? { section } : {}) }, signal);
+    async drawing(model: ModelDefinition, views: readonly StandardViewName[], section?: DrawingSection, signal?: AbortSignal, aux?: readonly AuxDirection[]) {
+      const r = await request({ type: 'drawing', model, views: [...views], ...(section ? { section } : {}), ...(aux?.length ? { aux: [...aux] } : {}) }, signal);
       if (!r.ok) throw new EngineError(r.error);
       if (r.type !== 'drawing') throw new EngineError('잘못된 응답입니다');
       return r.views;

@@ -4,15 +4,15 @@
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_DRAWING, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
+import { DEFAULT_DRAWING, MAX_DRAWING_AUX, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
 import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, RA_VALUES, snapCircle, snapEdge, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
-import type { DrawingView, DrawingViewName } from '../../features/engine/types';
+import type { DrawingView, StandardViewName } from '../../features/engine/types';
 import { sheetToDxf, sheetToSvg } from '../../features/drawing/exportSheet';
-import { buildSheet, DETAIL_LABELS, dimText, PAPERS, scaleLabel, STANDARD_SCALES, tolText, type Paper } from '../../features/drawing/sheet';
-import { ALL_VIEWS, DRAWING_VIEWS } from '../../features/drawing/views';
+import { AUX_LABELS, buildSheet, DETAIL_LABELS, dimText, PAPERS, scaleLabel, STANDARD_SCALES, tolText, type Paper } from '../../features/drawing/sheet';
+import { ALL_VIEWS, auxDirection, DRAWING_VIEWS } from '../../features/drawing/views';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
 
@@ -49,6 +49,7 @@ function DrawingWindow() {
     if (!next.section) delete next.section;
     if (!next.details?.length) delete next.details;
     if (!next.marks?.length) delete next.marks;
+    if (!next.aux?.length) delete next.aux;
     submitNow({ type: 'set_drawing', drawing: next });
   };
   const title = settings.title ?? projectName;
@@ -63,6 +64,7 @@ function DrawingWindow() {
   // 도면 설정만 바뀌면 형상을 다시 투상하지 않는다
   const geometry = useMemo(() => ({ ...model, drawing: undefined }), [model.objects, model.sketches, model.mates]); // eslint-disable-line react-hooks/exhaustive-deps
   const sectionKey = JSON.stringify(settings.section ?? null);
+  const auxKey = JSON.stringify(settings.aux ?? []);
 
   // 형상·엔진·보기·단면이 바뀌면 다시 투상 (늦게 온 결과는 버린다)
   useEffect(() => {
@@ -72,7 +74,7 @@ function DrawingWindow() {
     setBusy(true);
     setError(null);
     engine
-      .drawing(geometry, chosen, settings.section, ctl.signal)
+      .drawing(geometry, chosen, settings.section, ctl.signal, (settings.aux ?? []).map((a) => auxDirection(a.view, a.angle)))
       .then((v) => {
         if (ctl.signal.aborted) return;
         setViews(v);
@@ -85,10 +87,10 @@ function DrawingWindow() {
         setBusy(false);
       });
     return () => ctl.abort();
-  }, [geometry, engineId, chosen.join(','), sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [geometry, engineId, chosen.join(','), sectionKey, auxKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 치수 추가 모드: 종류 → 끝점 클릭(꼭짓점에 붙음) → 치수선 위치 클릭. Esc 는 모드를 먼저 끝낸다
-  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | 'roughness' | null>(null);
+  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | 'roughness' | 'aux' | null>(null);
   const [ra, setRa] = useState(3.2);
   const [pending, setPending] = useState<{ view: PickView; p: [number, number] }[]>([]);
   const [hover, setHover] = useState<{ view: PickView; p: [number, number]; paper: [number, number]; r?: number } | null>(null);
@@ -125,6 +127,7 @@ function DrawingWindow() {
             ...(shownDims?.length ? { dims: shownDims } : {}),
             ...(settings.details?.length ? { details: settings.details } : {}),
             ...(settings.marks?.length ? { marks: settings.marks } : {}),
+            ...(settings.aux?.length ? { aux: settings.aux } : {}),
           })
         : null,
     [views, chosen.length, settings, title, shownDims],
@@ -132,7 +135,7 @@ function DrawingWindow() {
   const svg = useMemo(() => (sheet ? sheetToSvg(sheet) : ''), [sheet]);
   const fileBase = `${title || projectName} 도면`;
   const [W, H] = PAPERS[settings.paper];
-  const toggle = (v: DrawingViewName) => update({ views: chosen.includes(v) ? chosen.filter((x) => x !== v) : ALL_VIEWS.filter((x) => x === v || chosen.includes(x)) });
+  const toggle = (v: StandardViewName) => update({ views: chosen.includes(v) ? chosen.filter((x) => x !== v) : ALL_VIEWS.filter((x) => x === v || chosen.includes(x)) });
   /** 단면 위치 기본값: 형상 가운데 (정면 단면 = 평면도의 y 가운데, 우측면 단면 = 정면도의 x 가운데) */
   const sectionCenter = (view: 'front' | 'right') => {
     const ref = views?.find((v) => v.name === (view === 'front' ? 'top' : 'front'));
@@ -183,6 +186,7 @@ function DrawingWindow() {
     return `detail${n}`;
   };
   const marks = settings.marks ?? [];
+  const auxList = settings.aux ?? [];
   const nextMarkId = () => {
     let n = 1;
     while (marks.some((m) => m.id === `ra${n}`)) n++;
@@ -191,7 +195,7 @@ function DrawingWindow() {
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return setHover(null);
-    if (dimMode === 'roughness') {
+    if (dimMode === 'roughness' || dimMode === 'aux') {
       const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
       return setHover(e && h.view ? { view: h.view, p: e.p, paper: toPaper(h.view, e.p) } : null);
     }
@@ -216,6 +220,21 @@ function DrawingWindow() {
   const onClick = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return;
+    if (dimMode === 'aux') {
+      // 보조 투상도: 고른 선(기울어진 면의 모서리)에 수직이고 형상 바깥쪽 방향에서 본다
+      const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
+      if (!e || !h.view || auxList.length >= MAX_DRAWING_AUX) return;
+      let n: [number, number] = [-e.dir[1], e.dir[0]];
+      const c: [number, number] = [(h.v.bounds[0] + h.v.bounds[2]) / 2, (h.v.bounds[1] + h.v.bounds[3]) / 2];
+      if ((e.p[0] - c[0]) * n[0] + (e.p[1] - c[1]) * n[1] < 0) n = [-n[0], -n[1]];
+      const angle = Math.round(((Math.atan2(n[1], n[0]) * 180) / Math.PI) * 100) / 100 + 0;
+      let k = 1;
+      while (auxList.some((a) => a.id === `aux${k}`)) k++;
+      update({ aux: [...auxList, { id: `aux${k}`, view: h.view, angle }] });
+      setDimMode(null);
+      setHover(null);
+      return;
+    }
     if (dimMode === 'roughness') {
       // 표면 거칠기: 보이는 선 위 점 (계속 찍을 수 있음, Esc 로 끝)
       const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
@@ -254,7 +273,7 @@ function DrawingWindow() {
   };
   /** 세 번째 클릭: 치수선 위치 (종이 mm, 부호 = 방향) */
   const placeDim = (P: [number, number]) => {
-    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail' || dimMode === 'roughness') return;
+    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail' || dimMode === 'roughness' || dimMode === 'aux') return;
     const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
     const offset = dimOffsetAt(dimMode, toPaper(a.view, a.p), toPaper(b.view, b.p), P);
     const v = viewOf(a.view)!;
@@ -401,7 +420,9 @@ function DrawingWindow() {
           </div>
           {dimMode && (
             <p className="muted small" data-testid="dim-hint">
-              {dimMode === 'roughness'
+              {dimMode === 'aux'
+                ? '기울어진 면의 모서리(보이는 선)를 클릭하세요 — 그 선에 수직인 방향에서 본 보조 투상도를 넣습니다'
+                : dimMode === 'roughness'
                 ? `표면(보이는 선)을 클릭하세요 — Ra ${ra}`
                 : dimMode === 'detail'
                 ? pending.length === 0
@@ -519,6 +540,50 @@ function DrawingWindow() {
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </fieldset>
+        <fieldset className="drawing-dims">
+          <legend>보조 투상도 (기울어진 면의 실제 모양)</legend>
+          <button
+            aria-pressed={dimMode === 'aux'}
+            disabled={auxList.length >= MAX_DRAWING_AUX}
+            onClick={() => {
+              setDimMode(dimMode === 'aux' ? null : 'aux');
+              setPending([]);
+            }}
+            data-testid="aux-mode"
+            title="정면·평면·우측면도에서 기울어진 면의 모서리를 클릭하면, 그 면을 똑바로 마주 본 투상을 빈 자리에 넣습니다 (최대 2개)"
+          >
+            + 보조 투상도
+          </button>
+          {auxList.length > 0 && (
+            <ul className="drawing-dim-list">
+              {auxList.map((a, k) => (
+                <li key={a.id} data-testid={`aux-row-${a.id}`}>
+                  <span>
+                    {AUX_LABELS[k]} · {DRAWING_VIEWS[a.view].label}에서
+                  </span>
+                  <input
+                    type="number"
+                    step="any"
+                    aria-label={`${a.id} 방향 (°)`}
+                    title="보는 방향 (°, 보기의 오른쪽에서 반시계)"
+                    key={`${a.id}:${a.angle}`}
+                    defaultValue={a.angle}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && Math.abs(v) <= 360 && v !== a.angle) update({ aux: auxList.map((x) => (x.id === a.id ? { ...x, angle: v } : x)) });
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                    data-testid={`aux-angle-${a.id}`}
+                  />
+                  <span>°</span>
+                  <button className="cancel" onClick={() => update({ aux: auxList.filter((x) => x.id !== a.id) })} title="보조 투상도 지우기" data-testid={`aux-delete-${a.id}`}>
+                    ✕
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
         </fieldset>

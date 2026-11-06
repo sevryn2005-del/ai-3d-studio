@@ -682,6 +682,17 @@ export const DrawingMarkSchema = z.strictObject({
 });
 export type DrawingMark = z.infer<typeof DrawingMarkSchema>;
 export const MAX_DRAWING_MARKS = 50;
+/**
+ * 보조 투상도 (형식 v25): 부모 보기(view)에서 angle(°, 보기 x 축에서 반시계) 방향 쪽에서 본 투상 — 그 방향에 수직인 기울어진 면이
+ * 실제 모양으로 보인다 (features/drawing/views.ts auxDirection). 엔진은 순서대로 aux1, aux2 로 투상한다
+ */
+export const DrawingAuxSchema = z.strictObject({
+  id: ObjectIdSchema,
+  view: z.enum(['front', 'top', 'right']),
+  angle: z.number().min(-360).max(360),
+});
+export type DrawingAux = z.infer<typeof DrawingAuxSchema>;
+export const MAX_DRAWING_AUX = 2;
 export const MAX_DRAWING_DIMS = 100;
 export const DrawingSettingsSchema = z.strictObject({
   paper: z.enum(['A4', 'A3']),
@@ -695,6 +706,7 @@ export const DrawingSettingsSchema = z.strictObject({
   dims: z.array(DrawingDimSchema).max(MAX_DRAWING_DIMS).optional(),
   details: z.array(DrawingDetailSchema).max(MAX_DRAWING_DETAILS).optional(),
   marks: z.array(DrawingMarkSchema).max(MAX_DRAWING_MARKS).optional(),
+  aux: z.array(DrawingAuxSchema).max(MAX_DRAWING_AUX).optional(),
 });
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
@@ -706,7 +718,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 24;
+export const MODEL_SCHEMA_VERSION = 25;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

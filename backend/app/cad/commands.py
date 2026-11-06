@@ -967,6 +967,17 @@ class DrawingMark(Strict):
 MAX_DRAWING_MARKS = 50
 
 
+class DrawingAux(Strict):
+    """보조 투상도 (형식 v25): 부모 보기에서 angle(°) 방향 쪽에서 본 투상"""
+
+    id: ObjectId
+    view: Literal["front", "top", "right"]
+    angle: Annotated[float, _num(-360, 360)]
+
+
+MAX_DRAWING_AUX = 2
+
+
 class DrawingDim(Strict):
     """사용자 치수 (형식 v17): 수평·수직·평행(a·b) 또는 지름(a = 원 중심). offset = 종이 mm"""
 
@@ -996,10 +1007,11 @@ class DrawingSettings(Strict):
     dims: Annotated[list[DrawingDim] | None, Field(max_length=MAX_DRAWING_DIMS, exclude_if=lambda v: v is None)] = None
     details: Annotated[list[DrawingDetail] | None, Field(max_length=MAX_DRAWING_DETAILS, exclude_if=lambda v: v is None)] = None
     marks: Annotated[list[DrawingMark] | None, Field(max_length=MAX_DRAWING_MARKS, exclude_if=lambda v: v is None)] = None
+    aux: Annotated[list[DrawingAux] | None, Field(max_length=MAX_DRAWING_AUX, exclude_if=lambda v: v is None)] = None
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[24]
+    schemaVersion: Literal[25]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

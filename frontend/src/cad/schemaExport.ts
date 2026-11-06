@@ -836,7 +836,7 @@ export const ASSEMBLY_COMMANDS: unknown[] = [
  * 보기마다 보이는 선·숨은선 길이 합(mm, 원은 π/48 표본), 보이는 선 범위, 정면으로 보이는 원 반지름.
  */
 type DrawingExpect = { visible?: number; hidden?: number; bounds: number[]; circles?: number[]; axes?: number; section?: number };
-export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { view: 'front' | 'right'; offset: number }; views: Record<string, DrawingExpect> }> = {
+export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { view: 'front' | 'right'; offset: number }; aux?: { toward: number[]; right: number[] }[]; views: Record<string, DrawingExpect> }> = {
   'block-blind-hole': {
     // 40×20×10 블록 윗면에 지름 6 깊이 5 막힌 구멍: 정면·우측면 숨은선 = 구멍 양옆 5 × 2 + 바닥 6
     commands: [
@@ -873,6 +873,17 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { vi
       top: { visible: 120 + 6 * Math.PI, hidden: 0, bounds: [-20, -10, 20, 10], circles: [3] },
     },
   },
+  'block-aux-45': {
+    // 보조 투상도 (형식 v25): 정면도에서 45° 위 오른쪽 방향 쪽에서 본다 = toward (1, 0, 1)/√2, right (1, 0, −1)/√2 (views.ts auxDirection('front', 45))
+    // 보기 좌표 x' = (x − z)/√2, y' = y → 40×20×10 블록 범위 x' −30/√2 … 20/√2, y' −10 … 10
+    commands: [{ type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 }],
+    aux: [{ toward: [Math.SQRT1_2, 0, Math.SQRT1_2], right: [Math.SQRT1_2, 0, -Math.SQRT1_2] }],
+    views: {
+      front: { visible: 100, hidden: 0, bounds: [-20, 0, 20, 10] },
+      // 숨은선 = 왼쪽 아래 모서리 (x −20, z 0, y 방향 20) 하나 — 위·오른쪽에서 보면 가려진다
+      aux1: { hidden: 20, bounds: [-30 / Math.SQRT2, -10, 20 / Math.SQRT2, 10] },
+    },
+  },
   'object-behind-object': {
     // 앞 블록 20³ 뒤에 블록 10³: 정면에서 뒤 블록은 숨은선 (바닥선은 앞 블록 바닥과 겹쳐 지워짐 → 10 × 3)
     commands: [
@@ -888,7 +899,7 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { vi
 
 export function buildDrawingFixture() {
   return Object.fromEntries(
-    Object.entries(DRAWING_CASES).map(([name, c]) => [name, { views: c.views, ...(c.section ? { section: c.section } : {}), model: buildSketchPlateFixture(c.commands) }]),
+    Object.entries(DRAWING_CASES).map(([name, c]) => [name, { views: c.views, ...(c.section ? { section: c.section } : {}), ...(c.aux ? { aux: c.aux } : {}), model: buildSketchPlateFixture(c.commands) }]),
   );
 }
 

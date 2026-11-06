@@ -3,7 +3,7 @@ import type { DrawingView } from '../engine/types';
 import { cleanHidden } from './clean';
 import { dxfText, sheetToDxf, sheetToSvg } from './exportSheet';
 import { buildSheet, clipToCircle, hatch, scaleLabel, tolText, type SheetOptions } from './sheet';
-import { projectPoint } from './views';
+import { auxDirection, projectPoint } from './views';
 
 const rectLine = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
 /** 40×20×10 블록 + 윗면 지름 6 구멍 두 개 (엔진 투상 결과 모양) */
@@ -236,5 +236,36 @@ describe('도면 2단계: 해칭·절단선·중심선·주기', () => {
     // 선이 없는 보기 → 연결 끊김
     const empty = VIEWS.map((v) => (v.name === 'front' ? { ...v, visible: [] } : v));
     expect(texts(buildSheet(empty, { ...OPT, dimensions: false, marks: [mark] }))).toContain('Ra 1.6?');
+  });
+
+  it('보조 투상도 방향: 정면도 90° = 위에서 (평면도와 같음), 45° = (1, 0, 1)/√2 쪽, 오른쪽은 수직', () => {
+    const top = auxDirection('front', 90);
+    expect(top.toward).toEqual([0, 0, 1]);
+    expect(top.right).toEqual([1, 0, 0]);
+    const d = auxDirection('front', 45);
+    expect(d.toward[0]).toBeCloseTo(Math.SQRT1_2);
+    expect(d.toward[2]).toBeCloseTo(Math.SQRT1_2);
+    expect(d.right[0]).toBeCloseTo(Math.SQRT1_2);
+    expect(d.right[2]).toBeCloseTo(-Math.SQRT1_2);
+    expect(d.toward.reduce((s2, v, i) => s2 + v * d.right[i]!, 0)).toBeCloseTo(0);
+    const side = auxDirection('top', 0); // 평면도에서 오른쪽(+X) = 우측면 쪽
+    expect(side.toward).toEqual([1, 0, 0]);
+  });
+
+  it('보조 투상도: 부모 보기에 화살표·기호 P, 투상은 빈 자리에 "보조 투상도 P"', () => {
+    const aux1 = { name: 'aux1' as const, visible: [rectLine(-21, -10, 14, 10)], hidden: [], circles: [], axes: [], bounds: [-21, -10, 14, 10] as [number, number, number, number] };
+    const s = buildSheet([...VIEWS, aux1], { ...OPT, dimensions: false, scale: 1, aux: [{ id: 'aux1', view: 'front', angle: 45 }] });
+    expect(texts(s)).toEqual(expect.arrayContaining(['P', '보조 투상도 P']));
+    expect(s.aux).toHaveLength(1);
+    const a = s.aux[0]!;
+    // 다른 보기 범위와 겹치지 않음
+    for (const pl of Object.values(s.placements)) {
+      const w = (pl.bounds[2] - pl.bounds[0]) * pl.scale;
+      const h = (pl.bounds[3] - pl.bounds[1]) * pl.scale;
+      const overlap = a.at[0] < pl.at[0] + w && a.at[0] + 35 > pl.at[0] && a.at[1] < pl.at[1] + h && a.at[1] + 20 > pl.at[1];
+      expect(overlap).toBe(false);
+    }
+    // 엔진 결과가 없으면 그리지 않는다
+    expect(buildSheet(VIEWS, { ...OPT, aux: [{ id: 'aux1', view: 'front', angle: 45 }] }).aux).toHaveLength(0);
   });
 });

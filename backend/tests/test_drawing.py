@@ -22,7 +22,9 @@ def length(lines) -> float:
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_shared_drawing_cases(name):
     case = CASES[name]
-    views = drawing({"model": case["model"], "views": list(case["views"]), **({"section": case["section"]} if "section" in case else {})})
+    names = [n for n in case["views"] if not n.startswith("aux")]
+    views = drawing({"model": case["model"], "views": names, **({"section": case["section"]} if "section" in case else {}), **({"aux": case["aux"]} if "aux" in case else {})})
+    assert sorted(v["name"] for v in views) == sorted(case["views"])
     for v in views:
         e = case["views"][v["name"]]
         if "axes" in e:
@@ -79,3 +81,12 @@ def test_api_drawing(client):
     assert sec["ok"] and sec["views"][0]["section"]
     bad_sec = client.post("/api/model/drawing", json={"model": case["model"], "views": ["front"], "section": {"view": "top", "offset": 0}}).json()
     assert not bad_sec["ok"]
+
+
+def test_api_aux_directions_validated(client):
+    case = CASES["block-aux-45"]
+    ok = client.post("/api/model/drawing", json={"model": case["model"], "views": ["front"], "aux": case["aux"]}).json()
+    assert ok["ok"] and [v["name"] for v in ok["views"]] == ["front", "aux1"]
+    for bad in ([{"toward": [1, 0, 0], "right": [1, 0, 0]}], [{"toward": [2, 0, 0], "right": [0, 1, 0]}], [{"toward": [1, 0, 0]}], [{"toward": [1, 0, 0], "right": [0, 1, 0]}] * 3):
+        r = client.post("/api/model/drawing", json={"model": case["model"], "views": ["front"], "aux": bad}).json()
+        assert not r["ok"] and r["issues"][0]["path"] == "aux"

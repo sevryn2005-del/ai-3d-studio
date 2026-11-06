@@ -160,7 +160,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     if (req.type === 'drawing') {
       // 도면도 항상 정밀 엔진 (B-rep 숨은선 제거)
       const [{ occtDrawing }, { oc }] = await Promise.all([import('../occt/occtDrawing'), precise()]);
-      reply({ id: req.id, ok: true, type: 'drawing', views: occtDrawing(oc, model, req.views, req.section) });
+      reply({ id: req.id, ok: true, type: 'drawing', views: occtDrawing(oc, model, req.views, req.section, req.aux ?? []) });
       return;
     }
     if (req.type === 'interference') {

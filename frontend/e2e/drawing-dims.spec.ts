@@ -150,3 +150,31 @@ test('도면 공차·상세도·거칠기 (형식 v23·v24): ±·위아래 공�
   await page.getByTestId('detail-delete-detail1').click();
   await expect(page.getByTestId('detail-row-detail1')).toHaveCount(0);
 });
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`보조 투상도 (형식 v25, ${engine === 'server' ? 'CadQuery 서버' : '브라우저 OCCT'}): 정면도 윗변 클릭 → 위에서 본 투상 P, 45° 로 바꾸기, 지우기`, async ({ page }) => {
+    test.setTimeout(90_000);
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    await page.getByRole('button', { name: '삭제', exact: true }).click();
+    await dispatch(page, { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 });
+    await page.getByRole('tab', { name: '도면' }).click();
+    await page.getByTestId('cmd-drawing').click();
+    await expect(page.getByTestId('drawing-sheet')).toBeVisible({ timeout: 40_000 });
+    await page.getByTestId('drawing-dims').uncheck();
+    await page.getByTestId('drawing-view-iso').uncheck();
+    const sheet = page.getByTestId('drawing-sheet');
+    await page.getByTestId('aux-mode').click();
+    await clickView(page, 'front', 5, 9.8); // 윗변 → 바깥(위)에서 본다
+    await expect(page.getByTestId('aux-row-aux1')).toContainText('P');
+    await expect(page.getByTestId('aux-angle-aux1')).toHaveValue('90');
+    await expect(sheet.locator('text', { hasText: /^보조 투상도 P$/ })).toHaveCount(1, { timeout: 40_000 });
+    await page.getByTestId('aux-angle-aux1').fill('45');
+    await page.getByTestId('aux-angle-aux1').press('Enter');
+    await expect(sheet.locator('text', { hasText: /^보조 투상도 P$/ })).toHaveCount(1, { timeout: 40_000 });
+    await expect(page.getByTestId('drawing-paper-area')).toHaveAttribute('data-busy', 'false', { timeout: 40_000 });
+    await page.getByTestId('aux-delete-aux1').click();
+    await expect(sheet.locator('text', { hasText: /^보조 투상도 P$/ })).toHaveCount(0, { timeout: 40_000 });
+  });
+}

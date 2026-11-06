@@ -11,13 +11,14 @@
  * - 주기: 표제란 왼쪽 칸에 여러 줄 (최대 6줄).
  * - 사용자 치수(형식 v17): 끝점을 투상 결과에 다시 붙여(dims.ts) 그린다. 붙을 곳이 없으면 값 뒤에 "?" (연결 끊김).
  * - 공차(형식 v23): 사용자 치수 값 뒤에 ±0.1 또는 +0.1/−0.05.
+ * - 보조 투상도(형식 v25): 엔진이 aux1·aux2 로 투상한 보기를 빈 자리에, 부모 보기에는 보는 방향 화살표 + 기호 P, Q.
  * - 상세도(형식 v23): 보기의 원 영역을 확대해 빈 자리(보기·표제란·주기·다른 상세도와 겹치지 않는 곳)에 — 원래 보기에는 가는 원과 기호 B, C, …
  * - 표면 거칠기(형식 v24): 보이는 선 위 점에 √ 기호 + "Ra 값" — 형상 바깥쪽에 서고, 글자는 읽기 쉬운 방향으로.
  * - 자동 치수: 정면도 전체 너비·높이, 우측면도 전체 깊이(우측면도가 없으면 평면도), 정면으로 보이는 원의 지름(같은 지름은 n×Ø).
  * 좌표: 용지 mm, 원점 = 왼쪽 아래, y 위쪽 (DXF 와 같음. SVG 는 뒤집어 그린다).
  */
-import type { DrawingDetail, DrawingDim, DrawingMark } from '../../cad/commandTypes';
-import type { DrawingView, DrawingViewName } from '../engine/types';
+import type { DrawingAux, DrawingDetail, DrawingDim, DrawingMark } from '../../cad/commandTypes';
+import type { DrawingView, DrawingViewName, StandardViewName } from '../engine/types';
 import { resolveDim, resolveMark, type ResolvedDim } from './dims';
 import { DRAWING_VIEWS } from './views';
 
@@ -52,6 +53,8 @@ export interface SheetOptions {
   details?: DrawingDetail[];
   /** 표면 거칠기 기호 */
   marks?: DrawingMark[];
+  /** 보조 투상도 (순서대로 엔진 결과 aux1, aux2) */
+  aux?: DrawingAux[];
 }
 
 /** 보기 배치: 보기 좌표 (x, y) → 종이 = at + (p − bounds 최소) × scale */
@@ -74,6 +77,8 @@ export interface Sheet {
   dims: ResolvedDim[];
   /** 사용자 치수 끌기 손잡이 (종이 mm): 끝점 A·B(지름은 원 가장자리 A) + 글자 자리 handle */
   dimHandles: { id: string; kind: DrawingDim['kind']; A: [number, number]; B?: [number, number]; handle: [number, number] }[];
+  /** 보조 투상도 자리 (종이 mm: 보기 범위 최소점이 놓인 곳) — 목록·시험용 */
+  aux: { id: string; label: string; at: [number, number]; bounds: [number, number, number, number] }[];
   /** 표면 거칠기 기호 (종이 mm: 붙은 점, 붙었는지) — 목록·시험용 */
   marks: { id: string; ok: boolean; at: [number, number] }[];
   /** 상세도 자리 (종이 mm: 가운데·반지름, 기호) — 목록·시험용 */
@@ -105,6 +110,8 @@ export function tolText(t: DrawingDim['tol']): string {
   const sg = (v: number) => (v === 0 ? '0' : `${v > 0 ? '+' : '−'}${r(v)}`);
   return ` ${sg(t.upper)}/${sg(t.lower)}`;
 }
+/** 보조 투상도 기호 */
+export const AUX_LABELS = ['P', 'Q'];
 /** 상세도 기호: A 는 단면도가 쓰므로 B 부터 */
 export const DETAIL_LABELS = ['B', 'C', 'D', 'E'];
 
@@ -174,7 +181,7 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     const [x1, y1] = map(v.bounds[2], v.bounds[3]);
     if (opt.centerlines && v.name !== 'iso') centerLines(items, v, map, scale);
     if (opt.section && !sectioned) cuttingLine(items, v, opt.section, map, [x0, y0, x1, y1]);
-    const label = sectioned ? `단면 ${SECTION_LABEL}-${SECTION_LABEL}` : DRAWING_VIEWS[v.name].label;
+    const label = sectioned ? `단면 ${SECTION_LABEL}-${SECTION_LABEL}` : DRAWING_VIEWS[v.name as StandardViewName].label;
     items.push({ kind: 'text', layer: 'text', x: (x0 + x1) / 2, y: y0 - (v.name === 'front' || v.name === 'right' ? (opt.dimensions ? 17 : 6) : 6), size: sectioned ? 3.5 : 2.5, text: label, anchor: 'middle' });
     if (!opt.dimensions || v.name === 'iso') continue;
     const w = v.bounds[2] - v.bounds[0];
@@ -196,6 +203,7 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     if (at) placements[v.name] = { at, bounds: v.bounds, scale };
   }
   // 상세도: 원래 보기에 가는 원 + 기호, 확대 그림은 빈 자리에
+  const auxPlaced: Sheet['aux'] = [];
   const occupied: [number, number, number, number][] = [[W - MARGIN - TITLE_W, MARGIN, W - MARGIN, MARGIN + TITLE_H]];
   if (opt.notes?.trim()) occupied.push([MARGIN, MARGIN, W - MARGIN - TITLE_W, MARGIN + TITLE_H]);
   for (const v of list) {
@@ -203,8 +211,51 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     if (!at) continue;
     occupied.push([at[0] - PAD, at[1] - PAD - 4, at[0] + (v.bounds[2] - v.bounds[0]) * scale + PAD, at[1] + (v.bounds[3] - v.bounds[1]) * scale + PAD]);
   }
-  const details: Sheet['details'] = [];
+  /** 겹치지 않는 첫 빈 자리 (위→아래, 왼쪽→오른쪽 2mm 씩). 없으면 null */
+  const freeSpot = (bw: number, bh: number): [number, number] | null => {
+    for (let y = H - MARGIN - 2 - bh; y >= MARGIN + 2; y -= 2)
+      for (let x = MARGIN + 2; x + bw <= W - MARGIN - 2; x += 2)
+        if (!occupied.some(([a, b, c, d]) => x < c && x + bw > a && y < d && y + bh > b)) return [x, y];
+    return null;
+  };
   let detailOverflow = false;
+  // 보조 투상도: 부모 보기에 보는 방향 화살표 + 기호, 투상 결과는 빈 자리에
+  (opt.aux ?? []).forEach((ax, k) => {
+    const v = views[(k === 0 ? 'aux1' : 'aux2') as DrawingViewName];
+    const pv = views[ax.view];
+    const pat = place[ax.view];
+    if (!v || !pv || !pat) return;
+    const label = AUX_LABELS[k] ?? String(k + 1);
+    // 화살표: 부모 보기 가운데에서 방향 n 쪽 바깥 → 보기 쪽을 가리킴
+    const a = (ax.angle * Math.PI) / 180;
+    const n: [number, number] = [Math.cos(a), Math.sin(a)];
+    const pw = (pv.bounds[2] - pv.bounds[0]) * scale;
+    const ph = (pv.bounds[3] - pv.bounds[1]) * scale;
+    const c: [number, number] = [pat[0] + pw / 2, pat[1] + ph / 2];
+    // 가운데에서 n 방향 광선이 보기 상자 경계와 만나는 거리
+    const half = Math.min(Math.abs(n[0]) > 1e-9 ? pw / 2 / Math.abs(n[0]) : Infinity, Math.abs(n[1]) > 1e-9 ? ph / 2 / Math.abs(n[1]) : Infinity);
+    const tip: [number, number] = [c[0] + n[0] * (half + 3), c[1] + n[1] * (half + 3)];
+    const tail: [number, number] = [c[0] + n[0] * (half + 13), c[1] + n[1] * (half + 13)];
+    items.push({ kind: 'line', layer: 'dim', points: [...tail, ...tip] });
+    arrow(items, tip, [-n[0], -n[1]]);
+    items.push({ kind: 'text', layer: 'text', x: tail[0] + n[0] * 2.5, y: tail[1] + n[1] * 2.5 - 1.2, size: 3.5, text: label, anchor: 'middle' });
+    // 투상 결과
+    const w = (v.bounds[2] - v.bounds[0]) * scale;
+    const h = (v.bounds[3] - v.bounds[1]) * scale;
+    const spot = freeSpot(w + 8, h + 12);
+    if (!spot) detailOverflow = true;
+    const [sx, sy] = spot ?? [MARGIN + 2, H - MARGIN - 2 - h - 12];
+    occupied.push([sx, sy, sx + w + 8, sy + h + 12]);
+    const at: [number, number] = [sx + 4, sy + 9];
+    const map = (x: number, y: number): [number, number] => [at[0] + (x - v.bounds[0]) * scale, at[1] + (y - v.bounds[1]) * scale];
+    const mapLine = (l: number[]) => l.flatMap((_, j) => (j % 2 ? [] : map(l[j]!, l[j + 1]!)));
+    for (const l of v.hidden) items.push({ kind: 'line', layer: 'hidden', points: mapLine(l) });
+    for (const l of v.visible) items.push({ kind: 'line', layer: 'visible', points: mapLine(l) });
+    if (opt.centerlines) centerLines(items, v, map, scale);
+    items.push({ kind: 'text', layer: 'text', x: at[0] + w / 2, y: sy + 3, size: 3.5, text: `보조 투상도 ${label}`, anchor: 'middle' });
+    auxPlaced.push({ id: ax.id, label, at, bounds: v.bounds });
+  });
+  const details: Sheet['details'] = [];
   (opt.details ?? []).forEach((dt, k) => {
     const v = views[dt.view];
     const at = place[dt.view];
@@ -221,13 +272,7 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     const R = dt.radius * ds;
     const bw = 2 * R + 4;
     const bh = 2 * R + 10;
-    let spot: [number, number] | null = null;
-    for (let y = H - MARGIN - 2 - bh; y >= MARGIN + 2 && !spot; y -= 2)
-      for (let x = MARGIN + 2; x + bw <= W - MARGIN - 2; x += 2)
-        if (!occupied.some(([a, b, c, d]) => x < c && x + bw > a && y < d && y + bh > b)) {
-          spot = [x, y];
-          break;
-        }
+    let spot = freeSpot(bw, bh);
     if (!spot) {
       detailOverflow = true;
       spot = [MARGIN + 2, H - MARGIN - 2 - bh];
@@ -266,7 +311,7 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     roughnessSymbol(items, P, r.out, `Ra ${dimText(m.ra)}${r.ok ? '' : '?'}`);
     marks.push({ id: m.id, ok: r.ok, at: P });
   }
-  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details, dimHandles, marks };
+  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details, dimHandles, marks, aux: auxPlaced };
 }
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];

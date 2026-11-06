@@ -13,7 +13,7 @@ import type { DrawingSection, ModelDefinition } from '../../../cad/commandTypes'
 import { cleanHidden } from '../../drawing/clean';
 import { cross, DRAWING_VIEWS } from '../../drawing/views';
 import { GeometryError } from '../browser/geometry';
-import type { DrawingCircle, DrawingView, DrawingViewName } from '../types';
+import type { AuxDirection, DrawingCircle, DrawingView, DrawingViewName, StandardViewName } from '../types';
 import { boundsOf, Gc, occtWorldShapes, volumeOf, type OC } from './occtGeometry';
 
 /** 곡선 표본 간격 (rad) — 서버 drawing.py 와 같음 */
@@ -130,14 +130,18 @@ function cylinderAxes(oc: OC, gc: Gc, shapes: TopoDS_Shape[], toward: V3, projec
 }
 
 /** 보기마다 투상: 보이는 객체(숨김·억제 제외)를 한꺼번에 (서로 가리는 선도 숨은선으로) */
-export function occtDrawing(oc: OC, model: ModelDefinition, views: readonly DrawingViewName[], section?: DrawingSection): DrawingView[] {
+export function occtDrawing(oc: OC, model: ModelDefinition, views: readonly StandardViewName[], section?: DrawingSection, aux: readonly AuxDirection[] = []): DrawingView[] {
   const gc = new Gc();
   try {
     const shapes = occtWorldShapes(oc, model, gc, true).map((s) => s.shape);
     if (shapes.length === 0) throw new GeometryError('도면에 그릴 객체가 없습니다');
     const B = shapes.map((s) => boundsOf(oc, s)).reduce((a, b) => [0, 1, 2].map((k) => Math.min(a[k]!, b[k]!)).concat([3, 4, 5].map((k) => Math.max(a[k]!, b[k]!))));
-    return views.map((name) => {
-      const { toward, right } = DRAWING_VIEWS[name];
+    // 표준 보기 + 보조 투상도 (aux1, aux2: 방향을 따로 받는다)
+    const list: { name: DrawingViewName; toward: V3; right: V3 }[] = [
+      ...views.map((name) => ({ name, toward: DRAWING_VIEWS[name].toward, right: DRAWING_VIEWS[name].right })),
+      ...aux.slice(0, 2).map((a, i) => ({ name: `aux${i + 1}` as DrawingViewName, toward: a.toward, right: a.right })),
+    ];
+    return list.map(({ name, toward, right }) => {
       const up = cross(toward, right);
       const project = (p: V3): [number, number] => [dot(p, right), dot(p, up)];
       const sec = section && section.view === name ? section : undefined;

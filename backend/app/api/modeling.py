@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Annotated, Any
 
@@ -16,7 +17,12 @@ from pydantic import BaseModel, ValidationError
 from app.api.deps import get_cad_pool
 from app.cad.commands import CadCommandAdapter, DrawingSection, ModelDefinition
 from app.cad.mesh_cache import MeshCache, cache_key
-from app.cad.validation import Issue, active_top_level_ids, check_model, issues_from_validation_error
+from app.cad.validation import (
+    Issue,
+    active_top_level_ids,
+    check_model,
+    issues_from_validation_error,
+)
 from app.cad.worker_pool import CadEngineError, WorkerPool
 
 router = APIRouter(tags=["modeling"])
@@ -177,6 +183,21 @@ def model_topology(
 DRAWING_VIEWS = ("front", "top", "right", "iso")
 
 
+def _valid_aux(aux: Any) -> bool:
+    """보조 투상도 방향: 최대 2개, 각각 {toward, right} 유한한 3성분 단위 벡터이고 서로 수직"""
+    if not isinstance(aux, list) or len(aux) > 2:
+        return False
+    for a in aux:
+        if not isinstance(a, dict) or set(a) != {"toward", "right"}:
+            return False
+        vs = [a["toward"], a["right"]]
+        if any(not isinstance(v, list) or len(v) != 3 or any(not isinstance(x, (int, float)) or isinstance(x, bool) or not math.isfinite(x) for x in v) for v in vs):
+            return False
+        if any(abs(math.hypot(*v) - 1) > 1e-6 for v in vs) or abs(sum(p * q for p, q in zip(*vs))) > 1e-6:
+            return False
+    return True
+
+
 @router.post("/model/drawing")
 def model_drawing(
     pool: Annotated[WorkerPool, Depends(get_cad_pool)],
@@ -190,6 +211,9 @@ def model_drawing(
     views = payload.get("views") or list(DRAWING_VIEWS)
     if not isinstance(views, list) or any(v not in DRAWING_VIEWS for v in views) or len(views) > len(DRAWING_VIEWS):
         return {"ok": False, "issues": [Issue(path="views", message="보기는 front·top·right·iso 중에서 고릅니다").model_dump()], "views": []}
+    aux = payload.get("aux") or []
+    if not _valid_aux(aux):
+        return {"ok": False, "issues": [Issue(path="aux", message="보조 투상도 방향은 서로 수직인 단위 벡터 toward·right 두 개까지입니다").model_dump()], "views": []}
     section = payload.get("section")
     if section is not None:
         try:
@@ -200,7 +224,7 @@ def model_drawing(
     if issues:
         return {"ok": False, "issues": [i.model_dump() for i in issues], "views": []}
     try:
-        job = {"model": model.model_dump(mode="json"), "views": views, **({"section": section} if section else {})}
+        job = {"model": model.model_dump(mode="json"), "views": views, **({"section": section} if section else {}), **({"aux": aux} if aux else {})}
         out = pool.run("drawing", job, timeout=INTERFERENCE_TIMEOUT_S)
     except CadEngineError as e:
         return {"ok": False, "issues": [Issue(path="", message=str(e)).model_dump()], "views": []}

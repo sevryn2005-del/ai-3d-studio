@@ -1,14 +1,14 @@
 /** 메인 스레드 ↔ 브라우저 CAD 워커 메시지 형식 */
 import type { Issue } from '../../../api/backend';
 import type { DrawingSection, ModelDefinition } from '../../../cad/commandTypes';
-import type { DrawingView, DrawingViewName, ExportFormat, Topology } from '../types';
+import type { AuxDirection, DrawingView, ExportFormat, StandardViewName, Topology } from '../types';
 
 export type WorkerRequest =
   | { id: number; type: 'evaluate'; model: ModelDefinition }
   | { id: number; type: 'export'; model: ModelDefinition; format: ExportFormat }
   | { id: number; type: 'interference'; model: ModelDefinition }
   | { id: number; type: 'topology'; model: ModelDefinition; objectId: string }
-  | { id: number; type: 'drawing'; model: ModelDefinition; views: DrawingViewName[]; section?: DrawingSection };
+  | { id: number; type: 'drawing'; model: ModelDefinition; views: StandardViewName[]; section?: DrawingSection; aux?: AuxDirection[] };
 
 export interface WorkerEvaluation {
   ok: boolean;

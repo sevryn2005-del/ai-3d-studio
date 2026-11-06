@@ -246,14 +246,16 @@ def _cylinder_axes(shapes, toward, proj) -> list[list[float]]:
     return out
 
 
-def project(shapes: list, views: list[str], section: dict | None = None) -> list[dict[str, Any]]:
-    """월드 형상들 → 보기마다 투상 (서로 가리는 선도 숨은선으로)"""
+def project(shapes: list, views: list[str], section: dict | None = None, aux: list[dict] | None = None) -> list[dict[str, Any]]:
+    """월드 형상들 → 보기마다 투상 (서로 가리는 선도 숨은선으로). aux = 보조 투상도 방향들 [{toward, right}] → 이름 aux1, aux2"""
     from app.cad.primitives import GeometryError
 
     bounds = _bounds(shapes)
     result = []
-    for name in views:
-        toward, right = VIEWS[name]
+    todo = [(name, *VIEWS[name]) for name in views] + [
+        (f"aux{i + 1}", tuple(a["toward"]), tuple(a["right"])) for i, a in enumerate((aux or [])[:2])
+    ]
+    for name, toward, right in todo:
         up = _cross(toward, right)
 
         def proj(p, right=right, up=up):

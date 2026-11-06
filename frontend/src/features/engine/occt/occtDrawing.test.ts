@@ -2,7 +2,7 @@
 import cases from '../../../../../shared/schemas/examples/drawing-cases.json';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ModelDefinitionSchema } from '../../../cad/commandTypes';
-import type { DrawingViewName } from '../types';
+import type { AuxDirection, StandardViewName } from '../types';
 import { dedupeCircles, occtDrawing } from './occtDrawing';
 import type { OC } from './occtGeometry';
 import { loadTestOcct } from './testOcct';
@@ -22,9 +22,11 @@ const lineLength = (ls: number[][]) =>
 describe('도면 투상 (OCCT): 공유 픽스처', () => {
   it.each(Object.entries(cases))('%s', (_name, c) => {
     const model = ModelDefinitionSchema.parse(c.model);
-    const names = Object.keys(c.views) as DrawingViewName[];
+    const names = Object.keys(c.views).filter((n) => !n.startsWith('aux')) as StandardViewName[];
     const section = 'section' in c ? (c.section as { view: 'front' | 'right'; offset: number }) : undefined;
-    const views = occtDrawing(oc, model, names, section);
+    const aux = 'aux' in c ? (c.aux as AuxDirection[]) : [];
+    const views = occtDrawing(oc, model, names, section, aux);
+    expect(views.map((v) => v.name).sort()).toEqual(Object.keys(c.views).sort());
     for (const v of views) {
       const e = (c.views as Record<string, { visible?: number; hidden?: number; bounds: number[]; circles?: number[]; axes?: number; section?: number }>)[v.name]!;
       if (e.axes !== undefined) expect(lineLength(v.axes)).toBeCloseTo(e.axes, 3);

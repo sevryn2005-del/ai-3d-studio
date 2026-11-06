@@ -2466,6 +2466,38 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "aux": {
+              "maxItems": 2,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  },
+                  "view": {
+                    "type": "string",
+                    "enum": [
+                      "front",
+                      "top",
+                      "right"
+                    ]
+                  },
+                  "angle": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                  }
+                },
+                "required": [
+                  "id",
+                  "view",
+                  "angle"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "required": [

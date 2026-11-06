@@ -63,7 +63,7 @@ export const DrawingSchema = z.object({
   issues: z.array(IssueSchema),
   views: z.array(
     z.object({
-      name: z.enum(['front', 'top', 'right', 'iso']),
+      name: z.enum(['front', 'top', 'right', 'iso', 'aux1', 'aux2']),
       visible: z.array(z.array(z.number())),
       hidden: z.array(z.array(z.number())),
       circles: z.array(z.object({ center: P2Schema, radius: z.number(), full: z.boolean(), visible: z.boolean() })),
@@ -74,8 +74,8 @@ export const DrawingSchema = z.object({
   ),
 });
 /** 도면 투상 (숨은선 제거) */
-export const drawingModel = (model: ModelDefinition, views: readonly string[], section: DrawingSection | undefined, signal?: AbortSignal) =>
-  apiPost('/model/drawing', { model, views, ...(section ? { section } : {}) }, DrawingSchema, signal, 70_000);
+export const drawingModel = (model: ModelDefinition, views: readonly string[], section: DrawingSection | undefined, signal?: AbortSignal, aux?: readonly { toward: number[]; right: number[] }[]) =>
+  apiPost('/model/drawing', { model, views, ...(section ? { section } : {}), ...(aux?.length ? { aux } : {}) }, DrawingSchema, signal, 70_000);
 
 /** 간섭 검사 (조립품): 서로 파고드는 최상위 객체 쌍 */
 export const interferenceModel = (model: ModelDefinition, signal?: AbortSignal) =>

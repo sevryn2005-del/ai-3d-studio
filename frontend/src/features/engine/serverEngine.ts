@@ -32,8 +32,8 @@ export const serverEngine: CadEngine = {
     return r.pairs;
   },
 
-  async drawing(model, views, section, signal) {
-    const r = await drawingModel(model, views, section, signal);
+  async drawing(model, views, section, signal, aux) {
+    const r = await drawingModel(model, views, section, signal, aux);
     if (!r.ok) throw new EngineError(r.issues[0]?.message ?? '도면을 만들 수 없습니다');
     return r.views;
   },
