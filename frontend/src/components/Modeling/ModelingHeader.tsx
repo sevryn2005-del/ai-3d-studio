@@ -78,6 +78,7 @@ export function ModelingHeader() {
           <button onClick={() => modal('extrude')} title="면 돌출 (E)" data-testid="op-extrude">돌출 E</button>
           <button onClick={() => modal('inset')} title="면 인셋 (I)" data-testid="op-inset">인셋 I</button>
           <button onClick={loopCutSelected} title="고른 선을 가로지르는 고리 (Ctrl+R)" data-testid="op-loopcut">루프 컷</button>
+          <button onClick={() => useModelingStore.getState().setKnife({ a: null, b: null })} title="나이프 (K): 화면에 선을 그어 면 자르기 (고른 면, 없으면 전부)" data-testid="op-knife">나이프 K</button>
           <button onClick={() => modal('bevel')} title="고른 선 모따기 (Ctrl+B) — 마우스로 폭, 숫자 입력" data-testid="op-bevel">베벨</button>
           <button onClick={subdivideSelected} title="고른 면 세분 (W)">세분</button>
           <button onClick={mergeSelected} title="가운데로 병합 (M)">병합 M</button>
@@ -89,6 +90,7 @@ export function ModelingHeader() {
       {mode !== 'sculpt' && (
         <button onClick={deleteSelection} title="삭제 (X · Delete)" data-testid="op-delete">삭제 X</button>
       )}
+      <SnapToggle />
       <span className="spacer" />
       <button onClick={editor.toggleProjection} title="원근/직교 (숫자패드 5)">{projection === 'perspective' ? '원근' : '직교'}</button>
       <button onClick={editor.requestFit} title="화면 맞춤 (Home · 숫자패드 .)">화면 맞춤</button>
@@ -156,6 +158,24 @@ function ProportionalToggle() {
           <span>mm</span>
         </label>
       )}
+    </>
+  );
+}
+
+/** 스냅 (Shift+Tab): 단위(1mm·5°·0.1배) 또는 점에 붙기. 조작 중 Ctrl = 이번만 반대 */
+function SnapToggle() {
+  const snap = useModelingStore((s) => s.snap);
+  const set = useModelingStore.getState().setSnap;
+  return (
+    <>
+      <span className="sep" />
+      <button aria-pressed={snap.enabled} onClick={() => set({ enabled: !snap.enabled })} title="스냅 켜기·끄기 (Shift+Tab) — G/R/S 중 Ctrl 을 누르면 이번만 반대" data-testid="snap-toggle">
+        스냅
+      </button>
+      <select value={snap.target} onChange={(e) => set({ target: e.target.value as 'increment' | 'vertex' })} aria-label="스냅 대상" data-testid="snap-target" className="snap-target">
+        <option value="increment">단위 (1mm·5°)</option>
+        <option value="vertex">점에 붙기</option>
+      </select>
     </>
   );
 }

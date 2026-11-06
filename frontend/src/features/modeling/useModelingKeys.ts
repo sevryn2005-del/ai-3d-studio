@@ -13,7 +13,7 @@ import { cancelModal, confirmModal } from '../../components/Modeling/ModalContro
  * 모델링 모드 키 (블렌더와 같은 배치). 설계 모드 단축키(useKeyboardShortcuts)는 모델링 모드에서 Ctrl 조합만 처리한다.
  * Tab 편집 모드 · Shift+A 추가 · G/R/S 이동·회전·크기 (X/Y/Z 축, 숫자 입력, Enter/클릭 확정, Esc/오른쪽 클릭 취소)
  * 편집 모드: 1/2/3 점·선·면, A 전체 선택(Alt+A 해제), E 돌출, I 인셋, X·Delete 삭제, Ctrl+R 루프 컷, M 병합, F 면 채우기, W 세분
- * 편집 모드: O 비례 편집(모달 중 휠·PageUp/Down = 반지름), Ctrl+B 베벨, Ctrl+L 연결 선택, Ctrl+숫자패드 ± 선택 넓히기·좁히기, Alt+클릭 루프 선택
+ * 편집 모드: K 나이프(선을 그어 자르기), O 비례 편집(모달 중 휠·PageUp/Down = 반지름), Ctrl+B 베벨, Ctrl+L 연결 선택, Ctrl+숫자패드 ± 선택 넓히기·좁히기, Alt+클릭 루프 선택
  * Ctrl+1~3 세분 표면 단계, Ctrl+0 세분 표면 빼기
  * 보기: 숫자패드 1/3/7 정면·우측·위 (Ctrl = 반대쪽), 5 원근/직교, . · Home 화면 맞춤
  */
@@ -83,13 +83,20 @@ export function useModelingKeys() {
         else invertMask();
         return;
       }
+      if (e.key === 'Tab' && e.shiftKey) {
+        // 스냅 켜기·끄기 (블렌더 Shift+Tab)
+        e.preventDefault();
+        st.setSnap({ enabled: !st.snap.enabled });
+        return;
+      }
       if (e.key === 'Tab') {
         e.preventDefault();
         toggleEditMode();
         return;
       }
       if (e.key === 'Escape') {
-        if (st.addMenu) st.setAddMenu(null);
+        if (st.knife) st.setKnife(null);
+        else if (st.addMenu) st.setAddMenu(null);
         return;
       }
       if (e.shiftKey && key === 'a') {
@@ -146,6 +153,7 @@ export function useModelingKeys() {
         e.preventDefault();
         selectAll();
       } else if (key === 'o') st.setProportional({ enabled: !st.proportional.enabled });
+      else if (key === 'k') st.setKnife({ a: null, b: null });
       else if (key === 'm') mergeSelected();
       else if (key === 'f') fillSelected();
       else if (key === 'w') subdivideSelected();

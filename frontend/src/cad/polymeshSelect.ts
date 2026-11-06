@@ -214,3 +214,49 @@ export function proportionalTransform(m: PolyMesh, weights: Map<number, number>,
   });
   return { verts, faces: m.faces };
 }
+
+/**
+ * 나이프·이등분 (K): 평면(점 p, 법선 n)으로 면을 자른다. faceIdx 가 비면 모든 면.
+ * 평면을 지나는 선마다 새 점(이웃 면에도 같은 점을 넣어 틈이 없다), 자르는 점이 둘인 면은 두 면으로 나눈다.
+ * 돌려주는 sel = 자른 자리의 점들
+ */
+export function bisectFaces(m: PolyMesh, faceIdx: number[], p: V3, n: V3): { mesh: PolyMesh; sel: number[] } {
+  const nn = unit(n);
+  const d = m.verts.map((v) => (v[0] - p[0]) * nn[0] + (v[1] - p[1]) * nn[1] + (v[2] - p[2]) * nn[2]);
+  const eps = 1e-7;
+  const chosen = new Set(faceIdx.length ? faceIdx : m.faces.map((_, i) => i));
+  const verts: V3[] = [...m.verts];
+  const split = new Map<string, number>();
+  // 자를 선: 고른 면의 선 중 양 끝이 평면 반대쪽
+  for (const fi of chosen) {
+    const f = m.faces[fi]!;
+    f.forEach((a, i) => {
+      const b = f[(i + 1) % f.length]!;
+      const k = ekey(a, b);
+      if (split.has(k) || !(d[a]! * d[b]! < 0 && Math.abs(d[a]!) > eps && Math.abs(d[b]!) > eps)) return;
+      const t = d[a]! / (d[a]! - d[b]!);
+      const A = m.verts[a]!;
+      const B = m.verts[b]!;
+      verts.push([r6(A[0] + (B[0] - A[0]) * t), r6(A[1] + (B[1] - A[1]) * t), r6(A[2] + (B[2] - A[2]) * t)]);
+      split.set(k, verts.length - 1);
+    });
+  }
+  const sel = new Set<number>([...split.values()]);
+  const faces: number[][] = [];
+  m.faces.forEach((f, fi) => {
+    // 자른 선에 새 점 끼우기 (고르지 않은 이웃 면도 — 틈 방지)
+    const loop: number[] = [];
+    f.forEach((a, i) => {
+      loop.push(a);
+      const s = split.get(ekey(a, f[(i + 1) % f.length]!));
+      if (s !== undefined) loop.push(s);
+    });
+    if (!chosen.has(fi)) return void faces.push(loop);
+    const cuts = loop.map((v, i) => (v >= m.verts.length || Math.abs(d[v]!) <= eps ? i : -1)).filter((i) => i >= 0);
+    for (const i of cuts) sel.add(loop[i]!);
+    const [i, j] = cuts;
+    if (cuts.length !== 2 || j! - i! === 1 || (i === 0 && j === loop.length - 1)) return void faces.push(loop);
+    faces.push(loop.slice(i, j! + 1), [...loop.slice(j!), ...loop.slice(0, i! + 1)]);
+  });
+  return { mesh: { verts, faces }, sel: [...sel] };
+}

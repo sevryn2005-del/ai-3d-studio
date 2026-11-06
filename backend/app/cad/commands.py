@@ -1366,6 +1366,15 @@ class MeshEditFill(Strict):
     verts: Annotated[list[PolyIndex], Field(min_length=3, max_length=256)]
 
 
+class MeshEditBisect(Strict):
+    """K 나이프·이등분 (평면으로 면 자르기, faces 비면 모든 면)"""
+
+    op: Literal["bisect"]
+    faces: Annotated[list[PolyIndex], Field(max_length=MAX_POLY_FACES)]
+    point: Vec3
+    normal: Vec3
+
+
 class MeshEditBevel(Strict):
     """Ctrl+B 베벨 (고른 점 사이 선 모따기)"""
 
@@ -1383,7 +1392,7 @@ class MeshEditSetVerts(Strict):
 
 
 MeshEdit = Annotated[
-    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBevel, MeshEditSetVerts],
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBisect, MeshEditBevel, MeshEditSetVerts],
     Field(discriminator="op"),
 ]
 

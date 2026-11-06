@@ -17,6 +17,7 @@ import { PolyMeshView } from './PolyMeshView';
 import { ModalController } from './ModalController';
 import { ModelingPicker } from './ModelingPicker';
 import { SculptController } from './SculptController';
+import { KnifeController, KnifeOverlay } from './KnifeController';
 import { AddMenu, ModelingEmptyGuide, ModelingHint, ModelingProperties, Outliner } from './ModelingPanels';
 
 const NONE = -1 as unknown as MOUSE;
@@ -90,6 +91,7 @@ function ModelingViewport() {
         <ModalController />
         <ModelingPicker />
         <SculptController />
+        <KnifeController />
         <CameraFitter />
         <ProjectionSwitch />
         {import.meta.env.DEV && <DevProbe />}
@@ -101,6 +103,7 @@ function ModelingViewport() {
       </Canvas>
       <ModelingEmptyGuide />
       <AddMenu />
+      <KnifeOverlay />
       <ModelingHint />
     </section>
   );

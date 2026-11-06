@@ -314,3 +314,43 @@ test('스컬프트 마스크: Ctrl+I 로 전부 가리면 획이 아무것도 �
   const r2 = Math.max(...JSON.parse(readFileSync((await dl2.path())!, 'utf8')).model.objects[0].polymesh.verts.map((v: number[]) => Math.hypot(v[0]!, v[1]!, v[2]!)));
   expect(r2).toBeGreaterThan(10.05);
 });
+
+test('나이프(K): 정면에서 가로선을 그어 큐브 옆면 4개를 둘로 / 스냅: G 이동이 1mm 단위', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-cube').click(); // 20mm, z 0..20
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  // 스냅 켜고 G: 마우스를 아무렇게나 옮겨도 위치가 1mm 단위
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByTestId('snap-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('g');
+  await page.mouse.move(box.x + box.width / 2 + 37, box.y + box.height / 2 + 23, { steps: 4 });
+  await page.keyboard.press('Enter');
+  for (const id of ['loc-x', 'loc-y', 'loc-z']) {
+    const v = Number(await page.getByTestId(id).inputValue());
+    expect(Number.isInteger(v)).toBe(true);
+  }
+  await page.keyboard.press('Control+z');
+
+  // 나이프: 편집 모드 → 정면 보기 → 큐브 가운데 높이(z = 10)를 가로지르는 선
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Numpad1');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 1, 0]);
+  await page.keyboard.press('k');
+  await expect(page.getByTestId('knife-overlay')).toBeVisible();
+  const a = await page.evaluate(() => window.__AI3D_DEV__!.project(-15, 0, 10));
+  const b = await page.evaluate(() => window.__AI3D_DEV__!.project(15, 0, 10));
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId('mesh-stats')).toContainText('면10');
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
+  await expect(page.getByTestId('knife-overlay')).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+});

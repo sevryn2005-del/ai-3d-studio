@@ -54,6 +54,26 @@ export function ModalController() {
       const v = new Vector3(...p).project(camera);
       return [((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height];
     };
+    // 점 스냅 후보: 다른 메시 객체의 점 + (편집 모드) 같은 메시의 안 고른 점 — 월드 좌표
+    const candidates: V3[] = [];
+    for (const o of useSceneStore.getState().history.present.model.objects) {
+      if (o.kind !== 'polymesh' || o.hidden) continue;
+      if (o.id === obj.id && !editing) continue;
+      o.polymesh.verts.forEach((v, i) => {
+        if (o.id === obj.id && sel.includes(i)) return;
+        candidates.push(toWorld(v, o.transform));
+      });
+    }
+    const candScreen = candidates.slice(0, 20000).map((c) => screenOf(c));
+    const nearestVertex = (m: [number, number], _id: string, _skip: Set<number> | null): V3 | null => {
+      let best = -1;
+      let bd = 20;
+      candScreen.forEach((s, i) => {
+        const d = Math.hypot(s[0] - m[0], s[1] - m[1]);
+        if (d < bd) (bd = d), (best = i);
+      });
+      return best >= 0 ? candidates[best]! : null;
+    };
     const start = modal0.start;
     const p0 = worldAt(start);
     const pivotScreen = screenOf(pivot);
@@ -108,18 +128,27 @@ export function ModalController() {
       } else {
         let world;
         let value: string;
+        const sn = useModelingStore.getState();
+        const snapping = sn.snap.enabled !== sn.ctrl; // Ctrl = 이번만 반대
         if (modal.kind === 'grab') {
-          const delta = grabDelta(mouseDelta, modal.axis, typed).map((v) => round(v, 0.01)) as V3;
+          let raw = mouseDelta;
+          if (snapping && sn.snap.target === 'vertex' && typed === null) {
+            // 점에 붙기: 커서에서 가장 가까운(화면 20px 안) 다른 점으로 피벗을 옮긴다
+            const target = nearestVertex(mouse, obj.id, editing ? new Set(sel) : null);
+            if (target) raw = [target[0] - pivot[0], target[1] - pivot[1], target[2] - pivot[2]];
+          }
+          const step = snapping && sn.snap.target === 'increment' && typed === null ? 1 : 0.01;
+          const delta = grabDelta(raw, modal.axis, typed).map((v) => round(v, step)) as V3;
           world = worldMatrix({ kind: 'grab', delta }, pivot);
           value = modal.axis ? `${formatMm(delta[0] + delta[1] + delta[2])}mm` : `(${delta.map((v) => formatMm(v)).join(', ')})`;
         } else if (modal.kind === 'rotate') {
           const axis = modal.axis ? AXIS_VEC[modal.axis] : ([toViewer.x, toViewer.y, toViewer.z] as V3);
           const facing = axis[0] * toViewer.x + axis[1] * toViewer.y + axis[2] * toViewer.z >= 0 ? 1 : -1;
-          const deg = typed ?? round(screenAngle(pivotScreen, start, mouse) * facing, 0.1);
+          const deg = typed ?? round(screenAngle(pivotScreen, start, mouse) * facing, snapping && sn.snap.target === 'increment' ? 5 : 0.1);
           world = worldMatrix({ kind: 'rotate', axis, degrees: deg }, pivot);
           value = `${formatMm(deg)}°`;
         } else {
-          const f = typed ?? round(screenScale(pivotScreen, start, mouse), 0.001);
+          const f = typed ?? round(screenScale(pivotScreen, start, mouse), snapping && sn.snap.target === 'increment' ? 0.1 : 0.001);
           world = worldMatrix({ kind: 'scale', factor: f, axis: modal.axis ? AXIS_VEC[modal.axis] : null }, pivot);
           value = `×${formatMm(f)}`;
         }
@@ -150,7 +179,7 @@ export function ModalController() {
     };
     update();
     const unsub = useModelingStore.subscribe((s, prev) => {
-      if (s.mouse !== prev.mouse || s.modal !== prev.modal || s.proportional !== prev.proportional) update();
+      if (s.mouse !== prev.mouse || s.modal !== prev.modal || s.proportional !== prev.proportional || s.ctrl !== prev.ctrl || s.snap !== prev.snap) update();
     });
     // 비례 편집 반지름: 모달 중 휠 (블렌더와 같음)
     const onWheel = (e: WheelEvent) => {
@@ -160,10 +189,16 @@ export function ModalController() {
       st.setProportional({ radius: Math.max(0.1, Math.min(5000, st.proportional.radius * (e.deltaY < 0 ? 1.1 : 1 / 1.1))) });
     };
     window.addEventListener('wheel', onWheel, { passive: false });
+    const onCtrl = (e: KeyboardEvent) => useModelingStore.getState().setCtrl(e.ctrlKey || e.metaKey);
+    window.addEventListener('keydown', onCtrl);
+    window.addEventListener('keyup', onCtrl);
     setRing(editing && useModelingStore.getState().proportional.enabled ? { center: pivot, camDir: [camDir.x, camDir.y, camDir.z] } : null);
     return () => {
       unsub();
       window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onCtrl);
+      window.removeEventListener('keyup', onCtrl);
+      useModelingStore.getState().setCtrl(false);
       setRing(null);
       if (controls) controls.enabled = true;
     };

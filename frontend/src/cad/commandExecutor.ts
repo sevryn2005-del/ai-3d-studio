@@ -58,7 +58,7 @@ import {
   subdivideFaces,
   transformVerts,
 } from './polymesh';
-import { bevelEdges } from './polymeshSelect';
+import { bevelEdges, bisectFaces } from './polymeshSelect';
 import { MAX_EVALUATED_FACES, estimateFaces, evaluateModifiers } from './polymeshModifiers';
 import { helixError, helixProfilePoints } from './sections';
 import { profileOf, resolveProfile } from './sketch';
@@ -591,6 +591,11 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       if (new Set(e.verts).size !== e.verts.length) return '같은 점을 두 번 골랐습니다';
       return fillFace(m, e.verts);
+    case 'bisect': {
+      if (badF(e.faces)) return '없는 면을 가리킵니다';
+      if (Math.hypot(...e.normal) < 1e-9) return '자르는 평면의 방향이 없습니다';
+      return bisectFaces(m, e.faces, e.point, e.normal).mesh;
+    }
     case 'bevel': {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       const sel = new Set(e.verts);

@@ -62,6 +62,15 @@ interface ModelingState {
   setSculpt: (p: Partial<SculptSettings>) => void;
   /** 비례 편집 (O): 편집 모드 G/R/S 에서 반지름(mm) 안 점도 매끈하게 따라온다 */
   proportional: { enabled: boolean; radius: number };
+  /** 스냅 (Shift+Tab, 조작 중 Ctrl 로 잠깐 반대): 단위(1mm·5°·0.1배) 또는 점에 붙기 */
+  snap: { enabled: boolean; target: 'increment' | 'vertex' };
+  setSnap: (p: Partial<{ enabled: boolean; target: 'increment' | 'vertex' }>) => void;
+  /** 조작 중 Ctrl 을 누르고 있는지 */
+  ctrl: boolean;
+  setCtrl: (c: boolean) => void;
+  /** 나이프 (K): 화면에 그은 선 (뷰포트 기준 px) */
+  knife: { a: [number, number] | null; b: [number, number] | null } | null;
+  setKnife: (k: { a: [number, number] | null; b: [number, number] | null } | null) => void;
   /** 스컬프트 마스크 (화면 상태, 저장 안 함): 점마다 0~1. 점 수가 바뀌면 무효 */
   mask: { objectId: string; values: number[] } | null;
   setMask: (m: { objectId: string; values: number[] } | null) => void;
@@ -93,9 +102,15 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   proportional: { enabled: false, radius: 10 },
   mask: null,
   setMask: (mask) => set({ mask }),
+  knife: null,
+  setKnife: (knife) => set({ knife }),
+  snap: { enabled: false, target: 'increment' },
+  setSnap: (p) => set((s) => ({ snap: { ...s.snap, ...p } })),
+  ctrl: false,
+  setCtrl: (ctrl) => set((s) => (s.ctrl === ctrl ? s : { ctrl })),
   setProportional: (p) => set((s) => ({ proportional: { ...s.proportional, ...p } })),
 
-  setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null }),
+  setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null, knife: null }),
   setSelectMode: (selectMode) => set({ selectMode }),
   setSel: (selVerts) => set({ selVerts }),
   startModal: (kind) => set({ modal: { kind, axis: null, typed: '', start: get().mouse, seq: ++modalSeq }, addMenu: null }),

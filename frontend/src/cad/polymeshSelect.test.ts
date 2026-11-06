@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, edges, polyMeshError, polyVolume, primitiveMesh } from './polymesh';
-import { bevelEdges, edgeLoop, faceRing, growSelection, proportionalTransform, proportionalWeights, selectLinked } from './polymeshSelect';
+import { bevelEdges, bisectFaces, edgeLoop, faceRing, growSelection, proportionalTransform, proportionalWeights, selectLinked } from './polymeshSelect';
 import { arrayMesh } from './polymeshModifiers';
 
 const cube = () => primitiveMesh('cube', { size: 2 });
@@ -81,5 +81,26 @@ describe('비례 편집', () => {
     const up = proportionalTransform(g, w, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 2, 1]);
     expect(up.verts[c]![2]).toBe(2);
     expect(up.verts[g.verts.findIndex((v) => v[0] === 1 && v[1] === 0)]![2]).toBeCloseTo(2 * at(1), 5);
+  });
+});
+
+describe('나이프·이등분', () => {
+  it('큐브를 z = 0.5 평면으로 자르면 옆면 4개가 둘로 → 면 10, 닫힘, 부피 그대로', () => {
+    const c = cube();
+    const r = bisectFaces(c, [], [0, 0, 0.5], [0, 0, 1]);
+    expect(r.mesh.faces).toHaveLength(10);
+    expect(r.mesh.verts).toHaveLength(12);
+    expect(boundaryEdgeCount(r.mesh)).toBe(0);
+    expect(polyMeshError(r.mesh)).toBeNull();
+    expect(polyVolume(r.mesh)).toBeCloseTo(8);
+    expect(r.sel).toHaveLength(4);
+  });
+
+  it('고른 면만 자르면 이웃 면에는 점만 끼워져 틈이 없다', () => {
+    const c = cube();
+    const front = c.faces.findIndex((f) => f.every((v) => c.verts[v]![1] === -1));
+    const r = bisectFaces(c, [front], [0, 0, 0], [1, 0, 0]);
+    expect(r.mesh.faces).toHaveLength(7);
+    expect(boundaryEdgeCount(r.mesh)).toBe(0);
   });
 });

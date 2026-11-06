@@ -44,7 +44,7 @@ export function ModelingPicker() {
     const ndc = ([x, y]: [number, number]) => new Vector2((x / el.clientWidth) * 2 - 1, -(y / el.clientHeight) * 2 + 1);
 
     const onDown = (e: PointerEvent) => {
-      if (useModelingStore.getState().mode === 'sculpt') return; // 스컬프트는 SculptController
+      if (useModelingStore.getState().mode === 'sculpt' || useModelingStore.getState().knife) return; // 스컬프트·나이프는 따로
       if (useModelingStore.getState().modal) {
         if (e.button === 0) confirmModal();
         else if (e.button === 2) cancelModal();
@@ -55,7 +55,7 @@ export function ModelingPicker() {
       down = e.button === 0 ? pos(e) : null;
     };
     const onUp = (e: PointerEvent) => {
-      if (!down || e.button !== 0) return;
+      if (!down || e.button !== 0 || useModelingStore.getState().knife) return;
       const p = pos(e);
       const moved = Math.hypot(p[0] - down[0], p[1] - down[1]);
       down = null;
