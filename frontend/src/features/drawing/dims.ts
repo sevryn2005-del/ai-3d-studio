@@ -152,3 +152,26 @@ export function tolInput(t: DrawingDim['tol']): string {
   const sg = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
   return `${sg(t.upper)}/${sg(t.lower)}`;
 }
+
+/**
+ * 치수선 간격 (종이 mm, 부호 = 방향): 끝점 A·B 와 치수선을 놓을 자리 P (모두 종이 좌표).
+ * 수평 = 위·아래로 형상에서 얼마나, 수직 = 좌·우로, 평행 = 두 점을 잇는 선의 왼쪽 법선 방향, 지름 = 원 가장자리 A 에서 지시선 꺾임까지 길이.
+ * 치수 추가(세 번째 클릭)와 끌어 옮기기가 같은 규칙을 쓴다. ±200 으로 자르고 0.1mm 로 반올림
+ */
+export function dimOffsetAt(kind: DrawingDim['kind'], A: P2, B: P2 | undefined, P: P2): number {
+  let off: number;
+  if (kind === 'diameter') off = Math.max(3, Math.hypot(P[0] - A[0], P[1] - A[1]));
+  else if (kind === 'horizontal') {
+    const hi = Math.max(A[1], B![1]);
+    const lo = Math.min(A[1], B![1]);
+    off = P[1] >= hi ? P[1] - hi : P[1] <= lo ? P[1] - lo : P[1] - hi;
+  } else if (kind === 'vertical') {
+    const hi = Math.max(A[0], B![0]);
+    const lo = Math.min(A[0], B![0]);
+    off = P[0] >= hi ? P[0] - hi : P[0] <= lo ? P[0] - lo : P[0] - hi;
+  } else {
+    const L = Math.hypot(B![0] - A[0], B![1] - A[1]) || 1;
+    off = ((P[0] - A[0]) * -(B![1] - A[1]) + (P[1] - A[1]) * (B![0] - A[0])) / L;
+  }
+  return Math.max(-200, Math.min(200, Math.round(off * 10) / 10));
+}

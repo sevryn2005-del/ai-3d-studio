@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_DRAWING, MAX_DRAWING_DETAILS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
-import { DIM_KIND_LABEL, makeAnchor, parseTol, snapCircle, snapVertex, tolInput } from '../../features/drawing/dims';
+import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, snapCircle, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
@@ -105,6 +105,9 @@ function DrawingWindow() {
     return () => window.removeEventListener('keydown', key);
   }, []);
 
+  // 치수 끌어 옮기기: 끄는 동안은 화면에서만 간격을 바꿔 보여 주고, 놓을 때 set_drawing 하나 (실행 취소 1번)
+  const [drag, setDrag] = useState<{ id: string; offset: number } | null>(null);
+  const shownDims = drag && settings.dims ? settings.dims.map((d) => (d.id === drag.id ? { ...d, offset: drag.offset } : d)) : settings.dims;
   const sheet = useMemo(
     () =>
       views && chosen.length
@@ -117,11 +120,11 @@ function DrawingWindow() {
             centerlines: settings.centerlines,
             ...(settings.section ? { section: settings.section } : {}),
             ...(settings.notes ? { notes: settings.notes } : {}),
-            ...(settings.dims?.length ? { dims: settings.dims } : {}),
+            ...(shownDims?.length ? { dims: shownDims } : {}),
             ...(settings.details?.length ? { details: settings.details } : {}),
           })
         : null,
-    [views, chosen.length, settings, title],
+    [views, chosen.length, settings, title, shownDims],
   );
   const svg = useMemo(() => (sheet ? sheetToSvg(sheet) : ''), [sheet]);
   const fileBase = `${title || projectName} 도면`;
@@ -150,6 +153,16 @@ function DrawingWindow() {
       return { view: name, v, pl, paper, p, tol: PICK_MM / pl.scale };
     }
     return { view: null, paper } as const;
+  };
+  const eventPaper = (ev: React.PointerEvent<SVGElement>): [number, number] => {
+    const svgEl = (ev.currentTarget as SVGElement).ownerSVGElement ?? (ev.currentTarget as SVGSVGElement);
+    const r = svgEl.getBoundingClientRect();
+    return [((ev.clientX - r.left) / r.width) * sheet!.width, sheet!.height - ((ev.clientY - r.top) / r.height) * sheet!.height];
+  };
+  const dragTo = (ev: React.PointerEvent<SVGElement>, id: string) => {
+    const h = sheet?.dimHandles.find((x) => x.id === id);
+    if (!h) return null;
+    return dimOffsetAt(h.kind, h.A, h.B, eventPaper(ev));
   };
   const toPaper = (view: PickView, p: [number, number]): [number, number] => {
     const pl = sheet!.placements[view]!;
@@ -223,17 +236,8 @@ function DrawingWindow() {
   const placeDim = (P: [number, number]) => {
     if (!dimMode || dimMode === 'diameter' || dimMode === 'detail') return;
     const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
-    const A = toPaper(a.view, a.p);
-    const B = toPaper(b.view, b.p);
-    let offset: number;
-    if (dimMode === 'horizontal') offset = P[1] >= Math.max(A[1], B[1]) ? P[1] - Math.max(A[1], B[1]) : P[1] <= Math.min(A[1], B[1]) ? P[1] - Math.min(A[1], B[1]) : P[1] - Math.max(A[1], B[1]);
-    else if (dimMode === 'vertical') offset = P[0] >= Math.max(A[0], B[0]) ? P[0] - Math.max(A[0], B[0]) : P[0] <= Math.min(A[0], B[0]) ? P[0] - Math.min(A[0], B[0]) : P[0] - Math.max(A[0], B[0]);
-    else {
-      const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
-      offset = ((P[0] - A[0]) * -(B[1] - A[1]) + (P[1] - A[1]) * (B[0] - A[0])) / L;
-    }
+    const offset = dimOffsetAt(dimMode, toPaper(a.view, a.p), toPaper(b.view, b.p), P);
     const v = viewOf(a.view)!;
-    offset = Math.max(-200, Math.min(200, Math.round(offset * 10) / 10));
     update({ dims: [...dims, { id: nextDimId(), view: a.view, kind: dimMode, a: makeAnchor(v, a.p), b: makeAnchor(v, b.p), offset }] });
     setPending([]);
   };
@@ -520,6 +524,38 @@ function DrawingWindow() {
                 return <line x1={x0} y1={sheet.height - y0} x2={hover.paper[0]} y2={sheet.height - hover.paper[1]} className="pick-line" />;
               })()}
               {hover && <circle cx={hover.paper[0]} cy={sheet.height - hover.paper[1]} r={hover.r ?? 1.5} className="pick-hover" />}
+              {/* 치수 손잡이: 모드가 없을 때 치수선 가운데(지름은 꺾인 곳)를 끌어 옮긴다 */}
+              {!dimMode &&
+                sheet.dimHandles.map((h) => (
+                  <circle
+                    key={h.id}
+                    cx={h.handle[0]}
+                    cy={sheet.height - h.handle[1]}
+                    r={2.2}
+                    className={`dim-handle${drag?.id === h.id ? ' dragging' : ''}`}
+                    data-testid={`dim-handle-${h.id}`}
+                    style={{ pointerEvents: 'auto', cursor: 'move' }}
+                    onPointerDown={(ev) => {
+                      ev.stopPropagation();
+                      (ev.currentTarget as SVGElement).setPointerCapture(ev.pointerId);
+                      const d = dims.find((x) => x.id === h.id);
+                      if (d) setDrag({ id: h.id, offset: d.offset });
+                    }}
+                    onPointerMove={(ev) => {
+                      if (drag?.id !== h.id) return;
+                      const o = dragTo(ev, h.id);
+                      if (o !== null && o !== drag.offset) setDrag({ id: h.id, offset: o });
+                    }}
+                    onPointerUp={() => {
+                      if (drag?.id !== h.id) return;
+                      const d = dims.find((x) => x.id === h.id);
+                      setDrag(null);
+                      if (d && d.offset !== drag.offset) setDimOffset(h.id, drag.offset);
+                    }}
+                  >
+                    <title>끌어서 치수선 옮기기</title>
+                  </circle>
+                ))}
             </svg>
           </div>
         )}

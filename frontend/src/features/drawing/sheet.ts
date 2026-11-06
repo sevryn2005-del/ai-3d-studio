@@ -69,6 +69,8 @@ export interface Sheet {
   placements: Partial<Record<DrawingViewName, ViewPlacement>>;
   /** 사용자 치수가 붙은 결과 (목록 표시용) */
   dims: ResolvedDim[];
+  /** 사용자 치수 끌기 손잡이 (종이 mm): 끝점 A·B(지름은 원 가장자리 A) + 글자 자리 handle */
+  dimHandles: { id: string; kind: DrawingDim['kind']; A: [number, number]; B?: [number, number]; handle: [number, number] }[];
   /** 상세도 자리 (종이 mm: 가운데·반지름, 기호) — 목록·시험용 */
   details: { id: string; label: string; center: [number, number]; radius: number; scale: number }[];
 }
@@ -239,15 +241,17 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
   });
 
   const resolved: ResolvedDim[] = [];
+  const dimHandles: Sheet['dimHandles'] = [];
   for (const d of opt.dims ?? []) {
     const v = views[d.view];
     const pl = placements[d.view];
     if (!v || !pl) continue;
     const r = resolveDim(v, d);
     resolved.push(r);
-    userDim(items, r, (p) => [pl.at[0] + (p[0] - pl.bounds[0]) * scale, pl.at[1] + (p[1] - pl.bounds[1]) * scale], scale);
+    const h = userDim(items, r, (p) => [pl.at[0] + (p[0] - pl.bounds[0]) * scale, pl.at[1] + (p[1] - pl.bounds[1]) * scale], scale);
+    if (h) dimHandles.push({ id: d.id, kind: d.kind, ...h });
   }
-  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details };
+  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details, dimHandles };
 }
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
@@ -506,7 +510,7 @@ function dimLine(items: SheetItem[], A: [number, number], B: [number, number], A
 }
 
 /** 사용자 치수 그리기. 연결이 끊기면 값 뒤에 "?" */
-function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) => [number, number], scale: number) {
+function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) => [number, number], scale: number): { A: [number, number]; B?: [number, number]; handle: [number, number] } | null {
   const mark = r.ok ? '' : '?';
   const off = r.dim.offset;
   if (r.dim.kind === 'diameter') {
@@ -519,7 +523,7 @@ function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) 
     items.push({ kind: 'line', layer: 'dim', points: [...edge, ...knee, knee[0] + label.length * TEXT * 0.62, knee[1]] });
     arrow(items, edge, [-u[0], -u[1]]);
     items.push({ kind: 'text', layer: 'dim', x: knee[0] + 0.5, y: knee[1] + 1, size: TEXT, text: label, anchor: 'start' });
-    return;
+    return { A: edge, handle: knee };
   }
   const A = map(r.a);
   const B = map(r.b!);
@@ -536,6 +540,7 @@ function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) 
     const n: [number, number] = [-(B[1] - A[1]) / L, (B[0] - A[0]) / L];
     [A2, B2] = [[A[0] + n[0] * off, A[1] + n[1] * off], [B[0] + n[0] * off, B[1] + n[1] * off]];
   }
-  if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < 1e-6) return; // 같은 점 (수평 치수인데 세로로 놓인 두 점 등)
+  if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < 1e-6) return null; // 같은 점 (수평 치수인데 세로로 놓인 두 점 등)
   dimLine(items, A, B, A2, B2, `${dimText(r.value)}${mark}${r.ok ? tolText(r.dim.tol) : ''}`);
+  return { A, B, handle: [(A2[0] + B2[0]) / 2, (A2[1] + B2[1]) / 2] };
 }

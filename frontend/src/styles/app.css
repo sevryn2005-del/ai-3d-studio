@@ -392,6 +392,8 @@ label.check.small { font-size: 12px; }
 .drawing-sheet-wrap .drawing-sheet { max-width: none; }
 .drawing-pick { position: absolute; inset: 0; width: 100%; height: 100%; }
 .drawing-pick .pick-hover { fill: none; stroke: #e5534b; stroke-width: 0.5; }
+.drawing-pick .dim-handle { fill: transparent; stroke: transparent; stroke-width: 0.4; }
+.drawing-pick .dim-handle:hover, .drawing-pick .dim-handle.dragging { fill: rgba(47, 129, 247, 0.18); stroke: #2f81f7; }
 .drawing-pick .pick-done { fill: #e5534b; }
 .drawing-pick .pick-line { stroke: #e5534b; stroke-width: 0.3; stroke-dasharray: 1 1; }
 .drawing-dim-kinds { display: flex; flex-wrap: wrap; gap: 4px; }

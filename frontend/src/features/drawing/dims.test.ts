@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DrawingDim } from '../../cad/commandTypes';
 import type { DrawingView } from '../engine/types';
-import { makeAnchor, parseTol, resolveDim, snapCircle, snapVertex, tolInput, viewVertices } from './dims';
+import { dimOffsetAt, makeAnchor, parseTol, resolveDim, snapCircle, snapVertex, tolInput, viewVertices } from './dims';
 import { buildSheet } from './sheet';
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
@@ -84,5 +84,17 @@ describe('공차 입력', () => {
     expect(parseTol('abc')).toBeNull();
     expect(tolInput({ upper: 0.1, lower: -0.1 })).toBe('±0.1');
     expect(tolInput({ upper: 0.1, lower: -0.05 })).toBe('+0.1/-0.05');
+  });
+});
+
+describe('치수선 간격 (추가·끌어 옮기기 공통)', () => {
+  it('수평은 위·아래, 수직은 좌·우, 평행은 왼쪽 법선, 지름은 지시선 길이 (최소 3)', () => {
+    expect(dimOffsetAt('horizontal', [0, 0], [10, 0], [5, -8])).toBe(-8);
+    expect(dimOffsetAt('horizontal', [0, 0], [10, 4], [5, 9])).toBe(5);
+    expect(dimOffsetAt('vertical', [0, 0], [0, 10], [-6, 5])).toBe(-6);
+    expect(dimOffsetAt('aligned', [0, 0], [10, 0], [5, 7])).toBe(7);
+    expect(dimOffsetAt('diameter', [0, 0], undefined, [3, 4])).toBe(5);
+    expect(dimOffsetAt('diameter', [0, 0], undefined, [1, 0])).toBe(3);
+    expect(dimOffsetAt('horizontal', [0, 0], [10, 0], [5, -999])).toBe(-200);
   });
 });

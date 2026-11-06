@@ -104,6 +104,20 @@ test('도면 공차·상세도 (형식 v23): ±·위아래 공차 글자, 구멍
   const sheet = page.getByTestId('drawing-sheet');
   await expect(sheet.locator('text', { hasText: /^40 ±0\.1$/ })).toHaveCount(1);
   await expect(sheet.locator('text', { hasText: /^Ø6 \+0\.1\/0$/ })).toHaveCount(1);
+  // 치수 끌어 옮기기: 손잡이(치수선 가운데)를 종이 아래로 10mm → 간격이 10 더 커진다, 실행 취소 1번
+  const off0 = Number(await page.getByTestId('dim-offset-dim1').inputValue());
+  const handle = page.getByTestId('dim-handle-dim1');
+  const hb = (await handle.boundingBox())!;
+  const pickBox = (await page.getByTestId('drawing-pick').boundingBox())!;
+  const [, paperH] = (await page.getByTestId('drawing-pick').getAttribute('data-paper'))!.split(',').map(Number) as [number, number];
+  const mmPx = pickBox.height / paperH;
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + hb.width / 2 + 3, hb.y + hb.height / 2 + 10 * mmPx, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await page.getByTestId('dim-offset-dim1').inputValue())).toBeCloseTo(off0 - 10, 0);
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('dim-offset-dim1')).toHaveValue(String(off0));
   // 읽을 수 없는 공차는 되돌린다
   await page.getByTestId('dim-tol-dim1').fill('abc');
   await page.getByTestId('dim-tol-dim1').press('Enter');
