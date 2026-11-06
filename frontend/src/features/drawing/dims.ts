@@ -123,3 +123,32 @@ export function dimValue(kind: DrawingDim['kind'], a: P2, b: P2): number {
 }
 
 export const DIM_KIND_LABEL: Record<DrawingDim['kind'], string> = { horizontal: '수평', vertical: '수직', aligned: '평행(두 점 사이)', diameter: '지름' };
+
+/**
+ * 공차 입력 읽기 (형식 v23): "" = 없음, "±0.1"·"+-0.1"·"0.1" = ±0.1, "+0.1/-0.05"·"+0.1 -0.05" = 위 +0.1 · 아래 −0.05.
+ * 읽을 수 없으면 null (입력 오류)
+ */
+export function parseTol(text: string): DrawingDim['tol'] | undefined | null {
+  const t = text.trim().replace(/−/g, '-').replace(/\s+/g, ' ');
+  if (!t) return undefined;
+  const sym = t.match(/^(?:±|\+-|\+\/-)?\s*(\d*\.?\d+)$/);
+  if (sym) {
+    const v = Number(sym[1]);
+    return v === 0 ? undefined : { upper: v, lower: -v };
+  }
+  const two = t.match(/^([+-]?\d*\.?\d+)\s*[/ ]\s*([+-]?\d*\.?\d+)$/);
+  if (!two) return null;
+  const a = Number(two[1]);
+  const b = Number(two[2]);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) > 100 || Math.abs(b) > 100) return null;
+  const [upper, lower] = a >= b ? [a, b] : [b, a];
+  return upper === 0 && lower === 0 ? undefined : { upper, lower };
+}
+
+/** 공차 → 입력 칸 글자 (parseTol 의 반대) */
+export function tolInput(t: DrawingDim['tol']): string {
+  if (!t) return '';
+  if (Math.abs(t.upper + t.lower) < 1e-12) return `±${t.upper}`;
+  const sg = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
+  return `${sg(t.upper)}/${sg(t.lower)}`;
+}

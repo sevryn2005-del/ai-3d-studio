@@ -653,8 +653,23 @@ export const DrawingDimSchema = z.strictObject({
   a: DrawingAnchorSchema,
   b: DrawingAnchorSchema.optional(),
   offset: z.number().min(-200).max(200),
+  /** 공차 (형식 v23): 위·아래 치수 허용차 (mm, 부호 포함). 같은 크기 반대 부호면 ±로 쓴다 */
+  tol: z.strictObject({ upper: z.number().min(-100).max(100), lower: z.number().min(-100).max(100) }).optional(),
 });
 export type DrawingDim = z.infer<typeof DrawingDimSchema>;
+/**
+ * 상세도 (형식 v23): 보기 view 의 원 영역(center·radius, 보기 좌표 mm)을 시트 척도의 scale 배로 확대해 빈 자리에 그린다.
+ * 원 영역 둘레·기호(B, C, …)를 원래 보기에 표시한다 (features/drawing/sheet.ts)
+ */
+export const DrawingDetailSchema = z.strictObject({
+  id: ObjectIdSchema,
+  view: z.enum(['front', 'top', 'right']),
+  center: z.tuple([coord, coord]),
+  radius: z.number().min(0.01).max(LIMITS.maxDimension),
+  scale: z.number().min(1.1).max(50),
+});
+export type DrawingDetail = z.infer<typeof DrawingDetailSchema>;
+export const MAX_DRAWING_DETAILS = 4;
 export const MAX_DRAWING_DIMS = 100;
 export const DrawingSettingsSchema = z.strictObject({
   paper: z.enum(['A4', 'A3']),
@@ -666,6 +681,7 @@ export const DrawingSettingsSchema = z.strictObject({
   section: DrawingSectionSchema.optional(),
   notes: z.string().max(500).optional(),
   dims: z.array(DrawingDimSchema).max(MAX_DRAWING_DIMS).optional(),
+  details: z.array(DrawingDetailSchema).max(MAX_DRAWING_DETAILS).optional(),
 });
 export type DrawingSettings = z.infer<typeof DrawingSettingsSchema>;
 export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', views: ['front', 'top', 'right', 'iso'], dimensions: true, centerlines: true };
@@ -677,7 +693,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 22;
+export const MODEL_SCHEMA_VERSION = 23;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

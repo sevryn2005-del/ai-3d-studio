@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingView } from '../engine/types';
 import { cleanHidden } from './clean';
 import { dxfText, sheetToDxf, sheetToSvg } from './exportSheet';
-import { buildSheet, hatch, scaleLabel, type SheetOptions } from './sheet';
+import { buildSheet, clipToCircle, hatch, scaleLabel, tolText, type SheetOptions } from './sheet';
 import { projectPoint } from './views';
 
 const rectLine = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
@@ -167,5 +167,45 @@ describe('도면 2단계: 해칭·절단선·중심선·주기', () => {
     expect(dxf).toMatch(/LTYPE\r\n {2}2\r\nCENTER\r\n/);
     expect(dxf).toContain('HATCH');
     expect(sheetToSvg(buildSheet(SECTIONED, OPT2))).toContain('class="hatch"');
+  });
+
+  it('공차 글자: ±, +위/−아래, 0 은 그대로', () => {
+    expect(tolText(undefined)).toBe('');
+    expect(tolText({ upper: 0.1, lower: -0.1 })).toBe(' ±0.1');
+    expect(tolText({ upper: 0.1, lower: -0.05 })).toBe(' +0.1/−0.05');
+    expect(tolText({ upper: 0, lower: -0.02 })).toBe(' 0/−0.02');
+    expect(tolText({ upper: 0, lower: 0 })).toBe('');
+  });
+
+  it('원으로 자르기: 원 밖은 버리고, 들어갔다 나온 선은 조각으로', () => {
+    expect(clipToCircle([-10, 0, 10, 0], [0, 0], 5)).toEqual([[-5, 0, 5, 0]]);
+    expect(clipToCircle([-10, 8, 10, 8], [0, 0], 5)).toEqual([]);
+    const two = clipToCircle([-10, 0, 10, 0, 10, 10, -10, 10], [0, 5], 6); // ㄷ 모양: 아래·위 변만 원을 지나감
+    expect(two).toHaveLength(2);
+  });
+
+  it('상세도: 원래 보기에 원 + 기호 B, 확대 그림은 보기·표제란과 겹치지 않는 자리 / 공차는 치수 글자 뒤에', () => {
+    const s = buildSheet(VIEWS, {
+      ...OPT,
+      scale: 1,
+      details: [{ id: 'det1', view: 'top', center: [-18, -8], radius: 5, scale: 3 }],
+      dims: [{ id: 'd1', view: 'front', kind: 'horizontal', a: { at: [-20, 0], rel: [0, 0] }, b: { at: [20, 0], rel: [1, 0] }, offset: -10, tol: { upper: 0.1, lower: -0.1 } }],
+    });
+    expect(texts(s)).toEqual(expect.arrayContaining(['B', '상세 B (3:1)', '40 ±0.1']));
+    expect(s.details).toHaveLength(1);
+    const d = s.details[0]!;
+    expect(d.radius).toBeCloseTo(15);
+    expect(s.overflow).toBe(false);
+    // 확대 그림 안의 보이는 선 = 원 안에만 (반지름 + 여유)
+    const inDetail = s.items.filter((i) => i.kind === 'line' && i.layer === 'visible' && i.points.every((v, k) => (k % 2 ? true : Math.hypot(v - d.center[0], i.points[k + 1]! - d.center[1]) <= d.radius + 1e-6)));
+    expect(inDetail.length).toBeGreaterThan(0);
+    // 다른 보기 범위와 겹치지 않음
+    for (const [name, pl] of Object.entries(s.placements)) {
+      const w = (pl.bounds[2] - pl.bounds[0]) * pl.scale;
+      const h = (pl.bounds[3] - pl.bounds[1]) * pl.scale;
+      const nearX = Math.max(pl.at[0], Math.min(d.center[0], pl.at[0] + w));
+      const nearY = Math.max(pl.at[1], Math.min(d.center[1], pl.at[1] + h));
+      expect(Math.hypot(nearX - d.center[0], nearY - d.center[1]), name).toBeGreaterThan(d.radius);
+    }
   });
 });

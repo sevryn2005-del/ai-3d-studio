@@ -72,3 +72,58 @@ test('도면 치수 직접 추가·따라가기·지우기', async ({ page }) =>
   await expect(page.getByTestId('dim-offset-dim1')).toHaveValue('-12', { timeout: 40_000 });
   await expect(page.getByTestId('dim-value-dim1')).toHaveText('60');
 });
+
+test('도면 공차·상세도 (형식 v23): ±·위아래 공차 글자, 구멍 둘레 상세도 B (2:1 → 배율 바꾸기), 저장 유지', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await dispatch(page, { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 });
+  await dispatch(page, { type: 'hole', id: 'h', target: 'b', face: 'top', at: [10, 0], diameter: 6, depth: 10 });
+  await page.getByRole('tab', { name: '도면' }).click();
+  await page.getByTestId('cmd-drawing').click();
+  await expect(page.getByTestId('drawing-sheet')).toBeVisible({ timeout: 40_000 });
+  await page.getByTestId('drawing-dims').uncheck();
+  await page.getByTestId('drawing-scale').selectOption('2');
+
+  // 공차: 수평 치수 40 ±0.1, 지름 Ø6 +0.1/0
+  await page.getByTestId('dim-mode-horizontal').click();
+  await clickView(page, 'front', -20, 0);
+  await clickView(page, 'front', 20, 0);
+  await clickView(page, 'front', 0, -6);
+  await page.getByTestId('dim-mode-diameter').click();
+  await clickView(page, 'top', 13, 0);
+  await page.keyboard.press('Escape');
+  await page.getByTestId('dim-tol-dim1').fill('±0.1');
+  await page.getByTestId('dim-tol-dim1').press('Enter');
+  await page.getByTestId('dim-tol-dim2').fill('+0.1/0');
+  await page.getByTestId('dim-tol-dim2').press('Enter');
+  await expect(page.getByTestId('dim-value-dim1')).toHaveText('40 ±0.1');
+  await expect(page.getByTestId('dim-value-dim2')).toHaveText('Ø6 +0.1/0');
+  const sheet = page.getByTestId('drawing-sheet');
+  await expect(sheet.locator('text', { hasText: /^40 ±0\.1$/ })).toHaveCount(1);
+  await expect(sheet.locator('text', { hasText: /^Ø6 \+0\.1\/0$/ })).toHaveCount(1);
+  // 읽을 수 없는 공차는 되돌린다
+  await page.getByTestId('dim-tol-dim1').fill('abc');
+  await page.getByTestId('dim-tol-dim1').press('Enter');
+  await expect(page.getByTestId('dim-tol-dim1')).toHaveValue('±0.1');
+
+  // 상세도: 평면도 구멍 가운데 → 반지름 6 → 상세 B (시트 2:1 × 2 = 4:1)
+  await page.getByTestId('detail-mode').click();
+  await clickView(page, 'top', 10, 0);
+  await clickView(page, 'top', 16, 0);
+  await expect(page.getByTestId('detail-row-detail1')).toContainText('상세 B');
+  await expect(sheet.locator('text', { hasText: /^상세 B \(4:1\)$/ })).toHaveCount(1);
+  await page.getByTestId('detail-scale-detail1').selectOption('5');
+  await expect(sheet.locator('text', { hasText: /^상세 B \(10:1\)$/ })).toHaveCount(1);
+
+  // 창을 닫았다 열어도 남는다 (모델에 저장), 실행 취소 1번 = 배율만 되돌림
+  await page.getByTestId('drawing-close').click();
+  await page.keyboard.press('Control+z');
+  await page.getByTestId('cmd-drawing').click();
+  await expect(page.getByTestId('drawing-sheet').locator('text', { hasText: /^상세 B \(4:1\)$/ })).toHaveCount(1, { timeout: 40_000 });
+  await expect(page.getByTestId('dim-value-dim1')).toHaveText('40 ±0.1');
+  await page.getByTestId('detail-delete-detail1').click();
+  await expect(page.getByTestId('detail-row-detail1')).toHaveCount(0);
+});

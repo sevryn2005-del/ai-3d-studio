@@ -4,14 +4,14 @@
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_DRAWING, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
-import { DIM_KIND_LABEL, makeAnchor, snapCircle, snapVertex } from '../../features/drawing/dims';
+import { DEFAULT_DRAWING, MAX_DRAWING_DETAILS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
+import { DIM_KIND_LABEL, makeAnchor, parseTol, snapCircle, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import type { DrawingView, DrawingViewName } from '../../features/engine/types';
 import { sheetToDxf, sheetToSvg } from '../../features/drawing/exportSheet';
-import { buildSheet, dimText, PAPERS, scaleLabel, STANDARD_SCALES, type Paper } from '../../features/drawing/sheet';
+import { buildSheet, DETAIL_LABELS, dimText, PAPERS, scaleLabel, STANDARD_SCALES, tolText, type Paper } from '../../features/drawing/sheet';
 import { ALL_VIEWS, DRAWING_VIEWS } from '../../features/drawing/views';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
@@ -47,6 +47,7 @@ function DrawingWindow() {
   const update = (patch: Partial<DrawingSettings>) => {
     const next = { ...settings, ...patch };
     if (!next.section) delete next.section;
+    if (!next.details?.length) delete next.details;
     submitNow({ type: 'set_drawing', drawing: next });
   };
   const title = settings.title ?? projectName;
@@ -86,7 +87,7 @@ function DrawingWindow() {
   }, [geometry, engineId, chosen.join(','), sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 치수 추가 모드: 종류 → 끝점 클릭(꼭짓점에 붙음) → 치수선 위치 클릭. Esc 는 모드를 먼저 끝낸다
-  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | null>(null);
+  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | null>(null);
   const [pending, setPending] = useState<{ view: PickView; p: [number, number] }[]>([]);
   const [hover, setHover] = useState<{ view: PickView; p: [number, number]; paper: [number, number]; r?: number } | null>(null);
   const modeRef = useRef(dimMode);
@@ -117,6 +118,7 @@ function DrawingWindow() {
             ...(settings.section ? { section: settings.section } : {}),
             ...(settings.notes ? { notes: settings.notes } : {}),
             ...(settings.dims?.length ? { dims: settings.dims } : {}),
+            ...(settings.details?.length ? { details: settings.details } : {}),
           })
         : null,
     [views, chosen.length, settings, title],
@@ -158,9 +160,23 @@ function DrawingWindow() {
     while (dims.some((d) => d.id === `dim${n}`)) n++;
     return `dim${n}`;
   };
+  const details = settings.details ?? [];
+  const nextDetailId = () => {
+    let n = 1;
+    while (details.some((d) => d.id === `detail${n}`)) n++;
+    return `detail${n}`;
+  };
   const onMove = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return setHover(null);
+    if (dimMode === 'detail') {
+      // 상세도: 첫 클릭 = 가운데, 둘째 = 반지름 (원 미리보기)
+      if (pending.length === 1) {
+        const c = toPaper(pending[0]!.view, pending[0]!.p);
+        return setHover({ view: pending[0]!.view, p: [0, 0], paper: c, r: Math.hypot(h.paper[0] - c[0], h.paper[1] - c[1]) });
+      }
+      return setHover(h.view ? { view: h.view, p: h.p, paper: h.paper } : null);
+    }
     // 치수선 자리: 보기 밖이어도 된다
     if (pending.length === 2 && dimMode !== 'diameter') return setHover({ view: pending[0]!.view, p: [0, 0], paper: h.paper });
     if (!h.view) return setHover(null);
@@ -174,6 +190,23 @@ function DrawingWindow() {
   const onClick = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return;
+    if (dimMode === 'detail') {
+      if (pending.length === 0) {
+        if (h.view) setPending([{ view: h.view, p: h.p }]);
+        return;
+      }
+      const c = pending[0]!;
+      const cp = toPaper(c.view, c.p);
+      const scale = sheet!.placements[c.view]!.scale;
+      const radius = Math.round((Math.hypot(h.paper[0] - cp[0], h.paper[1] - cp[1]) / scale) * 100) / 100;
+      setPending([]);
+      setDimMode(null);
+      setHover(null);
+      if (radius < 0.01 || details.length >= MAX_DRAWING_DETAILS) return;
+      const r3 = (v: number) => Math.round(v * 1000) / 1000;
+      update({ details: [...details, { id: nextDetailId(), view: c.view, center: [r3(c.p[0]), r3(c.p[1])], radius, scale: 2 }] });
+      return;
+    }
     if (pending.length === 2 && dimMode !== 'diameter') return placeDim(h.paper);
     if (!h.view) return;
     if (dimMode === 'diameter') {
@@ -188,7 +221,7 @@ function DrawingWindow() {
   };
   /** 세 번째 클릭: 치수선 위치 (종이 mm, 부호 = 방향) */
   const placeDim = (P: [number, number]) => {
-    if (!dimMode || dimMode === 'diameter') return;
+    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail') return;
     const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
     const A = toPaper(a.view, a.p);
     const B = toPaper(b.view, b.p);
@@ -204,6 +237,8 @@ function DrawingWindow() {
     update({ dims: [...dims, { id: nextDimId(), view: a.view, kind: dimMode, a: makeAnchor(v, a.p), b: makeAnchor(v, b.p), offset }] });
     setPending([]);
   };
+  const setDimTol = (id: string, tol: DrawingDim['tol']) =>
+    update({ dims: dims.map((d) => (d.id !== id ? d : tol ? { ...d, tol } : (({ tol: _drop, ...rest }) => rest)(d))) });
   const setDimOffset = (id: string, offset: number) => update({ dims: dims.map((d) => (d.id === id ? { ...d, offset: Math.max(-200, Math.min(200, offset)) } : d)) });
   const removeDim = (id: string) => update({ dims: dims.filter((d) => d.id !== id) });
   const resolved = new Map((sheet?.dims ?? []).map((r) => [r.dim.id, r]));
@@ -342,7 +377,11 @@ function DrawingWindow() {
           </div>
           {dimMode && (
             <p className="muted small" data-testid="dim-hint">
-              {dimMode === 'diameter'
+              {dimMode === 'detail'
+                ? pending.length === 0
+                  ? '확대할 곳의 가운데를 클릭하세요 (정면·평면·우측면도)'
+                  : '원 크기를 정할 곳을 클릭하세요'
+                : dimMode === 'diameter'
                 ? '원(가장자리·중심)을 클릭하세요'
                 : pending.length === 0
                   ? '첫 꼭짓점을 클릭하세요 (가까운 꼭짓점에 붙음)'
@@ -360,7 +399,7 @@ function DrawingWindow() {
                   <li key={d.id} data-testid={`dim-row-${d.id}`} className={r && !r.ok ? 'broken' : undefined}>
                     <span>
                       {DIM_KIND_LABEL[d.kind]} · {DRAWING_VIEWS[d.view].label}{' '}
-                      <strong data-testid={`dim-value-${d.id}`}>{r ? (r.ok ? `${d.kind === 'diameter' ? 'Ø' : ''}${dimText(r.value)}` : '연결 끊김') : '보기 없음'}</strong>
+                      <strong data-testid={`dim-value-${d.id}`}>{r ? (r.ok ? `${d.kind === 'diameter' ? 'Ø' : ''}${dimText(r.value)}${tolText(d.tol)}` : '연결 끊김') : '보기 없음'}</strong>
                     </span>
                     <input
                       type="number"
@@ -376,12 +415,72 @@ function DrawingWindow() {
                       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                       data-testid={`dim-offset-${d.id}`}
                     />
+                    <input
+                      className="dim-tol"
+                      aria-label={`${d.id} 공차`}
+                      title="공차: ±0.1 또는 +0.1/-0.05 (비우면 없음)"
+                      placeholder="공차"
+                      key={`${d.id}:tol:${tolInput(d.tol)}`}
+                      defaultValue={tolInput(d.tol)}
+                      onBlur={(e) => {
+                        const t = parseTol(e.target.value);
+                        if (t === null) {
+                          e.target.value = tolInput(d.tol);
+                          return;
+                        }
+                        if (tolInput(t) !== tolInput(d.tol)) setDimTol(d.id, t);
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                      data-testid={`dim-tol-${d.id}`}
+                    />
                     <button className="cancel" onClick={() => removeDim(d.id)} title="치수 지우기" data-testid={`dim-delete-${d.id}`}>
                       ✕
                     </button>
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </fieldset>
+        <fieldset className="drawing-dims">
+          <legend>상세도 (부분 확대)</legend>
+          <button
+            aria-pressed={dimMode === 'detail'}
+            disabled={details.length >= MAX_DRAWING_DETAILS}
+            onClick={() => {
+              setDimMode(dimMode === 'detail' ? null : 'detail');
+              setPending([]);
+            }}
+            data-testid="detail-mode"
+            title="보기에서 가운데·크기를 클릭해 원 영역을 고르면, 그 부분을 확대한 그림을 빈 자리에 넣습니다 (최대 4개)"
+          >
+            + 상세도
+          </button>
+          {details.length > 0 && (
+            <ul className="drawing-dim-list">
+              {details.map((d, k) => (
+                <li key={d.id} data-testid={`detail-row-${d.id}`}>
+                  <span>
+                    상세 {DETAIL_LABELS[k]} · {DRAWING_VIEWS[d.view].label}
+                  </span>
+                  <select
+                    value={String(d.scale)}
+                    aria-label={`${d.id} 배율`}
+                    title="시트 척도의 몇 배로 확대할지"
+                    onChange={(e) => update({ details: details.map((x) => (x.id === d.id ? { ...x, scale: Number(e.target.value) } : x)) })}
+                    data-testid={`detail-scale-${d.id}`}
+                  >
+                    {[...new Set([1.5, 2, 2.5, 3, 4, 5, 10, d.scale])].sort((a, b) => a - b).map((s) => (
+                      <option key={s} value={String(s)}>
+                        ×{s}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="cancel" onClick={() => update({ details: details.filter((x) => x.id !== d.id) })} title="상세도 지우기" data-testid={`detail-delete-${d.id}`}>
+                    ✕
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
         </fieldset>

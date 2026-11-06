@@ -935,6 +935,26 @@ class DrawingAnchor(Strict):
     rel: tuple[Annotated[float, _num(-10, 11)], Annotated[float, _num(-10, 11)]]
 
 
+class DrawingTolerance(Strict):
+    """치수 공차 (형식 v23): 위·아래 허용차 (mm, 부호 포함)"""
+
+    upper: Annotated[float, _num(-100, 100)]
+    lower: Annotated[float, _num(-100, 100)]
+
+
+class DrawingDetail(Strict):
+    """상세도 (형식 v23): 보기의 원 영역을 시트 척도의 scale 배로 확대"""
+
+    id: ObjectId
+    view: Literal["front", "top", "right"]
+    center: tuple[Coordinate, Coordinate]
+    radius: Annotated[float, _num(0.01, Limits.MAX_DIMENSION)]
+    scale: Annotated[float, _num(1.1, 50)]
+
+
+MAX_DRAWING_DETAILS = 4
+
+
 class DrawingDim(Strict):
     """사용자 치수 (형식 v17): 수평·수직·평행(a·b) 또는 지름(a = 원 중심). offset = 종이 mm"""
 
@@ -944,6 +964,7 @@ class DrawingDim(Strict):
     a: DrawingAnchor
     b: Annotated[DrawingAnchor | None, Field(exclude_if=lambda v: v is None)] = None
     offset: Annotated[float, _num(-200, 200)]
+    tol: Annotated[DrawingTolerance | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 MAX_DRAWING_DIMS = 100
@@ -961,10 +982,11 @@ class DrawingSettings(Strict):
     section: Annotated[DrawingSection | None, Field(exclude_if=lambda v: v is None)] = None
     notes: Annotated[str | None, Field(max_length=500, exclude_if=lambda v: v is None)] = None
     dims: Annotated[list[DrawingDim] | None, Field(max_length=MAX_DRAWING_DIMS, exclude_if=lambda v: v is None)] = None
+    details: Annotated[list[DrawingDetail] | None, Field(max_length=MAX_DRAWING_DETAILS, exclude_if=lambda v: v is None)] = None
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[22]
+    schemaVersion: Literal[23]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

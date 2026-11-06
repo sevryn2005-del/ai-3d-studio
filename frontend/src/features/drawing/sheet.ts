@@ -10,10 +10,12 @@
  * - 중심선: 정면으로 보이는 원의 중심 표시(+ 자형), 원통 축선 (가는 1점 쇄선, 2mm 넘게). 등각도에는 그리지 않는다.
  * - 주기: 표제란 왼쪽 칸에 여러 줄 (최대 6줄).
  * - 사용자 치수(형식 v17): 끝점을 투상 결과에 다시 붙여(dims.ts) 그린다. 붙을 곳이 없으면 값 뒤에 "?" (연결 끊김).
+ * - 공차(형식 v23): 사용자 치수 값 뒤에 ±0.1 또는 +0.1/−0.05.
+ * - 상세도(형식 v23): 보기의 원 영역을 확대해 빈 자리(보기·표제란·주기·다른 상세도와 겹치지 않는 곳)에 — 원래 보기에는 가는 원과 기호 B, C, …
  * - 자동 치수: 정면도 전체 너비·높이, 우측면도 전체 깊이(우측면도가 없으면 평면도), 정면으로 보이는 원의 지름(같은 지름은 n×Ø).
  * 좌표: 용지 mm, 원점 = 왼쪽 아래, y 위쪽 (DXF 와 같음. SVG 는 뒤집어 그린다).
  */
-import type { DrawingDim } from '../../cad/commandTypes';
+import type { DrawingDetail, DrawingDim } from '../../cad/commandTypes';
 import type { DrawingView, DrawingViewName } from '../engine/types';
 import { resolveDim, type ResolvedDim } from './dims';
 import { DRAWING_VIEWS } from './views';
@@ -45,6 +47,8 @@ export interface SheetOptions {
   notes?: string;
   /** 사용자 치수 */
   dims?: DrawingDim[];
+  /** 상세도 */
+  details?: DrawingDetail[];
 }
 
 /** 보기 배치: 보기 좌표 (x, y) → 종이 = at + (p − bounds 최소) × scale */
@@ -65,6 +69,8 @@ export interface Sheet {
   placements: Partial<Record<DrawingViewName, ViewPlacement>>;
   /** 사용자 치수가 붙은 결과 (목록 표시용) */
   dims: ResolvedDim[];
+  /** 상세도 자리 (종이 mm: 가운데·반지름, 기호) — 목록·시험용 */
+  details: { id: string; label: string; center: [number, number]; radius: number; scale: number }[];
 }
 
 const MARGIN = 10;
@@ -84,6 +90,16 @@ export function scaleLabel(s: number): string {
 }
 const round2 = (v: number) => String(Math.round(v * 100) / 100);
 export const dimText = (v: number) => String(Math.round(v * 100) / 100);
+/** 공차 글자: 같은 크기 반대 부호 = ±, 아니면 +위/−아래 (0 은 그대로 0). 없으면 '' */
+export function tolText(t: DrawingDim['tol']): string {
+  if (!t || (t.upper === 0 && t.lower === 0)) return '';
+  const r = (v: number) => String(Math.round(Math.abs(v) * 1e4) / 1e4);
+  if (Math.abs(t.upper + t.lower) < 1e-12) return ` ±${r(t.upper)}`;
+  const sg = (v: number) => (v === 0 ? '0' : `${v > 0 ? '+' : '−'}${r(v)}`);
+  return ` ${sg(t.upper)}/${sg(t.lower)}`;
+}
+/** 상세도 기호: A 는 단면도가 쓰므로 B 부터 */
+export const DETAIL_LABELS = ['B', 'C', 'D', 'E'];
 
 type Box = { w: number; h: number };
 const size = (v: DrawingView | undefined): Box => (v ? { w: v.bounds[2] - v.bounds[0], h: v.bounds[3] - v.bounds[1] } : { w: 0, h: 0 });
@@ -172,6 +188,56 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     const at = place[v.name];
     if (at) placements[v.name] = { at, bounds: v.bounds, scale };
   }
+  // 상세도: 원래 보기에 가는 원 + 기호, 확대 그림은 빈 자리에
+  const occupied: [number, number, number, number][] = [[W - MARGIN - TITLE_W, MARGIN, W - MARGIN, MARGIN + TITLE_H]];
+  if (opt.notes?.trim()) occupied.push([MARGIN, MARGIN, W - MARGIN - TITLE_W, MARGIN + TITLE_H]);
+  for (const v of list) {
+    const at = place[v.name];
+    if (!at) continue;
+    occupied.push([at[0] - PAD, at[1] - PAD - 4, at[0] + (v.bounds[2] - v.bounds[0]) * scale + PAD, at[1] + (v.bounds[3] - v.bounds[1]) * scale + PAD]);
+  }
+  const details: Sheet['details'] = [];
+  let detailOverflow = false;
+  (opt.details ?? []).forEach((dt, k) => {
+    const v = views[dt.view];
+    const at = place[dt.view];
+    if (!v || !at || dt.view === ('iso' as string)) return;
+    const label = DETAIL_LABELS[k] ?? String(k + 1);
+    const map = (x: number, y: number): [number, number] => [at[0] + (x - v.bounds[0]) * scale, at[1] + (y - v.bounds[1]) * scale];
+    const [pcx, pcy] = map(dt.center[0], dt.center[1]);
+    const pr = dt.radius * scale;
+    items.push({ kind: 'line', layer: 'dim', points: circlePts(pcx, pcy, pr) });
+    // 기호는 왼쪽 위 (지름 지시선은 오른쪽 위 45° 로 나가므로 겹치지 않게)
+    items.push({ kind: 'text', layer: 'text', x: pcx - pr * Math.SQRT1_2 - 1, y: pcy + pr * Math.SQRT1_2 + 1, size: 3.5, text: label, anchor: 'end' });
+    // 확대 그림 자리: 위에서 아래, 왼쪽에서 오른쪽으로 2mm 씩 훑어 겹치지 않는 첫 곳
+    const ds = scale * dt.scale;
+    const R = dt.radius * ds;
+    const bw = 2 * R + 4;
+    const bh = 2 * R + 10;
+    let spot: [number, number] | null = null;
+    for (let y = H - MARGIN - 2 - bh; y >= MARGIN + 2 && !spot; y -= 2)
+      for (let x = MARGIN + 2; x + bw <= W - MARGIN - 2; x += 2)
+        if (!occupied.some(([a, b, c, d]) => x < c && x + bw > a && y < d && y + bh > b)) {
+          spot = [x, y];
+          break;
+        }
+    if (!spot) {
+      detailOverflow = true;
+      spot = [MARGIN + 2, H - MARGIN - 2 - bh];
+    }
+    occupied.push([spot[0], spot[1], spot[0] + bw, spot[1] + bh]);
+    const cx = spot[0] + bw / 2;
+    const cy = spot[1] + 8 + R + 2;
+    const dmap = (x: number, y: number): [number, number] => [cx + (x - dt.center[0]) * ds, cy + (y - dt.center[1]) * ds];
+    const clipMap = (l: number[]) => clipToCircle(l, dt.center, dt.radius).map((piece) => piece.flatMap((_, j) => (j % 2 ? [] : dmap(piece[j]!, piece[j + 1]!))));
+    if (v.section && opt.section?.view === v.name) for (const l of hatch(v.section.map((l) => l.flatMap((_, j) => (j % 2 ? [] : dmap(l[j]!, l[j + 1]!)))))) for (const piece of clipToCircle(l, [cx, cy], R)) items.push({ kind: 'line', layer: 'hatch', points: piece });
+    for (const l of v.hidden) for (const piece of clipMap(l)) items.push({ kind: 'line', layer: 'hidden', points: piece });
+    for (const l of v.visible) for (const piece of clipMap(l)) items.push({ kind: 'line', layer: 'visible', points: piece });
+    items.push({ kind: 'line', layer: 'dim', points: circlePts(cx, cy, R) });
+    items.push({ kind: 'text', layer: 'text', x: cx, y: spot[1] + 2, size: 3.5, text: `상세 ${label} (${scaleLabel(ds)})`, anchor: 'middle' });
+    details.push({ id: dt.id, label, center: [cx, cy], radius: R, scale: ds });
+  });
+
   const resolved: ResolvedDim[] = [];
   for (const d of opt.dims ?? []) {
     const v = views[d.view];
@@ -181,10 +247,52 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     resolved.push(r);
     userDim(items, r, (p) => [pl.at[0] + (p[0] - pl.bounds[0]) * scale, pl.at[1] + (p[1] - pl.bounds[1]) * scale], scale);
   }
-  return { width: W, height: H, scale, overflow: L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved };
+  return { width: W, height: H, scale, overflow: detailOverflow || L.w > area.w + 1e-9 || L.h > area.h + 1e-9, items, placements, dims: resolved, details };
 }
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
+/** 원 꺾은선 (72 조각, 닫힘) */
+const circlePts = (cx: number, cy: number, r: number) => Array.from({ length: 73 }, (_, k) => [cx + r * Math.cos((k * Math.PI) / 36), cy + r * Math.sin((k * Math.PI) / 36)]).flat();
+
+/** 꺾은선을 원 안 조각들로 자른다 (상세도) */
+export function clipToCircle(l: number[], c: readonly [number, number] | readonly number[], r: number): number[][] {
+  const out: number[][] = [];
+  let cur: number[] = [];
+  const flush = () => {
+    if (cur.length >= 4) out.push(cur);
+    cur = [];
+  };
+  for (let k = 2; k + 1 < l.length; k += 2) {
+    const [ax, ay, bx, by] = [l[k - 2]!, l[k - 1]!, l[k]!, l[k + 1]!];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const fx = ax - c[0]!;
+    const fy = ay - c[1]!;
+    const A = dx * dx + dy * dy;
+    const B = 2 * (fx * dx + fy * dy);
+    const C = fx * fx + fy * fy - r * r;
+    const disc = B * B - 4 * A * C;
+    if (A < 1e-18 || disc <= 0) {
+      flush();
+      continue;
+    }
+    const sq = Math.sqrt(disc);
+    const t0 = Math.max(0, (-B - sq) / (2 * A));
+    const t1 = Math.min(1, (-B + sq) / (2 * A));
+    if (t0 >= t1) {
+      flush();
+      continue;
+    }
+    const p0 = [ax + dx * t0, ay + dy * t0];
+    const p1 = [ax + dx * t1, ay + dy * t1];
+    if (t0 > 0) flush();
+    if (!cur.length) cur.push(p0[0]!, p0[1]!);
+    cur.push(p1[0]!, p1[1]!);
+    if (t1 < 1) flush();
+  }
+  flush();
+  return out;
+}
 
 function titleBlock(items: SheetItem[], x: number, y: number, opt: SheetOptions, scale: number) {
   const w = TITLE_W;
@@ -407,7 +515,7 @@ function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) 
     const u: [number, number] = [Math.SQRT1_2, Math.SQRT1_2];
     const edge: [number, number] = [cx + u[0] * rad, cy + u[1] * rad];
     const knee: [number, number] = [edge[0] + u[0] * Math.max(3, Math.abs(off)), edge[1] + u[1] * Math.max(3, Math.abs(off))];
-    const label = r.ok ? `Ø${dimText(r.value)}` : 'Ø?';
+    const label = r.ok ? `Ø${dimText(r.value)}${tolText(r.dim.tol)}` : 'Ø?';
     items.push({ kind: 'line', layer: 'dim', points: [...edge, ...knee, knee[0] + label.length * TEXT * 0.62, knee[1]] });
     arrow(items, edge, [-u[0], -u[1]]);
     items.push({ kind: 'text', layer: 'dim', x: knee[0] + 0.5, y: knee[1] + 1, size: TEXT, text: label, anchor: 'start' });
@@ -429,5 +537,5 @@ function userDim(items: SheetItem[], r: ResolvedDim, map: (p: [number, number]) 
     [A2, B2] = [[A[0] + n[0] * off, A[1] + n[1] * off], [B[0] + n[0] * off, B[1] + n[1] * off]];
   }
   if (Math.hypot(B2[0] - A2[0], B2[1] - A2[1]) < 1e-6) return; // 같은 점 (수평 치수인데 세로로 놓인 두 점 등)
-  dimLine(items, A, B, A2, B2, `${dimText(r.value)}${mark}`);
+  dimLine(items, A, B, A2, B2, `${dimText(r.value)}${mark}${r.ok ? tolText(r.dim.tol) : ''}`);
 }

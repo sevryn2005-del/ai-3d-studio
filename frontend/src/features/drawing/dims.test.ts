@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DrawingDim } from '../../cad/commandTypes';
 import type { DrawingView } from '../engine/types';
-import { makeAnchor, resolveDim, snapCircle, snapVertex, viewVertices } from './dims';
+import { makeAnchor, parseTol, resolveDim, snapCircle, snapVertex, tolInput, viewVertices } from './dims';
 import { buildSheet } from './sheet';
 
 const rect = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y0, x1, y1, x0, y1, x0, y0];
@@ -70,5 +70,19 @@ describe('도면 사용자 치수: 다시 붙이기', () => {
     const s = buildSheet([v40], { paper: 'A4', scale: 1, title: 't', date: 'd', dimensions: false, dims: [diag] });
     const t = s.items.find((i) => i.kind === 'text' && i.layer === 'dim') as { angle?: number };
     expect(t.angle).toBeCloseTo((-Math.atan2(10, 40) * 180) / Math.PI, 2);
+  });
+});
+
+describe('공차 입력', () => {
+  it('±·두 값·없음·오류, 입력 칸으로 되돌리기', () => {
+    expect(parseTol('')).toBeUndefined();
+    expect(parseTol('±0.1')).toEqual({ upper: 0.1, lower: -0.1 });
+    expect(parseTol('0.05')).toEqual({ upper: 0.05, lower: -0.05 });
+    expect(parseTol('+0.1/-0.05')).toEqual({ upper: 0.1, lower: -0.05 });
+    expect(parseTol('-0.05 +0.1')).toEqual({ upper: 0.1, lower: -0.05 }); // 순서가 바뀌어도
+    expect(parseTol('0/−0.02')).toEqual({ upper: 0, lower: -0.02 });
+    expect(parseTol('abc')).toBeNull();
+    expect(tolInput({ upper: 0.1, lower: -0.1 })).toBe('±0.1');
+    expect(tolInput({ upper: 0.1, lower: -0.05 })).toBe('+0.1/-0.05');
   });
 });
