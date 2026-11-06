@@ -3033,6 +3033,71 @@
                 "voxel"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "replace"
+                },
+                "mesh": {
+                  "type": "object",
+                  "properties": {
+                    "verts": {
+                      "maxItems": 50000,
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "prefixItems": [
+                          {
+                            "type": "number",
+                            "minimum": -10000,
+                            "maximum": 10000
+                          },
+                          {
+                            "type": "number",
+                            "minimum": -10000,
+                            "maximum": 10000
+                          },
+                          {
+                            "type": "number",
+                            "minimum": -10000,
+                            "maximum": 10000
+                          }
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
+                      }
+                    },
+                    "faces": {
+                      "maxItems": 50000,
+                      "type": "array",
+                      "items": {
+                        "minItems": 3,
+                        "maxItems": 256,
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "verts",
+                    "faces"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "op",
+                "mesh"
+              ],
+              "additionalProperties": false
             }
           ]
         }

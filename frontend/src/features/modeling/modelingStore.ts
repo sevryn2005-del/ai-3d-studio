@@ -21,6 +21,10 @@ export interface SculptSettings {
   symmetryX: boolean;
   /** 리메시 복셀 크기 (mm), 0 = 자동 (가장 긴 변의 1/40) */
   voxel: number;
+  /** 다이나믹 토폴로지 (Ctrl+D): 붓이 지나가는 곳만 점을 늘린다 */
+  dyntopo: boolean;
+  /** 디테일: 붓 반지름에 대한 최대 선 길이 비율 (작을수록 촘촘) */
+  detail: number;
 }
 export type SelectMode = 'vert' | 'edge' | 'face';
 export type ModalKind = 'grab' | 'rotate' | 'scale' | 'extrude' | 'inset' | 'bevel';
@@ -102,7 +106,7 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   preview: null,
   addMenu: null,
   mouse: [0, 0],
-  sculpt: { brush: 'draw', radiusPx: 50, strength: 0.5, symmetryX: false, voxel: 0 },
+  sculpt: { brush: 'draw', radiusPx: 50, strength: 0.5, symmetryX: false, voxel: 0, dyntopo: false, detail: 0.25 },
   setSculpt: (p) => set((s) => ({ sculpt: { ...s.sculpt, ...p } })),
   proportional: { enabled: false, radius: 10 },
   mask: null,

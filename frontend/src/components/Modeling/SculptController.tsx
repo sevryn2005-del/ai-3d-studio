@@ -5,6 +5,8 @@ import { Matrix3, Mesh, OrthographicCamera, PerspectiveCamera, Plane, Raycaster,
 import { useSceneStore } from '../../cad/sceneStore';
 import type { PolyMesh, V3 } from '../../cad/polymesh';
 import { BRUSH_LABEL, applyDab, grabStroke, paintMask, sculptContext, strokeEdit, type SculptContext } from '../../cad/sculpt';
+import { extendValues, refineNear } from '../../cad/dyntopo';
+import { MAX_POLY_FACES, MAX_POLY_VERTS } from '../../cad/commandTypes';
 import { useModelingStore } from '../../features/modeling/modelingStore';
 import { editTarget } from '../../features/modeling/modelingOps';
 
@@ -20,6 +22,7 @@ interface Hit {
 /**
  * 스컬프트 모드 (블렌더 흐름): 왼쪽 드래그 = 브러시 한 획, Shift = 매끈하게, Ctrl = 반대로.
  * 획 동안은 미리보기만 바뀌고, 뗄 때 바뀐 점이 mesh_edit set_verts 명령 하나가 된다 (실행 취소 1번).
+ * 다이나믹 토폴로지(Ctrl+D)가 켜져 있으면 찍기 전에 붓 아래 긴 선을 쪼개고(cad/dyntopo.ts), 뗄 때 mesh_edit replace 하나.
  * 가운데 드래그 = 화면 돌리기 (Alt+왼쪽도) — 브러시는 왼쪽 버튼만.
  */
 export function SculptController() {
@@ -99,7 +102,7 @@ export function SculptController() {
       if (!s || !t) return;
       const set = useModelingStore.getState().sculpt;
       const brush = e.shiftKey ? 'smooth' : set.brush;
-      const mask = currentMask(t.id, s.base.verts.length);
+      const mask = currentMask(t.id, s.current.verts.length);
       if (brush === 'mask') {
         // 마스크: 모양은 그대로, 점마다 보호 값만 (Ctrl = 지우기)
         const moved = Math.hypot(h.local[0] - s.last[0], h.local[1] - s.last[1], h.local[2] - s.last[2]);
@@ -123,6 +126,20 @@ export function SculptController() {
         const moved = Math.hypot(h.local[0] - s.last[0], h.local[1] - s.last[1], h.local[2] - s.last[2]);
         if (!first && moved < h.radius * 0.15) return;
         s.last = h.local;
+        if (set.dyntopo && s.current.verts.length < MAX_POLY_VERTS && s.current.faces.length < MAX_POLY_FACES - 64) {
+          // 붓 아래(대칭이면 반대쪽도) 긴 선 쪼개기 → 이웃·법선을 다시 구하고 마스크도 늘린다
+          const centers: V3[] = [h.local, ...(set.symmetryX && Math.abs(h.local[0]) > h.radius * 0.05 ? [[-h.local[0], h.local[1], h.local[2]] as V3] : [])];
+          let refined = false;
+          for (const c of centers) {
+            const r = refineNear(s.current, c, h.radius, h.radius * set.detail, MAX_POLY_VERTS, 2);
+            if (!r) continue;
+            refined = true;
+            const prevMask = currentMask(t.id, s.current.verts.length);
+            s.current = r.mesh;
+            if (prevMask) useModelingStore.getState().setMask({ objectId: t.id, values: extendValues(prevMask, r.parents) });
+          }
+          if (refined) s.ctx = sculptContext(s.current);
+        }
         s.current = applyDab(s.current, s.ctx, {
           brush,
           center: h.local,
@@ -131,7 +148,7 @@ export function SculptController() {
           strength: set.strength,
           invert: e.ctrlKey || e.metaKey,
           symmetryX: set.symmetryX,
-          mask,
+          mask: currentMask(t.id, s.current.verts.length),
         });
       }
       useModelingStore.getState().setPreview({ objectId: t.id, mesh: s.current, label: `스컬프트: ${BRUSH_LABEL[brush]}`, command: null });
@@ -148,9 +165,17 @@ export function SculptController() {
       if (!s || e.button !== 0) return;
       stroke.current = null;
       const t = target();
-      const edit = strokeEdit(s.base, s.current);
       useModelingStore.getState().setPreview(null);
-      if (t && edit) useSceneStore.getState().submitNow({ type: 'mesh_edit', target: t.id, edit: { op: 'set_verts', ...edit } });
+      if (!t) return;
+      if (s.current.faces !== s.base.faces) {
+        // 점·면이 함께 바뀜 (다이나믹 토폴로지) → 메시 통째로 하나
+        const r6 = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+        const mesh = { verts: s.current.verts.map((p) => [r6(p[0]), r6(p[1]), r6(p[2])] as V3), faces: s.current.faces };
+        useSceneStore.getState().submitNow({ type: 'mesh_edit', target: t.id, edit: { op: 'replace', mesh } });
+        return;
+      }
+      const edit = strokeEdit(s.base, s.current);
+      if (edit) useSceneStore.getState().submitNow({ type: 'mesh_edit', target: t.id, edit: { op: 'set_verts', ...edit } });
     };
     const onLeave = () => {
       if (!stroke.current) setCursor(null);

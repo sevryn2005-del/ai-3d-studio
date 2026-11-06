@@ -411,3 +411,33 @@ test('리메시 (스컬프트 Ctrl+R): 구를 고른 사각형 그물로, 복셀
   await page.keyboard.press('Control+r');
   await expect(page.getByTestId('notice')).toContainText('리메시 (복셀 0.5mm)'); // 지름 20mm / 40
 });
+
+test('다이나믹 토폴로지 (Ctrl+D): 붓이 지나간 곳만 점이 늘고, 닫힌 채로, 한 획 = 실행 취소 1번', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-uv_sphere').click();
+  const stats = page.getByTestId('mesh-stats');
+  const before = (await stats.textContent())!;
+  const verts = async () => Number(((await stats.textContent()) ?? '').match(/점([\d,]+)/)![1]!.replace(/,/g, ''));
+  const v0 = await verts();
+  await page.getByTestId('mode-sculpt').click();
+  const box = (await page.locator('.modeling-viewport canvas').boundingBox())!;
+  await page.mouse.move(box.x + 30, box.y + 30);
+  await page.keyboard.press('Control+d');
+  await expect(page.getByTestId('sculpt-dyntopo')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('sculpt-detail')).toBeVisible();
+  await page.keyboard.press('Numpad7');
+  await expect.poll(() => page.evaluate(() => window.__AI3D_DEV__!.cameraDir())).toEqual([0, 0, -1]);
+  const a = await page.evaluate(() => window.__AI3D_DEV__!.project(-4, 0, 20));
+  const b = await page.evaluate(() => window.__AI3D_DEV__!.project(4, 0, 20));
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 12 });
+  await page.mouse.up();
+  await expect.poll(verts).toBeGreaterThan(v0 + 20);
+  await expect(stats).toContainText('닫힘');
+  await page.keyboard.press('Control+z');
+  await expect(stats).toHaveText(before);
+});

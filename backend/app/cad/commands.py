@@ -1428,6 +1428,13 @@ class MeshEditSetVerts(Strict):
     positions: Annotated[list[Vec3], Field(min_length=1, max_length=MAX_POLY_VERTS)]
 
 
+class MeshEditReplace(Strict):
+    """메시 통째로 바꾸기 (다이나믹 토폴로지 스컬프트 한 획)"""
+
+    op: Literal["replace"]
+    mesh: PolyMeshData
+
+
 class MeshEditRemesh(Strict):
     """복셀 리메시 (고른 사각형 그물로 다시 짜기)"""
 
@@ -1437,7 +1444,7 @@ class MeshEditRemesh(Strict):
 
 
 MeshEdit = Annotated[
-    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBisect, MeshEditBevel, MeshEditSetVerts, MeshEditRemesh],
+    Union[MeshEditTransform, MeshEditExtrude, MeshEditInset, MeshEditDelete, MeshEditLoopCut, MeshEditSubdivide, MeshEditMerge, MeshEditFill, MeshEditBisect, MeshEditBevel, MeshEditSetVerts, MeshEditRemesh, MeshEditReplace],
     Field(discriminator="op"),
 ]
 

@@ -122,6 +122,11 @@ export function useModelingKeys() {
         else growSelected(e.code === 'NumpadSubtract');
         return;
       }
+      if (mod && key === 'd' && st.mode === 'sculpt') {
+        e.preventDefault(); // 브라우저 즐겨찾기 대신 (블렌더 스컬프트 Ctrl+D = 다이나믹 토폴로지)
+        st.setSculpt({ dyntopo: !st.sculpt.dyntopo });
+        return;
+      }
       if (mod && key === 'r') {
         e.preventDefault(); // 브라우저 새로 고침 대신
         if (st.mode === 'edit') loopCutSelected();

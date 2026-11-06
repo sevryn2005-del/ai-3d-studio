@@ -141,6 +141,16 @@ function SculptBar() {
       <button onClick={densify} title="세분 표면 1단계를 메시에 적용해 점을 늘립니다 (스컬프트가 더 부드럽게)" data-testid="sculpt-densify">
         촘촘하게
       </button>
+      <button aria-pressed={sc.dyntopo} onClick={() => set({ dyntopo: !sc.dyntopo })} title="다이나믹 토폴로지 (Ctrl+D): 붓이 지나가는 곳만 점을 늘려 작은 붓으로도 세밀하게" data-testid="sculpt-dyntopo">
+        다이나믹
+      </button>
+      {sc.dyntopo && (
+        <label className="slider" title="디테일: 붓 반지름에 대한 최대 선 길이 (작을수록 촘촘, 점이 빨리 늘어남)">
+          디테일
+          <input type="range" min={0.1} max={0.5} step={0.05} value={sc.detail} onChange={(e) => set({ detail: Number(e.target.value) })} data-testid="sculpt-detail" />
+          <span>{Math.round(sc.detail * 100)}%</span>
+        </label>
+      )}
       <label className="slider" title="리메시 복셀 크기 (mm, 0 = 자동: 가장 긴 변의 1/40)">
         복셀
         <input type="number" min={0} step={0.5} value={sc.voxel} onChange={(e) => Number(e.target.value) >= 0 && set({ voxel: Number(e.target.value) })} data-testid="sculpt-voxel" style={{ width: 52 }} />

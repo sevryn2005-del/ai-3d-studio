@@ -612,6 +612,11 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
     }
     case 'remesh':
       return voxelRemesh(m, e.voxel, e.smooth ?? 2);
+    case 'replace': {
+      const n = e.mesh.verts.length;
+      if (e.mesh.faces.some((f) => f.some((v) => v >= n))) return '없는 점을 가리킵니다';
+      return { verts: e.mesh.verts.map((v) => [...v] as V3), faces: e.mesh.faces.map((f) => [...f]) };
+    }
   }
 }
 
