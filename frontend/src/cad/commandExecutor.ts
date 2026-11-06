@@ -599,7 +599,7 @@ function applyMeshEdit(m: PolyMesh, e: MeshEdit): PolyMesh | string {
     case 'bevel': {
       if (badV(e.verts)) return '없는 점을 가리킵니다';
       const sel = new Set(e.verts);
-      const r = bevelEdges(m, edges(m).filter(([a, b]) => sel.has(a) && sel.has(b)), e.width);
+      const r = bevelEdges(m, edges(m).filter(([a, b]) => sel.has(a) && sel.has(b)), e.width, e.segments ?? 1);
       return typeof r === 'string' ? r : r.mesh;
     }
     case 'set_verts': {

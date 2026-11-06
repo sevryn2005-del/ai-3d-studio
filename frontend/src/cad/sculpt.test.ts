@@ -37,6 +37,28 @@ describe('스컬프트 브러시', () => {
     expect(fl.verts[peak]![2]).toBeLessThan(3);
   });
 
+  it('점토(C): 평균 평면을 띄워 그 아래 점만 올림 — 튀어나온 점은 그대로 / 주름(Shift+C): 파면서 가운데로 모음', () => {
+    const m = grid();
+    const peak = m.verts.findIndex((v) => v[0] === 2 && v[1] === 0);
+    const bumped = { verts: m.verts.map((v, i) => (i === peak ? ([2, 0, 2] as [number, number, number]) : v)), faces: m.faces };
+    const ctx = sculptContext(bumped);
+    const clay = applyDab(bumped, ctx, { brush: 'clay', center: [0, 0, 0], normal: [0, 0, 1], radius: 5, strength: 1 });
+    const at = (mm: { verts: number[][] }, x: number, y: number) => mm.verts[m.verts.findIndex((v) => v[0] === x && v[1] === y)]!;
+    expect(at(clay, 0, 0)[2]).toBeGreaterThan(0);
+    expect(at(clay, 0, 0)[2]).toBeLessThan(0.6); // 띄운 평면(≈ 평균 + 0.4)을 넘지 않는다
+    expect(clay.verts[peak]![2]).toBe(2); // 평면 위 점은 그대로
+    expect(at(clay, 6, 0)[2]).toBe(0); // 반지름 밖
+
+    const flat = grid();
+    const cctx = sculptContext(flat);
+    const cr = applyDab(flat, cctx, { brush: 'crease', center: [0, 0, 0], normal: [0, 0, 1], radius: 5, strength: 1 });
+    expect(at(cr, 0, 0)[2]).toBeLessThan(0); // 골
+    expect(at(cr, 2, 0)[0]).toBeLessThan(2); // 가운데로 모임
+    expect(at(cr, -2, 0)[0]).toBeGreaterThan(-2);
+    const ridge = applyDab(flat, cctx, { brush: 'crease', center: [0, 0, 0], normal: [0, 0, 1], radius: 5, strength: 1, invert: true });
+    expect(at(ridge, 0, 0)[2]).toBeGreaterThan(0); // Ctrl = 능선
+  });
+
   it('X 대칭·잡아끌기·획 → set_verts 명령 (실행 취소 1번 단위)', () => {
     const m = grid();
     const ctx = sculptContext(m);

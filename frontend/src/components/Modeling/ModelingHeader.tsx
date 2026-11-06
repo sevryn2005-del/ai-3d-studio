@@ -104,6 +104,8 @@ const BRUSHES: { id: Brush; key: string }[] = [
   { id: 'smooth', key: 'S' },
   { id: 'grab', key: 'G' },
   { id: 'flatten', key: 'Shift+T' },
+  { id: 'clay', key: 'C' },
+  { id: 'crease', key: 'Shift+C' },
   { id: 'mask', key: 'M' },
 ];
 

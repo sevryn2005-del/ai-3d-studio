@@ -5,13 +5,15 @@
  */
 import { faceNormal, type PolyMesh, type V3 } from './polymesh';
 
-export type Brush = 'draw' | 'inflate' | 'smooth' | 'grab' | 'flatten' | 'mask';
+export type Brush = 'draw' | 'inflate' | 'smooth' | 'grab' | 'flatten' | 'clay' | 'crease' | 'mask';
 export const BRUSH_LABEL: Record<Brush, string> = {
   draw: '그리기',
   inflate: '부풀리기',
   smooth: '매끈하게',
   grab: '잡아끌기',
   flatten: '평평하게',
+  clay: '점토',
+  crease: '주름',
   mask: '마스크',
 };
 
@@ -85,6 +87,31 @@ function dabOnce(m: PolyMesh, ctx: SculptContext, d: Dab): V3[] {
       if (!nb.length) continue;
       const avg = mul(nb.reduce<V3>((s, j) => add(s, m.verts[j]!), [0, 0, 0]), 1 / nb.length);
       verts[i] = add(m.verts[i]!, mul(sub(avg, m.verts[i]!), Math.min(1, d.strength * w * 0.6)));
+    }
+  } else if (d.brush === 'crease') {
+    // 주름: 안쪽으로 파면서(Ctrl = 솟은 능선) 둘레 점을 붓 가운데 쪽으로 모은다 (날카로운 골)
+    const n = norm(d.normal);
+    for (const { i, w } of hit) {
+      const v = m.verts[i]!;
+      const toC = sub(d.center, v);
+      const tangential = sub(toC, mul(n, dot(toC, n))); // 법선 성분을 뺀 가운데 쪽
+      verts[i] = add(add(v, mul(n, -sign * amount * w)), mul(tangential, Math.min(0.5, d.strength * w * 0.35)));
+    }
+  } else if (d.brush === 'clay') {
+    // 점토: 영향 범위 점들의 평균 평면을 바깥으로 조금 띄우고, 그 평면 아래 점만 평면 쪽으로 (층층이 덧붙이듯 평평하게 쌓임)
+    let wsum = 0;
+    let c: V3 = [0, 0, 0];
+    let n: V3 = [0, 0, 0];
+    for (const { i, w } of hit) {
+      c = add(c, mul(m.verts[i]!, w));
+      n = add(n, mul(ctx.normals[i]!, w));
+      wsum += w;
+    }
+    n = mul(norm(n), sign);
+    const plane = add(mul(c, 1 / wsum), mul(n, amount));
+    for (const { i, w } of hit) {
+      const below = dot(sub(plane, m.verts[i]!), n);
+      if (below > 0) verts[i] = add(m.verts[i]!, mul(n, below * Math.min(1, d.strength * w * 0.8)));
     }
   } else {
     // 평평하게: 영향 범위 점들의 (가중) 가운데를 지나고 (가중) 평균 법선에 수직인 평면 쪽으로

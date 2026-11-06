@@ -1381,6 +1381,8 @@ class MeshEditBevel(Strict):
     op: Literal["bevel"]
     verts: Annotated[list[PolyIndex], Field(min_length=2, max_length=MAX_POLY_VERTS)]
     width: Annotated[float, _num(0.0001, Limits.MAX_DIMENSION)]
+    # 여러 단계 (둥근 모서리), 생략 = 1
+    segments: Annotated[int, Field(ge=1, le=12)] | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class MeshEditSetVerts(Strict):

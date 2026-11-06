@@ -44,6 +44,37 @@ describe('베벨 (Ctrl+B)', () => {
     expect(r.sel).toHaveLength(4);
   });
 
+  it('여러 단계(8): 둥근 모서리 — 점이 원호 위, 닫힘, 부피는 모따기와 완전한 원호 사이', () => {
+    const r = bevelEdges(cube(), [[4, 5]], 0.5, 8);
+    if (typeof r === 'string') throw new Error(r);
+    expect(r.mesh.faces).toHaveLength(6 + 8);
+    expect(boundaryEdgeCount(r.mesh)).toBe(0);
+    expect(polyMeshError(r.mesh)).toBeNull();
+    const v = polyVolume(r.mesh);
+    const exact = 8 - 0.25 * (1 - Math.PI / 4) * 2; // 반지름 0.5 원호, 길이 2
+    expect(v).toBeGreaterThan(8 - 0.25);
+    expect(v).toBeLessThan(exact + 1e-9);
+    expect(v).toBeCloseTo(exact, 2);
+    // 둥근 면 점은 원호 중심(모서리에서 안쪽으로 0.5, 0.5)에서 거리 0.5
+    const c = cube();
+    const [a, b] = [c.verts[4]!, c.verts[5]!];
+    const axis = a.map((x, i) => (x === b[i] ? null : i)).findIndex((x) => x !== null);
+    const others = [0, 1, 2].filter((i) => i !== axis);
+    const center = others.map((i) => a[i]! - Math.sign(a[i]!) * 0.5);
+    const onArc = r.sel.map((i) => r.mesh.verts[i]!).map((p) => Math.hypot(p[others[0]!]! - center[0]!, p[others[1]!]! - center[1]!));
+    for (const d of onArc) expect(d).toBeCloseTo(0.5, 5);
+    expect(r.sel).toHaveLength(18); // 양 끝 9점씩
+  });
+
+  it('여러 단계: 큐브 모든 선도 닫힘 (모서리는 n각형 하나)', () => {
+    const c = cube();
+    const r = bevelEdges(c, edges(c), 0.3, 3);
+    if (typeof r === 'string') throw new Error(r);
+    expect(boundaryEdgeCount(r.mesh)).toBe(0);
+    expect(polyMeshError(r.mesh)).toBeNull();
+    expect(r.mesh.faces).toHaveLength(6 + 12 * 3 + 8);
+  });
+
   it('큐브 모든 선: 모서리마다 삼각형으로 메워 닫힘 (면 6 + 12 + 8)', () => {
     const c = cube();
     const r = bevelEdges(c, edges(c), 0.3);

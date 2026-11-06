@@ -99,7 +99,7 @@ export function growSelection(m: PolyMesh, sel: number[], shrink = false): numbe
  * 세 개 이상의 부채가 만나는 점(예: 큐브 모서리 전부)은 구멍을 다각형 면으로 메운다.
  * 닫힌(모든 선에 면 2개) 부분만 된다. 돌려주는 sel = 새로 생긴 베벨 면의 점
  */
-export function bevelEdges(m: PolyMesh, edgeList: [number, number][], width: number): { mesh: PolyMesh; sel: number[] } | string {
+export function bevelEdges(m: PolyMesh, edgeList: [number, number][], width: number, segments = 1): { mesh: PolyMesh; sel: number[] } | string {
   if (!edgeList.length) return '베벨: 선을 고르세요 (2 = 선 선택 모드)';
   const bev = new Set(edgeList.map(([a, b]) => ekey(a, b)));
   const faceCount = new Map<string, number>();
@@ -164,16 +164,60 @@ export function bevelEdges(m: PolyMesh, edgeList: [number, number][], width: num
     if (seq.length >= 3) extraFaces.push([...seq].reverse());
   }
   const at = (f: number, x: number) => corner.get(`${f}:${x}`) ?? [x];
-  const faces = m.faces.map((face, f) => face.flatMap((x) => at(f, x)));
+  let faces = [...m.faces.map((face, f) => face.flatMap((x) => at(f, x))), ...extraFaces];
   const sel = new Set<number>();
+  const n = Math.max(1, Math.min(12, Math.round(segments)));
+  // 여러 단계: 베벨 면의 가로 선(원래 점 둘레)마다 원호 위 점 n−1 개 — 그 선을 쓰는 모든 면이 같은 점을 나눠 쓴다
+  const arcs = new Map<string, number[]>(); // "a,b" (a→b 순서) → 사이 점
+  const cross = (a: number, b: number, v: number): number[] => {
+    if (n === 1 || a === b) return [];
+    const hit = arcs.get(`${a},${b}`);
+    if (hit) return hit;
+    const rev = arcs.get(`${b},${a}`);
+    if (rev) return [...rev].reverse();
+    const A = verts[a]!;
+    const B = verts[b]!;
+    const P = m.verts[v]!;
+    // 유리 2차 베지어 (조절점 = 원래 점): 두 면에 접하는 원호 (무게 = sin(α/2), α = 조절점에서 본 각)
+    const ua = unit(sub(A, P));
+    const ub = unit(sub(B, P));
+    const cosA = Math.max(-1, Math.min(1, ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2]));
+    const w = Math.sin(Math.acos(cosA) / 2);
+    const pts: number[] = [];
+    for (let k = 1; k < n; k++) {
+      const t = k / n;
+      const [b0, b1, b2] = [(1 - t) ** 2, 2 * t * (1 - t) * w, t * t];
+      const den = b0 + b1 + b2;
+      pts.push(newVert([(b0 * A[0] + b1 * P[0] + b2 * B[0]) / den, (b0 * A[1] + b1 * P[1] + b2 * B[1]) / den, (b0 * A[2] + b1 * P[2] + b2 * B[2]) / den]));
+    }
+    arcs.set(`${a},${b}`, pts);
+    return pts;
+  };
+  const strips: number[][] = [];
   for (const [u, v] of edgeList) {
     const fL = m.faces.findIndex((face) => face.some((x, i) => x === v && face[(i + 1) % face.length] === u));
     const fR = m.faces.findIndex((face) => face.some((x, i) => x === u && face[(i + 1) % face.length] === v));
-    const quad = [at(fL, u)[0]!, at(fL, v).at(-1)!, at(fR, v)[0]!, at(fR, u).at(-1)!];
-    quad.forEach((q) => sel.add(q));
-    faces.push(quad);
+    const [p0, p1, p2, p3] = [at(fL, u)[0]!, at(fL, v).at(-1)!, at(fR, v)[0]!, at(fR, u).at(-1)!];
+    const colV = [p1, ...cross(p1, p2, v), p2];
+    const colU = [p0, ...[...cross(p3, p0, u)].reverse(), p3];
+    for (let k = 0; k < n; k++) {
+      const q = [colU[Math.min(k, colU.length - 1)]!, colV[Math.min(k, colV.length - 1)]!, colV[Math.min(k + 1, colV.length - 1)]!, colU[Math.min(k + 1, colU.length - 1)]!];
+      const clean = q.filter((x, i) => x !== q[(i + 1) % q.length]);
+      if (clean.length >= 3) strips.push(clean);
+    }
+    [...colU, ...colV].forEach((q) => sel.add(q));
   }
-  faces.push(...extraFaces);
+  // 다른 면(옆면·모서리 메움)도 가로 선 사이 점을 끼워 넣어 틈이 없게
+  if (n > 1)
+    faces = faces.map((face) =>
+      face.flatMap((x, i) => {
+        const y = face[(i + 1) % face.length]!;
+        const fwd = arcs.get(`${x},${y}`);
+        const back = arcs.get(`${y},${x}`);
+        return fwd ? [x, ...fwd] : back ? [x, ...[...back].reverse()] : [x];
+      }),
+    );
+  faces.push(...strips);
   const out = compact({ verts, faces });
   // compact 로 번호가 바뀌므로 새 베벨 면 점은 좌표로 다시 찾는다
   const selPos = new Set([...sel].map((i) => verts[i]!.join(',')));

@@ -1094,7 +1094,7 @@ export const MeshEditSchema = z.discriminatedUnion('op', [
   /** K 나이프·이등분: 평면(point, normal, 객체 로컬)으로 면을 자른다. faces 가 비면 모든 면 */
   z.strictObject({ op: z.literal('bisect'), faces: z.array(z.number().int().min(0)).max(MAX_POLY_FACES), point: Vec3Schema, normal: Vec3Schema }),
   /** Ctrl+B 베벨: 고른 점들 사이 선(양 끝이 모두 고른 선)을 width 만큼 모따기 */
-  z.strictObject({ op: z.literal('bevel'), verts: vertIds.min(2), width: z.number().min(0.0001).max(LIMITS.maxDimension) }),
+  z.strictObject({ op: z.literal('bevel'), verts: vertIds.min(2), width: z.number().min(0.0001).max(LIMITS.maxDimension), segments: z.number().int().min(1).max(12).optional() }),
   /** 점 위치 바꾸기 (스컬프트 한 획): 고른 점들을 새 좌표로 (객체 로컬, mm) */
   z.strictObject({
     op: z.literal('set_verts'),

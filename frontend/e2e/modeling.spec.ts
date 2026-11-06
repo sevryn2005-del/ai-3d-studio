@@ -158,6 +158,23 @@ test('스컬프트: 구에 그리기 브러시로 한 획 → 부풀어 오름, 
   expect(after).toBeGreaterThan(10.05); // 반지름 10 구가 획 자리에서 부풀었다
   await page.keyboard.press('Control+z'); // 획 1번 = 실행 취소 1번
   expect(await save()).toBeLessThanOrEqual(10.000001);
+
+  // 점토(C)·주름(Shift+C): 단축키로 브러시 바꾸고, 주름 한 획은 구를 안쪽으로 판다
+  await page.keyboard.press('c');
+  await expect(page.getByTestId('brush-clay')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Shift+C');
+  await expect(page.getByTestId('brush-crease')).toHaveAttribute('aria-pressed', 'true');
+  const minR = async () => {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+    const obj = JSON.parse(readFileSync((await dl.path())!, 'utf8')).model.objects[0];
+    return Math.min(...obj.polymesh.verts.map((v: number[]) => Math.hypot(v[0]!, v[1]!, v[2]!)));
+  };
+  const before = await minR();
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 12 });
+  await page.mouse.up();
+  expect(await minR()).toBeLessThan(before - 0.05);
 });
 
 test('편집 모드: 선 클릭 → Ctrl+B 베벨 2mm → 면 7, Ctrl+L 연결 선택, 도넛 Alt+클릭 루프', async ({ page }) => {
@@ -186,6 +203,21 @@ test('편집 모드: 선 클릭 → Ctrl+B 베벨 2mm → 면 7, Ctrl+L 연결 �
   // Ctrl+L: 이어진 점 전부
   await page.keyboard.press('Control+l');
   await expect(page.getByTestId('edit-selection')).toContainText('점 10/10');
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+
+  // 여러 단계 베벨: 베벨 중 휠 위로 3번 = 4단계 (둥근 모서리) → 면 6 + 4
+  await page.mouse.click(e.x, e.y);
+  await expect(page.getByTestId('edit-selection')).toContainText('선 1');
+  await page.keyboard.press('Control+b');
+  await page.keyboard.type('2');
+  for (let k = 0; k < 3; k++) await page.mouse.wheel(0, -100);
+  await expect(page.getByTestId('modeling-hint')).toContainText('4단계');
+  await page.keyboard.press('PageDown'); // 3단계
+  await expect(page.getByTestId('modeling-hint')).toContainText('3단계');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면9');
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('mesh-stats')).toContainText('면6');
 

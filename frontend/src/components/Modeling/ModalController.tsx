@@ -110,13 +110,14 @@ export function ModalController() {
         };
       } else if (modal.kind === 'bevel' && mesh) {
         const w = Math.max(0.01, typed ?? round(Math.hypot(...mouseDelta), 0.01));
-        const r = bevelEdges(mesh, edgeSel, w);
+        const segs = useModelingStore.getState().bevelSegments;
+        const r = bevelEdges(mesh, edgeSel, w, segs);
         preview =
           typeof r === 'string'
             ? { objectId: obj.id, label: r, command: null }
             : {
-                objectId: obj.id, mesh: r.mesh, afterSel: r.sel, label: modalLabel('bevel', null, shown ?? `${formatMm(w)}mm`),
-                command: { type: 'mesh_edit', target: obj.id, edit: { op: 'bevel', verts: sel, width: w } },
+                objectId: obj.id, mesh: r.mesh, afterSel: r.sel, label: `${modalLabel('bevel', null, shown ?? `${formatMm(w)}mm`)} · ${segs}단계 (휠)`,
+                command: { type: 'mesh_edit', target: obj.id, edit: { op: 'bevel', verts: sel, width: w, ...(segs > 1 ? { segments: segs } : {}) } },
               };
       } else if (modal.kind === 'inset' && mesh) {
         const th = Math.max(0.01, typed ?? round(Math.hypot(...mouseDelta), 0.01));
@@ -179,11 +180,16 @@ export function ModalController() {
     };
     update();
     const unsub = useModelingStore.subscribe((s, prev) => {
-      if (s.mouse !== prev.mouse || s.modal !== prev.modal || s.proportional !== prev.proportional || s.ctrl !== prev.ctrl || s.snap !== prev.snap) update();
+      if (s.mouse !== prev.mouse || s.modal !== prev.modal || s.proportional !== prev.proportional || s.ctrl !== prev.ctrl || s.snap !== prev.snap || s.bevelSegments !== prev.bevelSegments) update();
     });
-    // 비례 편집 반지름: 모달 중 휠 (블렌더와 같음)
+    // 모달 중 휠 (블렌더와 같음): 베벨 = 단계 수, 그 밖 = 비례 편집 반지름
     const onWheel = (e: WheelEvent) => {
       const st = useModelingStore.getState();
+      if (st.modal?.kind === 'bevel') {
+        e.preventDefault();
+        st.setBevelSegments(st.bevelSegments + (e.deltaY < 0 ? 1 : -1));
+        return;
+      }
       if (!st.modal || !st.proportional.enabled || st.mode !== 'edit') return;
       e.preventDefault();
       st.setProportional({ radius: Math.max(0.1, Math.min(5000, st.proportional.radius * (e.deltaY < 0 ? 1.1 : 1 / 1.1))) });

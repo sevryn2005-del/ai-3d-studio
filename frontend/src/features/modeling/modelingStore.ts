@@ -75,6 +75,9 @@ interface ModelingState {
   mask: { objectId: string; values: number[] } | null;
   setMask: (m: { objectId: string; values: number[] } | null) => void;
   setProportional: (p: Partial<{ enabled: boolean; radius: number }>) => void;
+  /** 베벨 단계 수 (1 = 모따기, 여럿 = 둥근 모서리). 베벨 중 휠로 바꾼다 (블렌더와 같음), 다음 베벨에도 유지 */
+  bevelSegments: number;
+  setBevelSegments: (n: number) => void;
 
   setMode: (m: ModelingMode) => void;
   setSelectMode: (m: SelectMode) => void;
@@ -109,6 +112,8 @@ export const useModelingStore = create<ModelingState>((set, get) => ({
   ctrl: false,
   setCtrl: (ctrl) => set((s) => (s.ctrl === ctrl ? s : { ctrl })),
   setProportional: (p) => set((s) => ({ proportional: { ...s.proportional, ...p } })),
+  bevelSegments: 1,
+  setBevelSegments: (n) => set({ bevelSegments: Math.max(1, Math.min(12, Math.round(n))) }),
 
   setMode: (mode) => set({ mode, selVerts: [], modal: null, preview: null, addMenu: null, knife: null }),
   setSelectMode: (selectMode) => set({ selectMode }),
