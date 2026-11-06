@@ -62,14 +62,15 @@ def shared_cases(base: str) -> None:
 
     drawings = json.loads((ROOT / "shared/schemas/examples/drawing-cases.json").read_text(encoding="utf-8"))
     for name, case in drawings.items():
-        body = {"model": case["model"], "views": list(case["views"]), **({"section": case["section"]} if "section" in case else {})}
+        names = [n for n in case["views"] if not n.startswith("aux")]  # 보조 투상도는 aux 방향으로 따로 요청
+        body = {"model": case["model"], "views": names, **({"section": case["section"]} if "section" in case else {}), **({"aux": case["aux"]} if "aux" in case else {})}
         _, data, _ = request(f"{base}/api/model/drawing", body)
         r = json.loads(data)
         assert r["ok"] and len(r["views"]) == len(case["views"]), (name, r.get("issues"))
         for v in r["views"]:
             exp = case["views"][v["name"]]["bounds"]
             assert all(abs(a - b) < 1e-3 for a, b in zip(v["bounds"], exp)), (name, v["name"], v["bounds"], exp)
-    print(f"도면 {len(drawings)}가지 ✓ (숨은선·단면)")
+    print(f"도면 {len(drawings)}가지 ✓ (숨은선·단면·보조 투상도)")
 
     model = cases["fillet-box-all"]["model"]  # 정밀 피처(필렛)의 B-rep 면·모서리
     oid = model["objects"][-1]["id"]
