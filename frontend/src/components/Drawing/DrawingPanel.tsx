@@ -4,7 +4,7 @@
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_DRAWING, MAX_DRAWING_AUX, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
+import { DEFAULT_DRAWING, MAX_DRAWING_AUX, MAX_EXTRA_SHEETS, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
 import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, RA_VALUES, snapCircle, snapEdge, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
@@ -42,15 +42,30 @@ function DrawingWindow() {
   const engineId = useActiveEngineId();
   const projectName = useProjectStore((s) => s.name);
   const close = () => useDrawingStore.getState().setOpen(false);
-  // 설정은 설계 원본(model.drawing)에 — 바꿀 때마다 set_drawing 명령 (실행 취소·저장·AI 가 같은 경로)
-  const settings: DrawingSettings = model.drawing ?? DEFAULT_DRAWING;
+  // 설정은 설계 원본(model.drawing · 2장째부터 model.drawingSheets)에 — 바꿀 때마다 set_drawing 명령 (실행 취소·저장·AI 가 같은 경로)
+  const extraSheets = model.drawingSheets ?? [];
+  const sheetCount = extraSheets.length + 1;
+  const [sheetIdx, setSheetIdx] = useState(0);
+  const idx = Math.min(sheetIdx, sheetCount - 1);
+  const settings: DrawingSettings = idx === 0 ? (model.drawing ?? DEFAULT_DRAWING) : extraSheets[idx - 1]!;
+  const send = (drawing: DrawingSettings, sheet: number) => submitNow({ type: 'set_drawing', drawing, ...(sheet ? { sheet } : {}) });
+  const addSheet = () => {
+    if (sheetCount >= MAX_EXTRA_SHEETS + 1) return;
+    // 새 시트: 지금 시트의 용지·척도·보기만 이어받고 치수·주기 등은 비운다
+    const { paper, scale, views, dimensions, centerlines } = settings;
+    if (send({ paper, scale, views, dimensions, centerlines, title: `${title} (${sheetCount + 1})` }, sheetCount).status === 'applied') setSheetIdx(sheetCount);
+  };
+  const removeSheet = () => {
+    if (idx === 0) return;
+    if (submitNow({ type: 'delete_drawing_sheet', sheet: idx }).status === 'applied') setSheetIdx(idx - 1);
+  };
   const update = (patch: Partial<DrawingSettings>) => {
     const next = { ...settings, ...patch };
     if (!next.section) delete next.section;
     if (!next.details?.length) delete next.details;
     if (!next.marks?.length) delete next.marks;
     if (!next.aux?.length) delete next.aux;
-    submitNow({ type: 'set_drawing', drawing: next });
+    send(next, idx);
   };
   const title = settings.title ?? projectName;
   const [titleDraft, setTitleDraft] = useState(title);
@@ -128,12 +143,13 @@ function DrawingWindow() {
             ...(settings.details?.length ? { details: settings.details } : {}),
             ...(settings.marks?.length ? { marks: settings.marks } : {}),
             ...(settings.aux?.length ? { aux: settings.aux } : {}),
+            ...(sheetCount > 1 ? { sheetNo: [idx + 1, sheetCount] as [number, number] } : {}),
           })
         : null,
-    [views, chosen.length, settings, title, shownDims],
+    [views, chosen.length, settings, title, shownDims, idx, sheetCount],
   );
   const svg = useMemo(() => (sheet ? sheetToSvg(sheet) : ''), [sheet]);
-  const fileBase = `${title || projectName} 도면`;
+  const fileBase = `${title || projectName} 도면${sheetCount > 1 ? ` ${idx + 1}` : ''}`;
   const [W, H] = PAPERS[settings.paper];
   const toggle = (v: StandardViewName) => update({ views: chosen.includes(v) ? chosen.filter((x) => x !== v) : ALL_VIEWS.filter((x) => x === v || chosen.includes(x)) });
   /** 단면 위치 기본값: 형상 가운데 (정면 단면 = 평면도의 y 가운데, 우측면 단면 = 정면도의 x 가운데) */
@@ -322,6 +338,32 @@ function DrawingWindow() {
           <button className="cancel" onClick={close} data-testid="drawing-close" title="닫기 (Esc)">
             ✕
           </button>
+        </div>
+        <div className="drawing-sheet-tabs" role="tablist" aria-label="도면 시트">
+          {Array.from({ length: sheetCount }, (_, i) => (
+            <button
+              key={i}
+              role="tab"
+              aria-selected={i === idx}
+              onClick={() => {
+                setSheetIdx(i);
+                setDimMode(null);
+                setPending([]);
+              }}
+              data-testid={`drawing-sheet-tab-${i + 1}`}
+              title={`${i + 1}장째 시트`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          <button onClick={addSheet} disabled={sheetCount >= MAX_EXTRA_SHEETS + 1} title="시트 추가 (지금 시트의 용지·척도·보기를 이어받음, 최대 10장)" data-testid="drawing-sheet-add">
+            + 시트
+          </button>
+          {idx > 0 && (
+            <button className="cancel" onClick={removeSheet} title="이 시트 지우기 (실행 취소 가능)" data-testid="drawing-sheet-delete">
+              시트 지우기
+            </button>
+          )}
         </div>
         <label className="drawing-field">
           <span>제목</span>

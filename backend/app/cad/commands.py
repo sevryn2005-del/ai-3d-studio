@@ -1013,12 +1013,13 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[26]
+    schemaVersion: Literal[27]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
     mates: Annotated[list[Mate] | None, Field(max_length=MAX_MATES, exclude_if=lambda v: v is None)] = None
     drawing: Annotated[DrawingSettings | None, Field(exclude_if=lambda v: v is None)] = None
+    drawingSheets: Annotated[list[DrawingSettings] | None, Field(max_length=9, exclude_if=lambda v: v is None)] = None
     # 작업 모드 (형식 v19): design = 설계(스케치 → 피처), modeling = 3D 모델링(메시 편집). 없으면 예전 통합 화면
     workspace: Annotated[Literal["design", "modeling"] | None, Field(exclude_if=lambda v: v is None)] = None
 
@@ -1211,11 +1212,22 @@ class DeleteMate(Strict):
     mate: ObjectId
 
 
+MAX_EXTRA_SHEETS = 9
+
+
 class SetDrawing(Strict):
-    """도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다"""
+    """도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다. sheet (형식 v27): 0 = 1장째, k = k+1 장째, 시트 수와 같은 번호 = 새 시트"""
 
     type: Literal["set_drawing"]
     drawing: DrawingSettings
+    sheet: Annotated[int, Field(ge=0, le=MAX_EXTRA_SHEETS)] | None = Field(default=None, exclude_if=lambda v: v is None)
+
+
+class DeleteDrawingSheet(Strict):
+    """도면 시트 지우기 (형식 v27): sheet = 1 … (1장째는 지울 수 없다)"""
+
+    type: Literal["delete_drawing_sheet"]
+    sheet: Annotated[int, Field(ge=1, le=MAX_EXTRA_SHEETS)]
 
 
 class PartData(Strict):
@@ -1746,6 +1758,7 @@ CadCommand = Annotated[
         SetMate,
         DeleteMate,
         SetDrawing,
+        DeleteDrawingSheet,
         AddMesh,
         MeshEditCommand,
         SetModifiers,
@@ -1823,6 +1836,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     SetMate,
     DeleteMate,
     SetDrawing,
+    DeleteDrawingSheet,
     AddMesh,
     MeshEditCommand,
     SetModifiers,

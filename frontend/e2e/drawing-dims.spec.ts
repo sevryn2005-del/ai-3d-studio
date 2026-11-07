@@ -206,3 +206,42 @@ for (const engine of ['server', 'browser'] as const) {
     await expect(sheet.locator('text', { hasText: /^단면 A-A$/ })).toHaveCount(1, { timeout: 40_000 });
   });
 }
+
+test('도면 여러 장 (형식 v27): 시트 추가 → 따로 설정·표제란 시트 n/m → 지우기 → 실행 취소', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await dispatch(page, { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 });
+  await page.getByRole('tab', { name: '도면' }).click();
+  await page.getByTestId('cmd-drawing').click();
+  const sheet = page.getByTestId('drawing-sheet');
+  await expect(sheet).toBeVisible({ timeout: 40_000 });
+  await expect(sheet.locator('text', { hasText: /^1\/2$/ })).toHaveCount(0); // 한 장이면 시트 번호 없음
+
+  await page.getByTestId('drawing-sheet-add').click();
+  await expect(page.getByTestId('drawing-sheet-tab-2')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('drawing-title')).toHaveValue(/\(2\)$/);
+  await expect(sheet.locator('text', { hasText: /^2\/2$/ })).toHaveCount(1, { timeout: 40_000 });
+  // 2장째만 A3 · 등각도 빼기
+  await page.getByTestId('drawing-paper').selectOption('A3');
+  await page.getByTestId('drawing-view-iso').uncheck();
+  await expect(sheet.locator('text', { hasText: /^등각도$/ })).toHaveCount(0, { timeout: 40_000 });
+  // 1장째는 그대로 (A4, 등각도 있음, 시트 1/2)
+  await page.getByTestId('drawing-sheet-tab-1').click();
+  await expect(page.getByTestId('drawing-paper')).toHaveValue('A4');
+  await expect(sheet.locator('text', { hasText: /^등각도$/ })).toHaveCount(1, { timeout: 40_000 });
+  await expect(sheet.locator('text', { hasText: /^1\/2$/ })).toHaveCount(1);
+
+  // 2장째 지우기 → 실행 취소로 되살리기 (모델에 저장)
+  await page.getByTestId('drawing-sheet-tab-2').click();
+  await page.getByTestId('drawing-sheet-delete').click();
+  await expect(page.getByTestId('drawing-sheet-tab-2')).toHaveCount(0);
+  await page.getByTestId('drawing-close').click();
+  await page.keyboard.press('Control+z');
+  await page.getByTestId('cmd-drawing').click();
+  await expect(page.getByTestId('drawing-sheet-tab-2')).toBeVisible();
+  await page.getByTestId('drawing-sheet-tab-2').click();
+  await expect(page.getByTestId('drawing-paper')).toHaveValue('A3');
+});

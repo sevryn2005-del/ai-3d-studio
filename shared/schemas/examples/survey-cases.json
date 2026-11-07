@@ -2,7 +2,7 @@
   "touching-faces-union": {
     "volume": 2000,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -80,7 +80,7 @@
   "coplanar-through-cut": {
     "volume": 3717.2566611769184,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -157,7 +157,7 @@
   "tangent-side-cut": {
     "volume": 4000,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [],
       "objects": [
@@ -234,7 +234,7 @@
   "revolve-and-negative-extrude": {
     "volume": 4269.911184307752,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [
         {
@@ -359,7 +359,7 @@
   "revolve-edge-on-axis": {
     "volume": 3141.5926535897934,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [
         {
@@ -427,7 +427,7 @@
   "revolve-cone-point-on-axis": {
     "volume": 1047.1975511965977,
     "model": {
-      "schemaVersion": 26,
+      "schemaVersion": 27,
       "units": "mm",
       "sketches": [
         {

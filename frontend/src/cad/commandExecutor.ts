@@ -24,6 +24,7 @@ import {
   type Mate,
   type Sketch,
   MAX_MATES,
+  MAX_EXTRA_SHEETS,
   type ModelDefinition,
   type ObjectId,
   type PrimitiveKind,
@@ -420,7 +421,22 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (new Set(dims.map((d) => d.id)).size !== dims.length) return fail('도면 치수 ID 가 중복되었습니다');
       const bad = dims.find((d) => (d.kind === 'diameter') === !!d.b);
       if (bad) return fail(`치수 ${bad.id}: ${bad.kind === 'diameter' ? '지름 치수는 끝점이 하나입니다' : '길이 치수는 끝점이 둘입니다'}`);
-      return done(model, { ...model, drawing: cmd.drawing }, cmd, null);
+      const k = cmd.sheet ?? 0;
+      if (k === 0) return done(model, { ...model, drawing: cmd.drawing }, cmd, null);
+      // 2장째부터 (형식 v27): 있는 시트는 바꾸고, 시트 수와 같은 번호는 새로 붙인다
+      const extra = model.drawingSheets ?? [];
+      if (k - 1 > extra.length) return fail(`도면 시트 ${k + 1}장째가 없습니다 (지금 ${extra.length + 1}장)`);
+      if (k - 1 === extra.length && extra.length >= MAX_EXTRA_SHEETS) return fail(`도면은 최대 ${MAX_EXTRA_SHEETS + 1}장까지입니다`);
+      const sheets = [...extra];
+      sheets[k - 1] = cmd.drawing;
+      return done(model, { ...model, drawingSheets: sheets }, cmd, null);
+    }
+    case 'delete_drawing_sheet': {
+      const extra = model.drawingSheets ?? [];
+      if (cmd.sheet > extra.length) return fail(`도면 시트 ${cmd.sheet + 1}장째가 없습니다`);
+      const sheets = extra.filter((_, i) => i !== cmd.sheet - 1);
+      const { drawingSheets: _old, ...rest } = model;
+      return done(model, sheets.length ? { ...rest, drawingSheets: sheets } : rest, cmd, null);
     }
 
     case 'insert_part':

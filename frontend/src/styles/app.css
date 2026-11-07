@@ -538,3 +538,6 @@ label.check.small { font-size: 12px; }
 .sketch-copy .check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .knife-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
 .modeling-header .snap-target { font: inherit; font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; }
+.drawing-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }
+.drawing-sheet-tabs [role='tab'] { min-width: 28px; }
+.drawing-sheet-tabs [role='tab'][aria-selected='true'] { background: var(--accent, #2f81f7); color: #fff; border-color: transparent; }

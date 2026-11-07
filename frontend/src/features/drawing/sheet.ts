@@ -56,6 +56,8 @@ export interface SheetOptions {
   marks?: DrawingMark[];
   /** 보조 투상도 (순서대로 엔진 결과 aux1, aux2) */
   aux?: DrawingAux[];
+  /** 여러 장일 때 [이 시트 번호, 전체 장 수] → 표제란 "시트 n/m" (형식 v27) */
+  sheetNo?: [number, number];
 }
 
 /** 보기 배치: 보기 좌표 (x, y) → 종이 = at + (p − bounds 최소) × scale */
@@ -404,6 +406,10 @@ function titleBlock(items: SheetItem[], x: number, y: number, opt: SheetOptions,
   label(x + 2, y + 3, '날짜');
   value(x + 12, y + 2.5, opt.date, 3);
   value(x + 92, y + 2.5, 'AI 3D Studio', 3);
+  if (opt.sheetNo) {
+    label(x + 47, y + 3, '시트');
+    value(x + 57, y + 2.5, `${opt.sheetNo[0]}/${opt.sheetNo[1]}`, 3);
+  }
 }
 
 /** 화살표 (끝점 tip, 방향 d = 화살표가 가리키는 쪽) */

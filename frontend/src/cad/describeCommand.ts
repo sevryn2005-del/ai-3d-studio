@@ -141,7 +141,9 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
     case 'set_region':
       return `${sketchName(cmd.sketch)}의 영역 ${cmd.entity} 구성 (${cmd.items.map((it) => `${it.op === 'add' ? '+' : '−'}${it.entity}`).join(' ')})`;
     case 'set_drawing':
-      return `도면 설정 (${cmd.drawing.paper}${cmd.drawing.section ? ', 단면도' : ''})`;
+      return `도면${cmd.sheet ? ` ${cmd.sheet + 1}장째` : ''} 설정 (${cmd.drawing.paper}${cmd.drawing.section ? ', 단면도' : ''})`;
+    case 'delete_drawing_sheet':
+      return `도면 ${cmd.sheet + 1}장째 지우기`;
     case 'insert_part':
       return `부품 삽입 "${cmd.name}" (객체 ${cmd.part.objects.length}개)`;
     case 'set_thin':

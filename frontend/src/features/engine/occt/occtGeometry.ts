@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 26, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 27, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));

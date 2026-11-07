@@ -62,6 +62,7 @@ describe('shared/schemas 동기화', () => {
       'set_mate',
       'delete_mate',
       'set_drawing',
+      'delete_drawing_sheet',
       'add_mesh',
       'mesh_edit',
       'set_modifiers',

@@ -698,6 +698,8 @@ export const DrawingAuxSchema = z.strictObject({
 });
 export type DrawingAux = z.infer<typeof DrawingAuxSchema>;
 export const MAX_DRAWING_AUX = 2;
+/** 도면 추가 시트 수 (1장째 + 9 = 10장) */
+export const MAX_EXTRA_SHEETS = 9;
 export const MAX_DRAWING_DIMS = 100;
 export const DrawingSettingsSchema = z.strictObject({
   paper: z.enum(['A4', 'A3']),
@@ -723,7 +725,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 26;
+export const MODEL_SCHEMA_VERSION = 27;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -732,6 +734,8 @@ export const ModelDefinitionSchema = z.strictObject({
   objects: z.array(CadObjectSchema).max(LIMITS.maxObjects, `객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`),
   mates: z.array(MateSchema).max(MAX_MATES).optional(),
   drawing: DrawingSettingsSchema.optional(),
+  /** 도면 2장째부터 (형식 v27): 시트마다 용지·척도·보기·치수·단면을 따로. 1장째는 drawing */
+  drawingSheets: z.array(DrawingSettingsSchema).max(MAX_EXTRA_SHEETS).optional(),
   workspace: WorkspaceSchema.optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
@@ -755,7 +759,10 @@ export const SetMateCommandSchema = z.strictObject({
 export const DeleteMateCommandSchema = z.strictObject({ type: z.literal('delete_mate'), mate: ObjectIdSchema });
 
 /** 도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다. 형상은 바뀌지 않는다 */
-export const SetDrawingCommandSchema = z.strictObject({ type: z.literal('set_drawing'), drawing: DrawingSettingsSchema });
+/** sheet: 0(생략) = 1장째(model.drawing), k = k+1 장째 (drawingSheets[k − 1]), 시트 수와 같은 번호 = 새 시트 추가 (형식 v27) */
+export const SetDrawingCommandSchema = z.strictObject({ type: z.literal('set_drawing'), drawing: DrawingSettingsSchema, sheet: z.number().int().min(0).max(MAX_EXTRA_SHEETS).optional() });
+/** 도면 시트 지우기 (형식 v27): sheet = 1 … (1장째는 지울 수 없다) */
+export const DeleteDrawingSheetCommandSchema = z.strictObject({ type: z.literal('delete_drawing_sheet'), sheet: z.number().int().min(1).max(MAX_EXTRA_SHEETS) });
 
 /**
  * 부품 삽입 (조립품): 다른 프로젝트(.ai3d)의 설계 원본을 복사해 넣는다. ID 는 겹치지 않게 다시 붙이고,
@@ -1380,6 +1387,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   SetMateCommandSchema,
   DeleteMateCommandSchema,
   SetDrawingCommandSchema,
+  DeleteDrawingSheetCommandSchema,
   AddMeshCommandSchema,
   MeshEditCommandSchema,
   SetModifiersCommandSchema,

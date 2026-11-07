@@ -115,3 +115,31 @@ describe('보안: 알 수 없는 입력 거부', () => {
     expect(executeCommand(createDefaultModel(), input).ok).toBe(false);
   });
 });
+
+describe('도면 여러 장 (형식 v27)', () => {
+  const d = (title: string) => ({ paper: 'A4' as const, scale: 'auto' as const, title, views: ['front' as const], dimensions: true, centerlines: true });
+  it('1장째 = drawing, 시트 수와 같은 번호 = 새 시트, 건너뛴 번호는 거부, 지우면 앞으로 당겨짐', () => {
+    let m = run(emptyModel(), { type: 'set_drawing', drawing: d('하나') });
+    expect(m.drawing?.title).toBe('하나');
+    m = run(m, { type: 'set_drawing', drawing: d('둘'), sheet: 1 });
+    m = run(m, { type: 'set_drawing', drawing: d('셋'), sheet: 2 });
+    expect(m.drawingSheets?.map((s) => s.title)).toEqual(['둘', '셋']);
+    const skip = executeCommand(m, { type: 'set_drawing', drawing: d('다섯'), sheet: 4 });
+    expect(skip.ok).toBe(false);
+    m = run(m, { type: 'set_drawing', drawing: d('둘*'), sheet: 1 });
+    expect(m.drawingSheets?.map((s) => s.title)).toEqual(['둘*', '셋']);
+    m = run(m, { type: 'delete_drawing_sheet', sheet: 1 });
+    expect(m.drawingSheets?.map((s) => s.title)).toEqual(['셋']);
+    m = run(m, { type: 'delete_drawing_sheet', sheet: 1 });
+    expect(m.drawingSheets).toBeUndefined();
+    expect(executeCommand(m, { type: 'delete_drawing_sheet', sheet: 1 }).ok).toBe(false);
+    expect(m.drawing?.title).toBe('하나');
+  });
+
+  it('최대 10장', () => {
+    let m = emptyModel();
+    for (let k = 1; k <= 9; k++) m = run(m, { type: 'set_drawing', drawing: d(`${k}`), sheet: k });
+    expect(m.drawingSheets).toHaveLength(9);
+    expect(executeCommand(m, { type: 'set_drawing', drawing: d('넘침'), sheet: 9 }).ok).toBe(true); // 9장째 바꾸기는 됨
+  });
+});
