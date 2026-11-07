@@ -65,7 +65,7 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   await expect(page.getByTestId('mode-object')).toHaveAttribute('aria-pressed', 'true');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(28);
+  expect(saved.formatVersion).toBe(29);
   expect(saved.model.workspace).toBe('modeling');
   const obj = saved.model.objects[0];
   expect(obj.kind).toBe('polymesh');
@@ -118,7 +118,7 @@ test('모디파이어: Ctrl+2 세분 표면 → 미러 추가 → 부드러운 �
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(28);
+  expect(saved.formatVersion).toBe(29);
   expect(saved.model.objects[0]).toMatchObject({ smooth: true, modifiers: [{ type: 'subsurf', levels: 2 }, { type: 'mirror', axis: 'x', merge: true }] });
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
@@ -440,4 +440,33 @@ test('다이나믹 토폴로지 (Ctrl+D): 붓이 지나간 곳만 점이 늘고,
   await expect(stats).toContainText('닫힘');
   await page.keyboard.press('Control+z');
   await expect(stats).toHaveText(before);
+});
+
+test('PBR 재질 (형식 v29): 금속 광택 고르기 → 저장 파일에 재질 → 거칠기 막대 → 실행 취소', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  await page.getByTestId('guide-add-uv_sphere').click();
+  await page.getByTestId('material-preset').selectOption('metal');
+  await expect(page.getByTestId('material-metallic')).toHaveValue('1');
+  await expect(page.getByTestId('material-roughness')).toHaveValue('0.2');
+  await page.locator('.modeling-viewport').screenshot({ path: '/tmp/claude-0/-home-user-ai-3d-studio/4323758b-1072-5e0a-99ea-4c0316cb6eaf/scratchpad/metal.png' });
+  const saved = async () => {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+    return JSON.parse(readFileSync((await dl.path())!, 'utf8')).model.objects[0].material;
+  };
+  expect(await saved()).toEqual({ metallic: 1, roughness: 0.2 });
+  // 거칠기 막대: 놓을 때 한 번 (실행 취소 1번)
+  await page.getByTestId('material-roughness').fill('0.6');
+  await page.getByTestId('material-roughness').dispatchEvent('pointerup');
+  await expect(page.getByTestId('material-preset')).toHaveValue('custom');
+  expect(await saved()).toEqual({ metallic: 1, roughness: 0.6 });
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('material-preset')).toHaveValue('metal');
+  await page.getByTestId('material-preset').selectOption('default');
+  expect(await saved()).toBeUndefined();
 });

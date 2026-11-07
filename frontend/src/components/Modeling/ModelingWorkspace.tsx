@@ -1,3 +1,4 @@
+import { LocalEnvironment } from '../Viewport/LocalEnvironment';
 import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { GizmoHelper, GizmoViewport, Grid, Line, OrbitControls } from '@react-three/drei';
@@ -70,6 +71,7 @@ function ModelingViewport() {
     <section ref={ref} className="panel viewport modeling-viewport" aria-label="3D 뷰포트">
       <Canvas camera={{ position: [60, -80, 55], fov: 45, near: 0.1, far: 50_000 }}>
         <hemisphereLight args={['#ffffff', '#40444c', 1.15]} />
+        <LocalEnvironment />
         <directionalLight position={[120, -160, 220]} intensity={1.5} />
         <directionalLight position={[-150, 100, 80]} intensity={0.45} />
         <Grid

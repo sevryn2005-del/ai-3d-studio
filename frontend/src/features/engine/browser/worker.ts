@@ -65,7 +65,7 @@ async function exportMeshes(w: ManifoldToplevel, model: ModelDefinition) {
   const byObj = new Map<string, (typeof fastMeshes)[number]>(fast.map((o, i) => [o.id, fastMeshes[i]!]));
   if (slow.length) {
     const { geo, oc } = await precise();
-    for (const o of slow) byObj.set(o.id, { name: o.name, ...(o.color ? { color: o.color } : {}), ...geo.occtWorldMesh(oc, model, o) });
+    for (const o of slow) byObj.set(o.id, { name: o.name, ...(o.color ? { color: o.color } : {}), ...(o.material ? { material: o.material } : {}), ...geo.occtWorldMesh(oc, model, o) });
   }
   return roots.map((o) => byObj.get(o.id)!);
 }

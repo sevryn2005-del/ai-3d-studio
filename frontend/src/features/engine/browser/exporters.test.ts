@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { executeCommand } from '../../../cad/commandExecutor';
 import { emptyModel, type ModelDefinition } from '../../../cad/commandTypes';
 import { worldMeshes } from './geometry';
-import { boxUv, to3mf, toBinaryStl, toGlb } from './exporters';
+import { boxUv, glbMaterial, linearRgba, to3mf, toBinaryStl, toGlb } from './exporters';
 
 let wasm: ManifoldToplevel;
 beforeAll(async () => {
@@ -146,3 +146,25 @@ describe('박스 투영 UV (서버 exporter.py box_uv 와 같은 값)', () => {
     expect(boxUv(10, 20, 30, 0.6, 0.6, 0.5)).toEqual([0.02, -0.03]); // 같으면 X 먼저
   });
 });
+
+describe('GLB 재질 (형식 v29, 서버 exporter.py 와 같은 값)', () => {
+  it('sRGB → 선형 색, 객체별 재질 (같은 색·재질은 하나), 없으면 기본', () => {
+    expect(linearRgba('#ffffff')).toEqual([1, 1, 1, 1]);
+    expect(linearRgba('#808080')).toEqual([0.215861, 0.215861, 0.215861, 1]);
+    expect(linearRgba('#e5534b')).toEqual([0.783538, 0.0865, 0.070360, 1]);
+    expect(glbMaterial(undefined, undefined)).toEqual({ name: 'default m0.05 r0.55', pbrMetallicRoughness: { baseColorFactor: [0.64, 0.68, 0.73, 1], metallicFactor: 0.05, roughnessFactor: 0.55 } });
+    expect(glbMaterial('#e5534b', { metallic: 1, roughness: 0.2 }).name).toBe('#e5534b m1 r0.2');
+    const tri = { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), indices: new Uint32Array([0, 1, 2]) };
+    const data = toGlb([
+      { name: 'a', color: '#e5534b', material: { metallic: 1, roughness: 0.2 }, ...tri },
+      { name: 'b', ...tri },
+      { name: 'c', color: '#e5534b', material: { metallic: 1, roughness: 0.2 }, ...tri },
+    ]);
+    const dv = new DataView(data.buffer, data.byteOffset);
+    const gltf = JSON.parse(strFromU8(data.subarray(20, 20 + dv.getUint32(12, true))));
+    expect(gltf.materials).toHaveLength(2);
+    expect(gltf.meshes.map((m: { primitives: { material: number }[] }) => m.primitives[0]!.material)).toEqual([0, 1, 0]);
+    expect(gltf.materials[0].pbrMetallicRoughness).toEqual({ baseColorFactor: [0.783538, 0.0865, 0.07036, 1], metallicFactor: 1, roughnessFactor: 0.2 });
+  });
+});
+

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { CadObject, Transform } from '../../cad/commandTypes';
+import { DEFAULT_MATERIAL } from '../../cad/commandTypes';
 import { edges, selectedFaces, triangulate, type PolyMesh } from '../../cad/polymesh';
 import type { SelectMode } from '../../features/modeling/modelingStore';
 import { evaluateModifiers } from '../../cad/polymeshModifiers';
@@ -122,7 +123,7 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
           onClick={editing ? undefined : onPick}
           raycast={editing ? () => null : undefined}
         >
-          <meshStandardMaterial key={`${smooth ? 'smooth' : 'flat'}${showMask ? '-mask' : ''}`} vertexColors={showMask && smooth} color={object.color ?? MESH_COLOR} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+          <meshStandardMaterial key={`${smooth ? 'smooth' : 'flat'}${showMask ? '-mask' : ''}`} vertexColors={showMask && smooth} color={object.color ?? MESH_COLOR} metalness={object.material?.metallic ?? DEFAULT_MATERIAL.metallic} roughness={object.material?.roughness ?? DEFAULT_MATERIAL.roughness} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
         </mesh>
       )}
       {editing && (
@@ -130,7 +131,7 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
           {hasMods || object.smooth ? (
             <meshBasicMaterial color="#9fb4d0" transparent opacity={hasMods ? 0.12 : 0.01} depthWrite={false} side={2} />
           ) : (
-            <meshStandardMaterial color={object.color ?? MESH_COLOR} flatShading side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+            <meshStandardMaterial color={object.color ?? MESH_COLOR} metalness={object.material?.metallic ?? DEFAULT_MATERIAL.metallic} roughness={object.material?.roughness ?? DEFAULT_MATERIAL.roughness} flatShading side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
           )}
         </mesh>
       )}

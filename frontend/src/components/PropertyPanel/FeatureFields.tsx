@@ -1,3 +1,4 @@
+import { MaterialFields } from './MaterialFields';
 /**
  * 형식 v6 피처의 속성 편집: 외관(색·숨기기)·억제, 쉘, 패턴·대칭, 패턴 만들기, 구멍 가공.
  * 모든 변경은 CAD 명령(submitNow)으로만 — AI 와 같은 경로.
@@ -43,6 +44,7 @@ export function AppearanceFields({ object }: { object: CadObject }) {
           onChange={(e) => submit({ type: 'set_appearance', target: object.id, color: e.target.value.toLowerCase() })}
         />
       </div>
+      <MaterialFields object={object} />
       <label className="check">
         <input
           type="checkbox"

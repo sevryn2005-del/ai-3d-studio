@@ -300,6 +300,8 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       else if (cmd.color) next.color = cmd.color;
       if (cmd.hidden === false) delete next.hidden;
       else if (cmd.hidden) next.hidden = true;
+      if (cmd.material === 'default') delete next.material;
+      else if (cmd.material) next.material = { ...cmd.material };
       return done(model, replaceObject(model, next as CadObject), cmd, target.id);
     }
 

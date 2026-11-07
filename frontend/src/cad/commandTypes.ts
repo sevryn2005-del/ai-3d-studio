@@ -368,6 +368,8 @@ const objectBase = {
   suppressed: z.boolean().optional(),
   hidden: z.boolean().optional(),
   color: ColorSchema.optional(),
+  /** 형식 v29: PBR 재질 (화면·GLB). 없으면 기본 (금속성 0.05, 거칠기 0.55) */
+  material: z.strictObject({ metallic: z.number().min(0).max(1), roughness: z.number().min(0).max(1) }).optional(),
 };
 
 /**
@@ -730,7 +732,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 28;
+export const MODEL_SCHEMA_VERSION = 29;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -1308,8 +1310,12 @@ export const SetAppearanceCommandSchema = z
     target: ObjectIdSchema,
     color: z.union([ColorSchema, z.literal('default')]).optional(),
     hidden: z.boolean().optional(),
+    /** 형식 v29: PBR 재질 ('default' = 기본으로) */
+    material: z.union([z.strictObject({ metallic: z.number().min(0).max(1), roughness: z.number().min(0).max(1) }), z.literal('default')]).optional(),
   })
-  .refine((c) => c.color !== undefined || c.hidden !== undefined, { message: 'color 또는 hidden 이 필요합니다' });
+  .refine((c) => c.color !== undefined || c.hidden !== undefined || c.material !== undefined, { message: 'color·hidden·material 중 하나가 필요합니다' });
+/** 재질 기본값 (화면·GLB 공통) */
+export const DEFAULT_MATERIAL = { metallic: 0.05, roughness: 0.55 } as const;
 
 /** 쉘 (속 비우기). thickness 0 = 쉘 제거. open 생략 = 열린 면 없음 (속이 빈 닫힌 형상) */
 export const ShellCommandSchema = z.strictObject({

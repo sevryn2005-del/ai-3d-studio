@@ -1,3 +1,4 @@
+import { LocalEnvironment } from './LocalEnvironment';
 import { useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { GizmoHelper, GizmoViewport, Grid, OrbitControls } from '@react-three/drei';
@@ -59,6 +60,7 @@ export function Viewport() {
       >
         {/* 배경은 CSS 그라디언트 (.viewport) — 밝은 작업 화면 */}
         <hemisphereLight args={['#ffffff', '#3a4250', 1.1]} />
+        <LocalEnvironment />
         <directionalLight position={[120, -160, 220]} intensity={1.6} />
         <directionalLight position={[-150, 100, 80]} intensity={0.4} />
 

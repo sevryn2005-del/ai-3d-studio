@@ -68,7 +68,7 @@ def test_frame_math_matches_frontend_table():
     r = transform_matrix(Transform(position=(10, 0, 0), rotation=(0, 0, 90)))
     assert (r @ np.array([1, 0, 0, 1]))[:3] == pytest.approx([10, 1, 0])
     # 박스 면 (sketchPlane.test.ts 와 같은 표)
-    m = ModelDefinition.model_validate({"schemaVersion": 28, "units": "mm", "sketches": [], "objects": [
+    m = ModelDefinition.model_validate({"schemaVersion": 29, "units": "mm", "sketches": [], "objects": [
         {"id": "b", "name": "b", "kind": "box", "params": {"width": 30, "depth": 20, "height": 10},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}]})
     b = m.objects[0]

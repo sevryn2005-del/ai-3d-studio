@@ -67,7 +67,7 @@ def test_invalid_model_returns_issues(client, default_model):
 
 
 def test_empty_model(client):
-    r = client.post("/api/export/stl", json={"schemaVersion": 28, "units": "mm", "sketches": [], "objects": []})
+    r = client.post("/api/export/stl", json={"schemaVersion": 29, "units": "mm", "sketches": [], "objects": []})
     assert r.status_code == 422
     assert "내보낼 객체가 없습니다" in r.json()["issues"][0]["message"]
 
@@ -226,4 +226,26 @@ def test_box_uv_matches_browser_rule():
     n = np.array([[0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0.6, 0.6, 0.5]], dtype=float)
     expect = [[0.01, -0.02], [0.01, 0.02], [0.02, -0.03], [-0.02, -0.03], [-0.01, -0.03], [0.01, -0.03], [0.02, -0.03]]
     np.testing.assert_allclose(box_uv(v, n), expect, atol=1e-12)
+
+
+def test_glb_materials_match_browser_rule():
+    """브라우저 exporters.test.ts 'GLB 재질' 과 같은 값"""
+    from app.cad.exporter import _glb_material, _linear_rgba
+
+    assert _linear_rgba("#ffffff") == [1, 1, 1, 1]
+    assert _linear_rgba("#808080") == [0.215861, 0.215861, 0.215861, 1]
+    assert _linear_rgba("#e5534b") == [0.783538, 0.0865, 0.07036, 1]
+    assert _glb_material(None, None) == {"name": "default m0.05 r0.55", "pbrMetallicRoughness": {
+        "baseColorFactor": [0.64, 0.68, 0.73, 1.0], "metallicFactor": 0.05, "roughnessFactor": 0.55}}
+    assert _glb_material("#e5534b", {"metallic": 1, "roughness": 0.2})["name"] == "#e5534b m1 r0.2"
+
+
+def test_glb_per_object_material(client, default_model):
+    model = two_objects(default_model)
+    model["objects"][0]["color"] = "#e5534b"
+    model["objects"][0]["material"] = {"metallic": 1, "roughness": 0.2}
+    gltf, _ = _parse_glb(fetch(client, "glb", model))
+    assert len(gltf["materials"]) == 2
+    first = gltf["materials"][gltf["meshes"][0]["primitives"][0]["material"]]
+    assert first["pbrMetallicRoughness"] == {"baseColorFactor": [0.783538, 0.0865, 0.07036, 1], "metallicFactor": 1, "roughnessFactor": 0.2}
 

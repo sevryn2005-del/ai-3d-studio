@@ -3,6 +3,7 @@ import { DoubleSide, Euler, FrontSide, Matrix4, Quaternion, Shape, Vector2, Vect
 import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
 import type { CadObject, ObjectId, PrimitiveObject } from '../../cad/commandTypes';
+import { DEFAULT_MATERIAL } from '../../cad/commandTypes';
 import { childIds, sketchIndex } from '../../cad/modelGraph';
 import { ellipseOutline, profileOf, slotOutline, type Profile } from '../../cad/sketch';
 import { roundedPoints } from '../../cad/curves';
@@ -29,7 +30,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 28, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 29, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -53,6 +54,7 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
         geometry={serverGeometry}
         variant="solid"
         baseColor={object.color}
+        material={object.material}
         source={serverGeometry.userData.engine === 'browser' ? 'browser' : 'server'}
       />
     ) : (
@@ -141,7 +143,7 @@ export function PreviewBody({
       if (!profile || !local) return null; // 참조가 깨진 돌출은 그리지 않는다 (파일 검증에서 거부되는 상태)
     }
     return (
-      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} local={local} variant={variant} baseColor={object.color} source={variant === 'ghost' ? 'ghost' : 'preview'} />
+      <ObjectMesh key="preview" selectId={selectId} primitive={object} profile={profile} local={local} variant={variant} baseColor={object.color} material={object.material} source={variant === 'ghost' ? 'ghost' : 'preview'} />
     );
   }
   return (
@@ -169,9 +171,12 @@ function ObjectMesh({
   variant,
   source,
   baseColor,
+  material,
 }: {
   /** 외관 색 (없으면 기본 회색) */
   baseColor?: string;
+  /** PBR 재질 (형식 v29, 없으면 기본) */
+  material?: { metallic: number; roughness: number };
   selectId: ObjectId;
   geometry?: BufferGeometry;
   primitive?: PrimitiveObject;
@@ -222,8 +227,8 @@ function ObjectMesh({
       {primitive && <PrimitiveGeometry object={primitive} profile={profile ?? null} />}
       <meshStandardMaterial
         color={color}
-        roughness={0.55}
-        metalness={0.05}
+        roughness={material?.roughness ?? DEFAULT_MATERIAL.roughness}
+        metalness={material?.metallic ?? DEFAULT_MATERIAL.metallic}
         transparent={transparent}
         opacity={variant === 'ghost' ? 0.18 : variant === 'translucent' ? 0.4 : xray ? 0.3 : 1}
         depthWrite={!transparent}

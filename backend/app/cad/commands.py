@@ -524,6 +524,13 @@ def _opt(default=None):
     return Field(default=default, exclude_if=lambda v: v is None)
 
 
+class Material(Strict):
+    """PBR 재질 (형식 v29): 금속성·거칠기 0~1"""
+
+    metallic: Annotated[float, _num(0, 1)]
+    roughness: Annotated[float, _num(0, 1)]
+
+
 class _ObjectBase(Strict):
     id: ObjectId
     name: Name
@@ -532,6 +539,8 @@ class _ObjectBase(Strict):
     suppressed: StrictBool | None = _opt()
     hidden: StrictBool | None = _opt()
     color: Color | None = _opt()
+    # 형식 v29: PBR 재질 (화면·GLB)
+    material: Material | None = _opt()
 
     @property
     def child_ids(self) -> list[str]:
@@ -1020,7 +1029,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[28]
+    schemaVersion: Literal[29]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1682,11 +1691,12 @@ class SetAppearance(Strict):
     target: ObjectId
     color: Color | Literal["default"] | None = None
     hidden: StrictBool | None = None
+    material: Material | Literal["default"] | None = None
 
     @model_validator(mode="after")
     def _something(self) -> SetAppearance:
-        if self.color is None and self.hidden is None:
-            raise ValueError("color 또는 hidden 이 필요합니다")
+        if self.color is None and self.hidden is None and self.material is None:
+            raise ValueError("color·hidden·material 중 하나가 필요합니다")
         return self
 
 

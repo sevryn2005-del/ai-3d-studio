@@ -61,7 +61,7 @@ def test_ai_validator_mates():
 def test_interference_api(client):
     t = lambda x: {"position": [x, 0, 0], "rotation": [0, 0, 0]}  # noqa: E731
     box = lambda i, x: {"id": i, "name": i, "kind": "box", "params": {"width": 10, "depth": 10, "height": 10}, "transform": t(x)}  # noqa: E731
-    model = {"schemaVersion": 28, "units": "mm", "sketches": [], "objects": [box("a", 0), box("b", 7), box("c", 10), box("d", 30)]}
+    model = {"schemaVersion": 29, "units": "mm", "sketches": [], "objects": [box("a", 0), box("b", 7), box("c", 10), box("d", 30)]}
     r = client.post("/api/model/interference", json=model).json()
     assert r["ok"] is True
     # a∩b = 3×10×10, b∩c = 7×10×10, a·c 는 맞닿기만 (5 + 5 = 10), d 는 떨어짐

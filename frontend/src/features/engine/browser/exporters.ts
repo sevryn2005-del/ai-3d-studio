@@ -13,6 +13,8 @@ export interface NamedMesh {
   name: string;
   /** 외관 색 #rrggbb (3MF basematerials 로 내보냄, 서버 exporter.to_3mf 와 같은 구조) */
   color?: string;
+  /** PBR 재질 (형식 v29, GLB 만) */
+  material?: { metallic: number; roughness: number };
   positions: Float32Array; // 월드 좌표 mm
   indices: Uint32Array;
 }
@@ -116,6 +118,21 @@ export function boxUv(x: number, y: number, z: number, nx: number, ny: number, n
   return [u * 0.001, -v * 0.001];
 }
 
+/** 기본 GLB 재질 (색·재질이 없는 객체) — 서버 exporter.py 와 같은 값 */
+const GLB_DEFAULT_BASE = [0.64, 0.68, 0.73, 1];
+/** sRGB #rrggbb → glTF baseColorFactor (선형, 소수 6자리) — 서버 exporter.py _linear_rgba 와 같은 식 */
+export function linearRgba(hex: string): number[] {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return [...c.map((v) => Math.round((v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * 1e6) / 1e6), 1];
+}
+/** 객체별 glTF 재질 (같은 색·재질은 하나로) — 서버 _glb_material 과 같은 규칙 */
+export function glbMaterial(color: string | undefined, m: { metallic: number; roughness: number } | undefined) {
+  return {
+    name: `${color ?? 'default'} m${m?.metallic ?? 0.05} r${m?.roughness ?? 0.55}`,
+    pbrMetallicRoughness: { baseColorFactor: color ? linearRgba(color) : GLB_DEFAULT_BASE, metallicFactor: m?.metallic ?? 0.05, roughnessFactor: m?.roughness ?? 0.55 },
+  };
+}
+
 export function toGlb(meshes: NamedMesh[]): Uint8Array {
   const chunks: Uint8Array[] = [];
   let offset = 0;
@@ -123,6 +140,14 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
   const accessors: object[] = [];
   const gltfMeshes: object[] = [];
   const nodes: object[] = [];
+  const materials: ReturnType<typeof glbMaterial>[] = [];
+  const materialIndex = (m: NamedMesh) => {
+    const mat = glbMaterial(m.color, m.material);
+    const k = materials.findIndex((x) => x.name === mat.name);
+    if (k >= 0) return k;
+    materials.push(mat);
+    return materials.length - 1;
+  };
 
   const addView = (data: Float32Array) => {
     const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -166,7 +191,7 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     const aPos = accessors.length - 1;
     accessors.push({ bufferView: addView(nrm), componentType: 5126, count: nrm.length / 3, type: 'VEC3' });
     accessors.push({ bufferView: addView(uv), componentType: 5126, count: uv.length / 2, type: 'VEC2' });
-    gltfMeshes.push({ name: m.name, primitives: [{ attributes: { POSITION: aPos, NORMAL: aPos + 1, TEXCOORD_0: aPos + 2 }, material: 0 }] });
+    gltfMeshes.push({ name: m.name, primitives: [{ attributes: { POSITION: aPos, NORMAL: aPos + 1, TEXCOORD_0: aPos + 2 }, material: materialIndex(m) }] });
     nodes.push({ name: m.name, mesh: gltfMeshes.length - 1 });
   }
 
@@ -176,7 +201,7 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     scenes: [{ nodes: nodes.map((_, i) => i) }],
     nodes,
     meshes: gltfMeshes,
-    materials: [{ name: 'default', pbrMetallicRoughness: { baseColorFactor: [0.64, 0.68, 0.73, 1], metallicFactor: 0.05, roughnessFactor: 0.55 } }],
+    materials: materials.length ? materials : [glbMaterial(undefined, undefined)],
     accessors,
     bufferViews,
     buffers: [{ byteLength: offset }],

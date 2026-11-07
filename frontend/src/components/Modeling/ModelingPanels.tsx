@@ -1,3 +1,4 @@
+import { MaterialFields } from '../PropertyPanel/MaterialFields';
 import { useMemo, useState } from 'react';
 import { byId, sketchIndex } from '../../cad/modelGraph';
 import { geometryKey } from '../../features/backend/renderMesh';
@@ -112,6 +113,8 @@ function ObjectFields({ obj }: { obj: CadObject }) {
       ) : (
         <ConvertToMesh obj={obj} />
       )}
+      <h3>재질</h3>
+      <MaterialFields object={obj} />
       <BooleanPanel obj={obj} />
     </>
   );

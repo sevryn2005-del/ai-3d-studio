@@ -71,7 +71,8 @@ def export_file(payload: dict[str, Any]) -> bytes:
     for oid in active_top_level_ids(model):
         obj = index[oid]
         try:
-            objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform), obj.color))
+            objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform), obj.color,
+                                       obj.material.model_dump() if obj.material else None))
         except GeometryError:
             raise
         except Exception as e:

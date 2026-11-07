@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 28
+      "const": 29
     },
     "units": {
       "type": "string",
@@ -893,6 +893,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "box"
@@ -1078,6 +1098,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "cylinder"
@@ -1227,6 +1267,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "sphere"
@@ -1333,6 +1393,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -1452,6 +1532,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -1629,6 +1729,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "revolve"
@@ -1755,6 +1875,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "boolean"
@@ -1879,6 +2019,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -2010,6 +2170,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -2273,6 +2453,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "helix"
@@ -2405,6 +2605,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "sweep"
@@ -2525,6 +2745,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -2651,6 +2891,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "mesh"
@@ -2763,6 +3023,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",
@@ -3026,6 +3306,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "fillet"
@@ -3197,6 +3497,26 @@
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
               },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "draft"
@@ -3308,6 +3628,26 @@
               "color": {
                 "type": "string",
                 "pattern": "^#[0-9a-f]{6}$"
+              },
+              "material": {
+                "type": "object",
+                "properties": {
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "roughness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "metallic",
+                  "roughness"
+                ],
+                "additionalProperties": false
               },
               "kind": {
                 "type": "string",

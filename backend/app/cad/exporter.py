@@ -36,6 +36,7 @@ class NamedShape:
     name: str
     shape: cq.Shape  # 월드 좌표 (mm)
     color: str | None = None  # 외관 색 #rrggbb (3MF basematerials)
+    material: dict | None = None  # PBR 재질 {metallic, roughness} (형식 v29, GLB 만)
 
 
 def _fine_mesh(shape: cq.Shape) -> tuple[np.ndarray, np.ndarray]:
@@ -176,10 +177,44 @@ def box_uv(v: np.ndarray, n: np.ndarray) -> np.ndarray:
     return np.stack([u * 0.001, -w * 0.001], axis=1)
 
 
+_GLB_DEFAULT_BASE = [0.64, 0.68, 0.73, 1.0]
+
+
+def _linear_rgba(hex_color: str) -> list[float]:
+    """sRGB #rrggbb → glTF baseColorFactor (선형, 소수 6자리) — 브라우저 exporters.ts linearRgba 와 같은 식"""
+    out = []
+    for i in (1, 3, 5):
+        v = int(hex_color[i : i + 2], 16) / 255
+        out.append(round(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4, 6))
+    return [*out, 1.0]
+
+
+def _glb_material(color: str | None, m: dict | None) -> dict:
+    """객체별 glTF 재질 (같은 색·재질은 하나로) — 브라우저 glbMaterial 과 같은 규칙"""
+    metal = m["metallic"] if m else 0.05
+    rough = m["roughness"] if m else 0.55
+    return {"name": f"{color or 'default'} m{_num_str(metal)} r{_num_str(rough)}", "pbrMetallicRoughness": {
+        "baseColorFactor": _linear_rgba(color) if color else _GLB_DEFAULT_BASE, "metallicFactor": metal, "roughnessFactor": rough}}
+
+
+def _num_str(v: float) -> str:
+    """JS 의 숫자 → 글자와 같게 (1.0 → "1", 0.5 → "0.5")"""
+    return str(int(v)) if float(v).is_integer() else repr(float(v))
+
+
 def to_glb(objects: list[NamedShape]) -> bytes:
     bin_chunks: list[bytes] = []
     offset = 0
     buffer_views, accessors, meshes, nodes = [], [], [], []
+    materials: list[dict] = []
+
+    def material_index(obj: NamedShape) -> int:
+        mat = _glb_material(obj.color, obj.material)
+        for k, x in enumerate(materials):
+            if x["name"] == mat["name"]:
+                return k
+        materials.append(mat)
+        return len(materials) - 1
 
     def add_view(data: bytes, target: int) -> int:
         nonlocal offset
@@ -212,7 +247,7 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         a_idx = len(accessors) - 1
 
         meshes.append({"name": obj.name, "primitives": [
-            {"attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv}, "indices": a_idx, "material": 0}]})
+            {"attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv}, "indices": a_idx, "material": material_index(obj)}]})
         nodes.append({"name": obj.name, "mesh": len(meshes) - 1})
 
     binary = b"".join(bin_chunks)
@@ -222,8 +257,7 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         "scenes": [{"nodes": list(range(len(nodes)))}],
         "nodes": nodes,
         "meshes": meshes,
-        "materials": [{"name": "default", "pbrMetallicRoughness": {
-            "baseColorFactor": [0.64, 0.68, 0.73, 1.0], "metallicFactor": 0.05, "roughnessFactor": 0.55}}],
+        "materials": materials or [_glb_material(None, None)],
         "accessors": accessors,
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(binary)}],
