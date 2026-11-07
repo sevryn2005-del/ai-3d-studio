@@ -73,10 +73,29 @@ function polylines(oc: OC, gc: Gc, s: TopoDS_Shape | null, circles: DrawingCircl
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 /** 단면: 걷어낼 쪽 상자 (모델 범위보다 1mm 크게). 아무것도 걷어내지 않으면 null */
-function sectionBox(oc: OC, gc: Gc, B: number[], s: DrawingSection): TopoDS_Shape | null {
+/** 계단 단면 (형식 v28): 구간마다 [u 범위, 깊이] — 계단이 없으면 구간 하나 (서버 drawing.py _section_segments 와 같음) */
+export function sectionSegments(s: DrawingSection): { u0: number; u1: number; offset: number }[] {
+  const steps = s.steps ?? [];
+  if (!steps.length) return [{ u0: -Infinity, u1: Infinity, offset: s.offset }];
+  return [{ u0: -Infinity, u1: steps[0]!.at, offset: s.offset }, ...steps.map((st, i) => ({ u0: st.at, u1: steps[i + 1]?.at ?? Infinity, offset: st.offset }))];
+}
+
+/** 걷어낼 상자들 (계단 단면이면 구간마다 하나) */
+function sectionBoxes(oc: OC, gc: Gc, B: number[], s: DrawingSection): TopoDS_Shape[] {
+  return sectionSegments(s).flatMap((seg) => {
+    const b = sectionBox(oc, gc, B, { ...s, offset: seg.offset }, seg.u0, seg.u1);
+    return b ? [b] : [];
+  });
+}
+
+function sectionBox(oc: OC, gc: Gc, B: number[], s: DrawingSection, u0 = -Infinity, u1 = Infinity): TopoDS_Shape | null {
   const [x0, y0, z0, x1, y1, z1] = [B[0]! - 1, B[1]! - 1, B[2]! - 1, B[3]! + 1, B[4]! + 1, B[5]! + 1];
   const lo: V3 = s.view === 'front' ? [x0, y0, z0] : [s.offset, y0, z0];
   const hi: V3 = s.view === 'front' ? [x1, s.offset, z1] : [x1, y1, z1];
+  // 계단 구간: 정면 단면은 x, 우측면 단면은 y 범위로 줄인다
+  const ku = s.view === 'front' ? 0 : 1;
+  lo[ku] = Math.max(lo[ku]!, u0);
+  hi[ku] = Math.min(hi[ku]!, u1);
   if (s.rect) {
     // 부분 단면: 보기 좌표 영역 (정면 u = x, 우측면 u = y; v = z) 안만
     const [u0, v0, u1, v1] = [Math.min(s.rect[0], s.rect[2]), Math.min(s.rect[1], s.rect[3]), Math.max(s.rect[0], s.rect[2]), Math.max(s.rect[1], s.rect[3])];
@@ -93,6 +112,7 @@ function sectionBox(oc: OC, gc: Gc, B: number[], s: DrawingSection): TopoDS_Shap
 /** 잘린 면 (절단 평면 위의 평면) 경계 → 보기 좌표 꺾은선 */
 function sectionLines(oc: OC, gc: Gc, s: TopoDS_Shape, sec: DrawingSection, project: (p: V3) => [number, number]): number[][] {
   const axis: V3 = sec.view === 'front' ? [0, 1, 0] : [1, 0, 0];
+  const offsets = sectionSegments(sec).map((g) => g.offset);
   const out: number[][] = [];
   for (const f of facesOf(oc, gc, s)) {
     const a = gc.k(new oc.BRepAdaptor_Surface(f, true));
@@ -100,7 +120,9 @@ function sectionLines(oc: OC, gc: Gc, s: TopoDS_Shape, sec: DrawingSection, proj
     const ax = gc.k(gc.k(a.Plane()).Axis());
     const d = gc.k(ax.Direction());
     const o = gc.k(ax.Location());
-    if (Math.abs(dot([d.X(), d.Y(), d.Z()], axis)) < 1 - 1e-9 || Math.abs(dot([o.X(), o.Y(), o.Z()], axis) - sec.offset) > 1e-6) continue;
+    // 잘린 면 = 어느 구간의 자르는 평면 위 (계단 단면이면 깊이가 여럿)
+    const depth = dot([o.X(), o.Y(), o.Z()], axis);
+    if (Math.abs(dot([d.X(), d.Y(), d.Z()], axis)) < 1 - 1e-9 || !offsets.some((off) => Math.abs(depth - off) <= 1e-6)) continue;
     for (const e of edgesOf(oc, gc, f)) out.push(edgeSamples(oc, gc, e).pts.flatMap((p) => project(p).map(round)));
   }
   return out;
@@ -156,8 +178,8 @@ export function occtDrawing(oc: OC, model: ModelDefinition, views: readonly Stan
       const sec = section && section.view === name ? section : undefined;
       let viewShapes = shapes;
       if (sec) {
-        const box = sectionBox(oc, gc, B, sec);
-        if (box) viewShapes = shapes.map((s) => gc.k(gc.k(new oc.BRepAlgoAPI_Cut(s, box, gc.k(new oc.Message_ProgressRange()))).Shape())).filter((s) => volumeOf(oc, s) > 1e-9);
+        for (const box of sectionBoxes(oc, gc, B, sec))
+          viewShapes = viewShapes.map((s) => gc.k(gc.k(new oc.BRepAlgoAPI_Cut(s, box, gc.k(new oc.Message_ProgressRange()))).Shape())).filter((s) => volumeOf(oc, s) > 1e-9);
         if (!viewShapes.length) throw new GeometryError('단면 위치가 형상 밖입니다 (자른 뒤 남는 것이 없음)');
       }
       const algo = gc.k(new oc.HLRBRep_Algo());

@@ -510,6 +510,67 @@ function DrawingWindow() {
             />
           </label>
         )}
+        {settings.section && !settings.section.rect && (
+          <fieldset className="drawing-dims" data-testid="section-steps">
+            <legend>계단 단면 ({settings.section.view === 'front' ? 'X' : 'Y'} 위치부터 깊이 바꾸기)</legend>
+            {(settings.section.steps ?? []).map((st, i) => {
+              const steps = settings.section!.steps!;
+              const set = (patch: Partial<{ at: number; offset: number }>) => {
+                const next = steps.map((x, j) => (j === i ? { ...x, ...patch } : x)).sort((a, b) => a.at - b.at);
+                update({ section: { ...settings.section!, steps: next } });
+              };
+              const num = (k: 'at' | 'offset', label: string) => (
+                <input
+                  type="number"
+                  step="any"
+                  aria-label={`${i + 1}번째 계단 ${label}`}
+                  title={label}
+                  key={`${i}:${k}:${st[k]}`}
+                  defaultValue={st[k]}
+                  onBlur={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v) && v !== st[k]) set({ [k]: v });
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                  data-testid={`section-step-${k}-${i}`}
+                  style={{ width: 64 }}
+                />
+              );
+              return (
+                <div key={i} className="drawing-dim-kinds">
+                  <span>{settings.section!.view === 'front' ? 'X' : 'Y'} ≥</span>
+                  {num('at', '꺾이는 위치 (mm)')}
+                  <span>깊이</span>
+                  {num('offset', '이 구간 자르는 깊이 (mm)')}
+                  <button className="cancel" onClick={() => {
+                      const { steps: _all, ...rest } = settings.section!;
+                      update({ section: steps.length > 1 ? { ...rest, steps: steps.filter((_, j) => j !== i) } : rest });
+                    }} title="계단 지우기" data-testid={`section-step-delete-${i}`}>
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+            {(settings.section.steps?.length ?? 0) < 4 && (
+              <button
+                onClick={() => {
+                  const sec = settings.section!;
+                  const steps = sec.steps ?? [];
+                  // 새 꺾임: 형상 가운데(또는 마지막 꺾임 + 10), 깊이는 지금 깊이 그대로 → 값을 고쳐 쓴다
+                  const ref = views?.find((v) => v.name === 'front');
+                  const mid = ref ? Math.round(((sec.view === 'front' ? ref.bounds[0] + ref.bounds[2] : 0) / 2) * 1000) / 1000 : 0;
+                  const at = steps.length ? steps[steps.length - 1]!.at + 10 : mid;
+                  const offset = steps.length ? steps[steps.length - 1]!.offset : sec.offset;
+                  update({ section: { ...sec, steps: [...steps, { at, offset }] } });
+                }}
+                data-testid="section-step-add"
+                title="이 위치부터 다른 깊이에서 자르기 (최대 4번 꺾기)"
+              >
+                + 계단
+              </button>
+            )}
+          </fieldset>
+        )}
         <label className="drawing-field">
           <span>주기 (표제란 옆, 최대 6줄)</span>
           <textarea rows={3} maxLength={500} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} onBlur={commitText} data-testid="drawing-notes" placeholder="예: 지시 없는 모따기 C0.5" />

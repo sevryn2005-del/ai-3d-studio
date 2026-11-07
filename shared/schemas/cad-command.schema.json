@@ -2192,6 +2192,31 @@
                   "items": false,
                   "minItems": 4,
                   "maxItems": 4
+                },
+                "steps": {
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      },
+                      "offset": {
+                        "type": "number",
+                        "minimum": -10000,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "offset"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [

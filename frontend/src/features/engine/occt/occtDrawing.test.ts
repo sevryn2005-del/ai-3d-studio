@@ -1,7 +1,7 @@
 /** 도면 투상 (OCCT): 공유 픽스처 drawing-cases.json — 서버 tests/test_drawing.py 가 같은 값을 검사한다 */
 import cases from '../../../../../shared/schemas/examples/drawing-cases.json';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ModelDefinitionSchema } from '../../../cad/commandTypes';
+import { ModelDefinitionSchema, type DrawingSection } from '../../../cad/commandTypes';
 import type { AuxDirection, StandardViewName } from '../types';
 import { dedupeCircles, occtDrawing } from './occtDrawing';
 import type { OC } from './occtGeometry';
@@ -23,7 +23,7 @@ describe('도면 투상 (OCCT): 공유 픽스처', () => {
   it.each(Object.entries(cases))('%s', (_name, c) => {
     const model = ModelDefinitionSchema.parse(c.model);
     const names = Object.keys(c.views).filter((n) => !n.startsWith('aux')) as StandardViewName[];
-    const section = 'section' in c ? (c.section as { view: 'front' | 'right'; offset: number; rect?: [number, number, number, number] }) : undefined;
+    const section = 'section' in c ? (c.section as DrawingSection) : undefined;
     const aux = 'aux' in c ? (c.aux as AuxDirection[]) : [];
     const views = occtDrawing(oc, model, names, section, aux);
     expect(views.map((v) => v.name).sort()).toEqual(Object.keys(c.views).sort());

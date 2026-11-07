@@ -191,10 +191,34 @@ def _volume(s) -> float:
     return p.Mass()
 
 
-def _section_box(bounds, sec):
+def _section_segments(sec) -> list[tuple[float, float, float]]:
+    """계단 단면 (형식 v28): 구간마다 (u0, u1, 깊이) — 계단이 없으면 하나 (occtDrawing.ts sectionSegments 와 같음)"""
+    steps = sec.get("steps") or []
+    if not steps:
+        return [(-math.inf, math.inf, sec["offset"])]
+    out = [(-math.inf, steps[0]["at"], sec["offset"])]
+    for i, st in enumerate(steps):
+        out.append((st["at"], steps[i + 1]["at"] if i + 1 < len(steps) else math.inf, st["offset"]))
+    return out
+
+
+def _section_boxes(bounds, sec) -> list:
+    """걷어낼 상자들 (계단 단면이면 구간마다 하나)"""
+    boxes = []
+    for u0, u1, off in _section_segments(sec):
+        b = _section_box(bounds, {**sec, "offset": off}, u0, u1)
+        if b is not None:
+            boxes.append(b)
+    return boxes
+
+
+def _section_box(bounds, sec, u0: float = -math.inf, u1: float = math.inf):
     """걷어낼 쪽 상자 (모델 범위보다 1mm 크게). 걷어낼 것이 없으면 None (occtDrawing.ts sectionBox)"""
     x0, y0, z0, x1, y1, z1 = bounds[0] - 1, bounds[1] - 1, bounds[2] - 1, bounds[3] + 1, bounds[4] + 1, bounds[5] + 1
     lo, hi = ([x0, y0, z0], [x1, sec["offset"], z1]) if sec["view"] == "front" else ([sec["offset"], y0, z0], [x1, y1, z1])
+    # 계단 구간: 정면 단면은 x, 우측면 단면은 y 범위로 줄인다
+    ku = 0 if sec["view"] == "front" else 1
+    lo[ku], hi[ku] = max(lo[ku], u0), min(hi[ku], u1)
     if sec.get("rect"):
         # 부분 단면: 보기 좌표 영역 (정면 u = x, 우측면 u = y; v = z) 안만
         r = sec["rect"]
@@ -208,6 +232,7 @@ def _section_box(bounds, sec):
 
 def _section_lines(s, sec, proj) -> list[list[float]]:
     axis = (0, 1, 0) if sec["view"] == "front" else (1, 0, 0)
+    segs = _section_segments(sec)
     out = []
     for f in _explore(s, TopAbs_FACE):
         a = BRepAdaptor_Surface(f, True)
@@ -215,7 +240,8 @@ def _section_lines(s, sec, proj) -> list[list[float]]:
             continue
         ax = a.Plane().Axis()
         d, o = ax.Direction(), ax.Location()
-        if abs(_dot((d.X(), d.Y(), d.Z()), axis)) < 1 - 1e-9 or abs(_dot((o.X(), o.Y(), o.Z()), axis) - sec["offset"]) > 1e-6:
+        depth = _dot((o.X(), o.Y(), o.Z()), axis)
+        if abs(_dot((d.X(), d.Y(), d.Z()), axis)) < 1 - 1e-9 or not any(abs(depth - off) <= 1e-6 for _, _, off in segs):
             continue
         for e in _explore(f, TopAbs_EDGE):
             out.append([_round(v) for p in _samples(e)[0] for v in proj(p)])
@@ -270,9 +296,8 @@ def project(shapes: list, views: list[str], section: dict | None = None, aux: li
         sec = section if section and section["view"] == name else None
         view_shapes = shapes
         if sec:
-            box = _section_box(bounds, sec)
-            if box is not None:
-                view_shapes = [r for r in (BRepAlgoAPI_Cut(s, box).Shape() for s in shapes) if _volume(r) > 1e-9]
+            for box in _section_boxes(bounds, sec):
+                view_shapes = [r for r in (BRepAlgoAPI_Cut(s, box).Shape() for s in view_shapes) if _volume(r) > 1e-9]
             if not view_shapes:
                 raise GeometryError("단면 위치가 형상 밖입니다 (자른 뒤 남는 것이 없음)")
         algo = HLRBRep_Algo()

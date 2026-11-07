@@ -44,8 +44,8 @@ export interface SheetOptions {
   dimensions: boolean;
   /** 중심선 (원 중심 표시·원통 축선) */
   centerlines?: boolean;
-  /** 단면도 (엔진에 같은 값을 넘겨 투상한 결과여야 한다). rect = 부분 단면 영역 (보기 좌표) */
-  section?: { view: 'front' | 'right'; offset: number; rect?: [number, number, number, number] };
+  /** 단면도 (엔진에 같은 값을 넘겨 투상한 결과여야 한다). rect = 부분 단면 영역 (보기 좌표), steps = 계단 단면 */
+  section?: { view: 'front' | 'right'; offset: number; rect?: [number, number, number, number]; steps?: { at: number; offset: number }[] };
   /** 주기 (여러 줄) */
   notes?: string;
   /** 사용자 치수 */
@@ -546,10 +546,11 @@ function centerLines(items: SheetItem[], v: DrawingView, map: (x: number, y: num
 function cuttingLine(
   items: SheetItem[],
   v: DrawingView,
-  sec: { view: 'front' | 'right'; offset: number },
+  sec: { view: 'front' | 'right'; offset: number; steps?: { at: number; offset: number }[] },
   map: (x: number, y: number) => [number, number],
   [x0, y0, x1, y1]: number[],
 ) {
+  if (sec.steps?.length) return steppedCuttingLine(items, v, sec as Required<typeof sec>, map, [x0!, y0!, x1!, y1!]);
   // 정면 단면: 평면 y = c 는 평면도에서 가로선 (보는 쪽 +Y = 종이 위쪽). 우측면 단면: 평면 x = c 는 정면도에서 세로선 (보는 쪽 −X = 왼쪽)
   let a: [number, number];
   let b: [number, number];
@@ -567,6 +568,54 @@ function cuttingLine(
     const q: [number, number] = [p[0] + along[0] * 5 * sign, p[1] + along[1] * 5 * sign];
     items.push({ kind: 'line', layer: 'visible', points: [...p, ...q] });
     // 화살표: 끝에서 보는 방향으로 6mm
+    const tip: [number, number] = [p[0] + look[0] * 6, p[1] + look[1] * 6];
+    items.push({ kind: 'line', layer: 'dim', points: [...p, ...tip] });
+    arrow(items, tip, look);
+    items.push({ kind: 'text', layer: 'text', x: tip[0] + look[0] * 1.5, y: tip[1] + (look[1] > 0 ? 1.5 : -1.2), size: 3.5, text: SECTION_LABEL, anchor: look[0] < 0 ? 'end' : 'middle' });
+  }
+}
+
+/**
+ * 계단 단면의 절단선 (형식 v28): 꺾임이 보이는 평면도에 꺾인 1점 쇄선 + 양 끝·꺾인 곳 굵은 선 + 끝 화살표 + 기호 A.
+ * 정면 단면 = y 가 x 를 따라 바뀜, 우측면 단면 = x 가 y 를 따라 바뀜 (평면도에서 둘 다 보인다)
+ */
+function steppedCuttingLine(
+  items: SheetItem[],
+  v: DrawingView,
+  sec: { view: 'front' | 'right'; offset: number; steps: { at: number; offset: number }[] },
+  map: (x: number, y: number) => [number, number],
+  [x0, y0, x1, y1]: number[],
+) {
+  if (v.name !== 'top') return;
+  const front = sec.view === 'front';
+  // 보기 좌표의 꺾인 점들 (평면도: x 오른쪽, y 위)
+  const pts: [number, number][] = [];
+  const P = (u: number, d: number) => (front ? map(u, d) : map(d, u));
+  const offs = [sec.offset, ...sec.steps.map((s) => s.offset)];
+  for (let i = 0; i < sec.steps.length; i++) {
+    pts.push(P(sec.steps[i]!.at, offs[i]!), P(sec.steps[i]!.at, offs[i + 1]!));
+  }
+  // 양 끝은 보기 바깥 6mm
+  const first = P(0, offs[0]!);
+  const last = P(0, offs[offs.length - 1]!);
+  const start: [number, number] = front ? [x0! - 6, first[1]] : [first[0], y0! - 6];
+  const end: [number, number] = front ? [x1! + 6, last[1]] : [last[0], y1! + 6];
+  const line = [start, ...pts, end];
+  items.push({ kind: 'line', layer: 'center', points: line.flat() });
+  // 굵은 표시: 양 끝 5mm, 꺾인 곳마다 두 방향 3mm
+  const thick = (p: [number, number], q: [number, number], len: number) => {
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    items.push({ kind: 'line', layer: 'visible', points: [...p, p[0] + ((q[0] - p[0]) / L) * len, p[1] + ((q[1] - p[1]) / L) * len] });
+  };
+  thick(start, line[1]!, 5);
+  thick(end, line[line.length - 2]!, 5);
+  for (let k = 1; k < line.length - 1; k++) {
+    thick(line[k]!, line[k - 1]!, 3);
+    thick(line[k]!, line[k + 1]!, 3);
+  }
+  // 보는 방향: 정면 단면 = +Y(종이 위), 우측면 단면 = −X(왼쪽)
+  const look: [number, number] = front ? [0, 1] : [-1, 0];
+  for (const p of [start, end]) {
     const tip: [number, number] = [p[0] + look[0] * 6, p[1] + look[1] * 6];
     items.push({ kind: 'line', layer: 'dim', points: [...p, ...tip] });
     arrow(items, tip, look);

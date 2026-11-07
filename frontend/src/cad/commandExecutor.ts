@@ -421,6 +421,9 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (new Set(dims.map((d) => d.id)).size !== dims.length) return fail('도면 치수 ID 가 중복되었습니다');
       const bad = dims.find((d) => (d.kind === 'diameter') === !!d.b);
       if (bad) return fail(`치수 ${bad.id}: ${bad.kind === 'diameter' ? '지름 치수는 끝점이 하나입니다' : '길이 치수는 끝점이 둘입니다'}`);
+      const sec = cmd.drawing.section;
+      if (sec?.steps && sec.rect) return fail('계단 단면과 부분 단면은 함께 쓸 수 없습니다');
+      if (sec?.steps?.some((st, i) => i > 0 && st.at <= sec.steps![i - 1]!.at)) return fail('계단 단면의 꺾이는 위치(at)는 오름차순이어야 합니다');
       const k = cmd.sheet ?? 0;
       if (k === 0) return done(model, { ...model, drawing: cmd.drawing }, cmd, null);
       // 2장째부터 (형식 v27): 있는 시트는 바꾸고, 시트 수와 같은 번호는 새로 붙인다

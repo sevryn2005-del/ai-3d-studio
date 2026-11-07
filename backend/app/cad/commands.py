@@ -921,6 +921,11 @@ class Mate(Strict):
 DrawingViewName = Literal["front", "top", "right", "iso"]
 
 
+class DrawingSectionStep(Strict):
+    at: Coordinate
+    offset: Coordinate
+
+
 class DrawingSection(Strict):
     """전단면도 (형식 v14): 정면도 = 평면 y = offset(앞쪽을 걷어냄), 우측면도 = 평면 x = offset(오른쪽을 걷어냄)"""
 
@@ -928,6 +933,8 @@ class DrawingSection(Strict):
     offset: Coordinate
     # 부분 단면 (형식 v26): 보기 좌표 사각 영역 [u0, v0, u1, v1] 안만 걷어낸다
     rect: Annotated[tuple[Coordinate, Coordinate, Coordinate, Coordinate] | None, Field(exclude_if=lambda v: v is None)] = None
+    # 계단 단면 (형식 v28): at 부터 자르는 깊이가 offset 으로 (at 오름차순, 최대 4)
+    steps: Annotated[list[DrawingSectionStep] | None, Field(min_length=1, max_length=4, exclude_if=lambda v: v is None)] = None
 
 
 class DrawingAnchor(Strict):
@@ -1013,7 +1020,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[27]
+    schemaVersion: Literal[28]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

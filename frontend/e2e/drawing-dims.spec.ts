@@ -269,3 +269,40 @@ test('도면 여러 장 (형식 v27): 시트 추가 → 따로 설정·표제란
   await page.getByTestId('drawing-sheet-tab-2').click();
   await expect(page.getByTestId('drawing-paper')).toHaveValue('A3');
 });
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`계단 단면 (형식 v28, ${engine === 'server' ? 'CadQuery 서버' : '브라우저 OCCT'}): 서로 다른 깊이의 두 구멍을 한 단면에, 평면도에 꺾인 절단선`, async ({ page }) => {
+    test.setTimeout(90_000);
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    await page.getByRole('button', { name: '삭제', exact: true }).click();
+    await dispatch(page, { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 });
+    await dispatch(page, { type: 'hole', id: 'h1', target: 'b', face: 'top', at: [-10, 5], diameter: 6, depth: 5 });
+    await dispatch(page, { type: 'hole', id: 'h2', target: 'cut_1', face: 'top', at: [10, -5], diameter: 6, depth: 5 });
+    await page.getByRole('tab', { name: '도면' }).click();
+    await page.getByTestId('cmd-drawing').click();
+    const sheet = page.getByTestId('drawing-sheet');
+    await expect(sheet).toBeVisible({ timeout: 40_000 });
+    await page.getByTestId('drawing-section').selectOption('front');
+    await page.getByTestId('drawing-section-offset').fill('5');
+    await page.getByTestId('drawing-section-offset').press('Enter');
+    await expect(sheet.locator('text', { hasText: /^단면 A-A$/ })).toHaveCount(1, { timeout: 40_000 });
+    await expect(page.getByTestId('drawing-paper-area')).toHaveAttribute('data-busy', 'false', { timeout: 40_000 });
+    const hatchBefore = await sheet.locator('polyline.hatch').count();
+    // x ≥ 0 부터 깊이 −5 (두 번째 구멍을 지나게)
+    await page.getByTestId('section-step-add').click();
+    await page.getByTestId('section-step-at-0').fill('0');
+    await page.getByTestId('section-step-at-0').press('Enter');
+    await page.getByTestId('section-step-offset-0').fill('-5');
+    await page.getByTestId('section-step-offset-0').press('Enter');
+    await expect(page.getByTestId('drawing-paper-area')).toHaveAttribute('data-busy', 'false', { timeout: 40_000 });
+    // 평면도의 꺾인 절단선 (꺾인 점이 있는 1점 쇄선), 해칭이 두 깊이에 걸침
+    await expect.poll(async () => sheet.locator('polyline.center').evaluateAll((ls) => ls.some((l) => (l.getAttribute('points') ?? '').trim().split(/\s+/).length === 4)), { timeout: 40_000 }).toBe(true);
+    expect(await sheet.locator('polyline.hatch').count()).toBeGreaterThan(0);
+    expect(hatchBefore).toBeGreaterThan(0);
+    // 계단 지우기 → 전단면으로
+    await page.getByTestId('section-step-delete-0').click();
+    await expect(page.getByTestId('section-step-at-0')).toHaveCount(0);
+  });
+}

@@ -638,6 +638,11 @@ export const DrawingSectionSchema = z.strictObject({
    * 없으면 전단면. 부분 단면은 절단선·"단면 A-A" 라벨 없이 영역 안만 해칭
    */
   rect: z.tuple([z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate)]).optional(),
+  /**
+   * 계단 단면 (형식 v28): at 부터 자르는 깊이가 offset 으로 바뀐다 (정면 단면 = x 를 따라, 우측면 단면 = y 를 따라, at 오름차순).
+   * at 앞쪽은 offset. 한 단면에 서로 다른 깊이의 구멍들을 함께 보인다. rect 와 함께 쓸 수 없다
+   */
+  steps: z.array(z.strictObject({ at: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate) })).min(1).max(4).optional(),
 });
 export type DrawingSection = z.infer<typeof DrawingSectionSchema>;
 /**
@@ -725,7 +730,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 27;
+export const MODEL_SCHEMA_VERSION = 28;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
