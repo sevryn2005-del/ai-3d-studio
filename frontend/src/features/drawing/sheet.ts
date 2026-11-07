@@ -6,6 +6,7 @@
  *   평면도·정면도는 가로 위치가, 정면도·우측면도는 높이가 맞춰진다.
  * - 척도: 표준 척도(10:1 … 1:1000) 중 용지에 들어가는 가장 큰 것 (직접 고를 수도 있음).
  * - 등각도는 숨은선을 그리지 않는다.
+ * - 부분 단면(형식 v26): section.rect 영역 안만 걷어낸 결과 — 절단선·A-A 라벨 없이 해칭만, 라벨은 "정면도 (부분 단면)".
  * - 단면도(형식 v14): 정면도·우측면도를 전단면 A-A 로 — 잘린 면 45° 해칭(2.5mm), 다른 보기에 절단선(가는 1점 쇄선 + 굵은 끝 + 보는 방향 화살표 + A).
  * - 중심선: 정면으로 보이는 원의 중심 표시(+ 자형), 원통 축선 (가는 1점 쇄선, 2mm 넘게). 등각도에는 그리지 않는다.
  * - 주기: 표제란 왼쪽 칸에 여러 줄 (최대 6줄).
@@ -43,8 +44,8 @@ export interface SheetOptions {
   dimensions: boolean;
   /** 중심선 (원 중심 표시·원통 축선) */
   centerlines?: boolean;
-  /** 단면도 (엔진에 같은 값을 넘겨 투상한 결과여야 한다) */
-  section?: { view: 'front' | 'right'; offset: number };
+  /** 단면도 (엔진에 같은 값을 넘겨 투상한 결과여야 한다). rect = 부분 단면 영역 (보기 좌표) */
+  section?: { view: 'front' | 'right'; offset: number; rect?: [number, number, number, number] };
   /** 주기 (여러 줄) */
   notes?: string;
   /** 사용자 치수 */
@@ -180,9 +181,11 @@ export function buildSheet(list: DrawingView[], opt: SheetOptions): Sheet {
     const [x0, y0] = map(v.bounds[0], v.bounds[1]);
     const [x1, y1] = map(v.bounds[2], v.bounds[3]);
     if (opt.centerlines && v.name !== 'iso') centerLines(items, v, map, scale);
-    if (opt.section && !sectioned) cuttingLine(items, v, opt.section, map, [x0, y0, x1, y1]);
-    const label = sectioned ? `단면 ${SECTION_LABEL}-${SECTION_LABEL}` : DRAWING_VIEWS[v.name as StandardViewName].label;
-    items.push({ kind: 'text', layer: 'text', x: (x0 + x1) / 2, y: y0 - (v.name === 'front' || v.name === 'right' ? (opt.dimensions ? 17 : 6) : 6), size: sectioned ? 3.5 : 2.5, text: label, anchor: 'middle' });
+    // 부분 단면은 절단선·단면 라벨 없이 (걷어낸 영역 안만 해칭)
+    const partial = !!opt.section?.rect;
+    if (opt.section && !sectioned && !partial) cuttingLine(items, v, opt.section, map, [x0, y0, x1, y1]);
+    const label = sectioned && !partial ? `단면 ${SECTION_LABEL}-${SECTION_LABEL}` : `${DRAWING_VIEWS[v.name as StandardViewName].label}${sectioned ? ' (부분 단면)' : ''}`;
+    items.push({ kind: 'text', layer: 'text', x: (x0 + x1) / 2, y: y0 - (v.name === 'front' || v.name === 'right' ? (opt.dimensions ? 17 : 6) : 6), size: sectioned && !partial ? 3.5 : 2.5, text: label, anchor: 'middle' });
     if (!opt.dimensions || v.name === 'iso') continue;
     const w = v.bounds[2] - v.bounds[0];
     const h = v.bounds[3] - v.bounds[1];

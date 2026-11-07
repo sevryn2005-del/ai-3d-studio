@@ -2164,6 +2164,34 @@
                   "type": "number",
                   "minimum": -10000,
                   "maximum": 10000
+                },
+                "rect": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": -10000,
+                      "maximum": 10000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": -10000,
+                      "maximum": 10000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": -10000,
+                      "maximum": 10000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": -10000,
+                      "maximum": 10000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
                 }
               },
               "required": [

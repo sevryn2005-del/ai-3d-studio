@@ -926,6 +926,8 @@ class DrawingSection(Strict):
 
     view: Literal["front", "right"]
     offset: Coordinate
+    # 부분 단면 (형식 v26): 보기 좌표 사각 영역 [u0, v0, u1, v1] 안만 걷어낸다
+    rect: Annotated[tuple[Coordinate, Coordinate, Coordinate, Coordinate] | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 class DrawingAnchor(Strict):
@@ -1011,7 +1013,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[25]
+    schemaVersion: Literal[26]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

@@ -178,3 +178,31 @@ for (const engine of ['server', 'browser'] as const) {
     await expect(sheet.locator('text', { hasText: /^보조 투상도 P$/ })).toHaveCount(0, { timeout: 40_000 });
   });
 }
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`부분 단면 (형식 v26, ${engine === 'server' ? 'CadQuery 서버' : '브라우저 OCCT'}): 정면도 구멍 둘레 영역만 걷어내 해칭, 절단선·A-A 없음`, async ({ page }) => {
+    test.setTimeout(90_000);
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    await page.getByRole('button', { name: '삭제', exact: true }).click();
+    await dispatch(page, { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 });
+    await dispatch(page, { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 5 });
+    await page.getByRole('tab', { name: '도면' }).click();
+    await page.getByTestId('cmd-drawing').click();
+    await expect(page.getByTestId('drawing-sheet')).toBeVisible({ timeout: 40_000 });
+    const sheet = page.getByTestId('drawing-sheet');
+    await page.getByTestId('drawing-section').selectOption('front-partial');
+    await expect(page.getByTestId('dim-hint')).toContainText('첫 모서리');
+    await clickView(page, 'front', -6, 2);
+    await clickView(page, 'front', 6, 9.9);
+    await expect(sheet.locator('text', { hasText: /^정면도 \(부분 단면\)$/ })).toHaveCount(1, { timeout: 40_000 });
+    await expect(page.getByTestId('drawing-paper-area')).toHaveAttribute('data-busy', 'false', { timeout: 40_000 });
+    await expect(sheet.locator('text', { hasText: /^단면 A-A$/ })).toHaveCount(0);
+    expect(await sheet.locator('polyline.hatch').count()).toBeGreaterThan(2);
+    await expect(page.getByTestId('drawing-section')).toHaveValue('front-partial');
+    // 전단면으로 바꾸면 라벨 A-A
+    await page.getByTestId('drawing-section').selectOption('front');
+    await expect(sheet.locator('text', { hasText: /^단면 A-A$/ })).toHaveCount(1, { timeout: 40_000 });
+  });
+}

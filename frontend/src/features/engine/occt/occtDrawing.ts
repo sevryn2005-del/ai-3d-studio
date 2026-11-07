@@ -77,7 +77,16 @@ function sectionBox(oc: OC, gc: Gc, B: number[], s: DrawingSection): TopoDS_Shap
   const [x0, y0, z0, x1, y1, z1] = [B[0]! - 1, B[1]! - 1, B[2]! - 1, B[3]! + 1, B[4]! + 1, B[5]! + 1];
   const lo: V3 = s.view === 'front' ? [x0, y0, z0] : [s.offset, y0, z0];
   const hi: V3 = s.view === 'front' ? [x1, s.offset, z1] : [x1, y1, z1];
-  if (hi[0] - lo[0] < 1e-9 || hi[1] - lo[1] < 1e-9) return null;
+  if (s.rect) {
+    // 부분 단면: 보기 좌표 영역 (정면 u = x, 우측면 u = y; v = z) 안만
+    const [u0, v0, u1, v1] = [Math.min(s.rect[0], s.rect[2]), Math.min(s.rect[1], s.rect[3]), Math.max(s.rect[0], s.rect[2]), Math.max(s.rect[1], s.rect[3])];
+    const k = s.view === 'front' ? 0 : 1;
+    lo[k] = u0;
+    hi[k] = u1;
+    lo[2] = v0;
+    hi[2] = v1;
+  }
+  if (hi[0] - lo[0] < 1e-9 || hi[1] - lo[1] < 1e-9 || hi[2] - lo[2] < 1e-9) return null;
   return gc.k(gc.k(new oc.BRepPrimAPI_MakeBox(gc.k(new oc.gp_Pnt(...lo)), gc.k(new oc.gp_Pnt(...hi)))).Shape());
 }
 
@@ -160,12 +169,12 @@ export function occtDrawing(oc: OC, model: ModelDefinition, views: readonly Stan
       const res = gc.k(new oc.HLRBRep_HLRToShape(algo));
       const circles: DrawingCircle[] = [];
       const visible = cleanHidden([], [...polylines(oc, gc, gc.k(res.VCompound()), circles, true), ...polylines(oc, gc, gc.k(res.OutLineVCompound()), circles, true)]);
-      const hidden = sec ? [] : cleanHidden(visible, [...polylines(oc, gc, gc.k(res.HCompound()), circles, false), ...polylines(oc, gc, gc.k(res.OutLineHCompound()), circles, false)]);
+      const hidden = sec && !sec.rect ? [] : cleanHidden(visible, [...polylines(oc, gc, gc.k(res.HCompound()), circles, false), ...polylines(oc, gc, gc.k(res.OutLineHCompound()), circles, false)]);
       const view: DrawingView = {
         name,
         visible,
         hidden,
-        circles: dedupeCircles(sec ? circles.filter((c) => c.visible) : circles),
+        circles: dedupeCircles(sec && !sec.rect ? circles.filter((c) => c.visible) : circles),
         axes: cylinderAxes(oc, gc, viewShapes, toward, project),
         bounds: linesBounds(visible),
       };

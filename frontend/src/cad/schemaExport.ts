@@ -836,7 +836,7 @@ export const ASSEMBLY_COMMANDS: unknown[] = [
  * 보기마다 보이는 선·숨은선 길이 합(mm, 원은 π/48 표본), 보이는 선 범위, 정면으로 보이는 원 반지름.
  */
 type DrawingExpect = { visible?: number; hidden?: number; bounds: number[]; circles?: number[]; axes?: number; section?: number };
-export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { view: 'front' | 'right'; offset: number }; aux?: { toward: number[]; right: number[] }[]; views: Record<string, DrawingExpect> }> = {
+export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { view: 'front' | 'right'; offset: number; rect?: [number, number, number, number] }; aux?: { toward: number[]; right: number[] }[]; views: Record<string, DrawingExpect> }> = {
   'block-blind-hole': {
     // 40×20×10 블록 윗면에 지름 6 깊이 5 막힌 구멍: 정면·우측면 숨은선 = 구멍 양옆 5 × 2 + 바닥 6
     commands: [
@@ -882,6 +882,18 @@ export const DRAWING_CASES: Record<string, { commands: unknown[]; section?: { vi
       front: { visible: 100, hidden: 0, bounds: [-20, 0, 20, 10] },
       // 숨은선 = 왼쪽 아래 모서리 (x −20, z 0, y 방향 20) 하나 — 위·오른쪽에서 보면 가려진다
       aux1: { hidden: 20, bounds: [-30 / Math.SQRT2, -10, 20 / Math.SQRT2, 10] },
+    },
+  },
+  'block-hole-partial-section': {
+    // 부분 단면 (형식 v26): 정면도의 x −6…6, z 2…10 영역만 y = 0 앞쪽을 걷어낸다
+    // 잘린 면 = 12×8 사각형에서 구멍(6×5) 홈을 뺀 모양 → 둘레 12 + 8 × 2 + 3 × 2 + 5 × 2 + 6 = 50
+    commands: [
+      { type: 'create_box', id: 'b', width: 40, depth: 20, height: 10 },
+      { type: 'hole', id: 'h', target: 'b', face: 'top', at: [0, 0], diameter: 6, depth: 5 },
+    ],
+    section: { view: 'front', offset: 0, rect: [-6, 2, 6, 10] },
+    views: {
+      front: { bounds: [-20, 0, 20, 10], section: 50 },
     },
   },
   'object-behind-object': {

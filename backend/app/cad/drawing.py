@@ -194,8 +194,14 @@ def _volume(s) -> float:
 def _section_box(bounds, sec):
     """걷어낼 쪽 상자 (모델 범위보다 1mm 크게). 걷어낼 것이 없으면 None (occtDrawing.ts sectionBox)"""
     x0, y0, z0, x1, y1, z1 = bounds[0] - 1, bounds[1] - 1, bounds[2] - 1, bounds[3] + 1, bounds[4] + 1, bounds[5] + 1
-    lo, hi = ((x0, y0, z0), (x1, sec["offset"], z1)) if sec["view"] == "front" else ((sec["offset"], y0, z0), (x1, y1, z1))
-    if hi[0] - lo[0] < 1e-9 or hi[1] - lo[1] < 1e-9:
+    lo, hi = ([x0, y0, z0], [x1, sec["offset"], z1]) if sec["view"] == "front" else ([sec["offset"], y0, z0], [x1, y1, z1])
+    if sec.get("rect"):
+        # 부분 단면: 보기 좌표 영역 (정면 u = x, 우측면 u = y; v = z) 안만
+        r = sec["rect"]
+        u0, v0, u1, v1 = min(r[0], r[2]), min(r[1], r[3]), max(r[0], r[2]), max(r[1], r[3])
+        k = 0 if sec["view"] == "front" else 1
+        lo[k], hi[k], lo[2], hi[2] = u0, u1, v0, v1
+    if hi[0] - lo[0] < 1e-9 or hi[1] - lo[1] < 1e-9 or hi[2] - lo[2] < 1e-9:
         return None
     return BRepPrimAPI_MakeBox(gp_Pnt(*lo), gp_Pnt(*hi)).Shape()
 
@@ -282,8 +288,8 @@ def project(shapes: list, views: list[str], section: dict | None = None, aux: li
         view = {
             "name": name,
             "visible": visible,
-            "hidden": [] if sec else clean_hidden(visible, hidden_raw),
-            "circles": dedupe_circles([c for c in circles if c["visible"]] if sec else circles),
+            "hidden": [] if sec and not sec.get("rect") else clean_hidden(visible, hidden_raw),
+            "circles": dedupe_circles([c for c in circles if c["visible"]] if sec and not sec.get("rect") else circles),
             "axes": _cylinder_axes(view_shapes, toward, proj),
             "bounds": bounds_of(visible),
         }

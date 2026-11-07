@@ -633,6 +633,11 @@ export const DrawingViewNameSchema = z.enum(['front', 'top', 'right', 'iso']);
 export const DrawingSectionSchema = z.strictObject({
   view: z.enum(['front', 'right']),
   offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
+  /**
+   * 부분 단면 (형식 v26): 보기 좌표 사각 영역 [u0, v0, u1, v1] 안만 걷어낸다 (정면 u = x · 우측면 u = y, v = z).
+   * 없으면 전단면. 부분 단면은 절단선·"단면 A-A" 라벨 없이 영역 안만 해칭
+   */
+  rect: z.tuple([z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate), z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate)]).optional(),
 });
 export type DrawingSection = z.infer<typeof DrawingSectionSchema>;
 /**
@@ -718,7 +723,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 25;
+export const MODEL_SCHEMA_VERSION = 26;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

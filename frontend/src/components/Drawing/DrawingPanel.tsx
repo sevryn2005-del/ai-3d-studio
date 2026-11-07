@@ -90,7 +90,7 @@ function DrawingWindow() {
   }, [geometry, engineId, chosen.join(','), sectionKey, auxKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 치수 추가 모드: 종류 → 끝점 클릭(꼭짓점에 붙음) → 치수선 위치 클릭. Esc 는 모드를 먼저 끝낸다
-  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | 'roughness' | 'aux' | null>(null);
+  const [dimMode, setDimMode] = useState<DrawingDim['kind'] | 'detail' | 'roughness' | 'aux' | 'partial-front' | 'partial-right' | null>(null);
   const [ra, setRa] = useState(3.2);
   const [pending, setPending] = useState<{ view: PickView; p: [number, number] }[]>([]);
   const [hover, setHover] = useState<{ view: PickView; p: [number, number]; paper: [number, number]; r?: number } | null>(null);
@@ -199,6 +199,10 @@ function DrawingWindow() {
       const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
       return setHover(e && h.view ? { view: h.view, p: e.p, paper: toPaper(h.view, e.p) } : null);
     }
+    if (dimMode === 'partial-front' || dimMode === 'partial-right') {
+      const want = dimMode === 'partial-front' ? 'front' : 'right';
+      return setHover(h.view === want ? { view: h.view, p: h.p, paper: h.paper } : null);
+    }
     if (dimMode === 'detail') {
       // 상세도: 첫 클릭 = 가운데, 둘째 = 반지름 (원 미리보기)
       if (pending.length === 1) {
@@ -220,6 +224,21 @@ function DrawingWindow() {
   const onClick = (ev: React.MouseEvent<SVGSVGElement>) => {
     const h = pick(ev);
     if (!h || !dimMode) return;
+    if (dimMode === 'partial-front' || dimMode === 'partial-right') {
+      // 부분 단면: 그 보기에서 사각 영역의 두 모서리 클릭 → 영역 안만 가운데(깊이 기본값)에서 걷어낸다
+      const view = dimMode === 'partial-front' ? 'front' : 'right';
+      if (h.view !== view) return;
+      if (pending.length === 0) return setPending([{ view, p: h.p }]);
+      const a = pending[0]!.p;
+      const r3 = (x: number) => Math.round(x * 1000) / 1000;
+      const rect: [number, number, number, number] = [r3(Math.min(a[0], h.p[0])), r3(Math.min(a[1], h.p[1])), r3(Math.max(a[0], h.p[0])), r3(Math.max(a[1], h.p[1]))];
+      setPending([]);
+      setDimMode(null);
+      setHover(null);
+      if (rect[2] - rect[0] < 0.01 || rect[3] - rect[1] < 0.01) return;
+      update({ section: { view, offset: settings.section?.view === view ? settings.section.offset : sectionCenter(view), rect } });
+      return;
+    }
     if (dimMode === 'aux') {
       // 보조 투상도: 고른 선(기울어진 면의 모서리)에 수직이고 형상 바깥쪽 방향에서 본다
       const e = h.view ? snapEdge(h.v, h.p, h.tol) : null;
@@ -273,7 +292,7 @@ function DrawingWindow() {
   };
   /** 세 번째 클릭: 치수선 위치 (종이 mm, 부호 = 방향) */
   const placeDim = (P: [number, number]) => {
-    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail' || dimMode === 'roughness' || dimMode === 'aux') return;
+    if (!dimMode || dimMode === 'diameter' || dimMode === 'detail' || dimMode === 'roughness' || dimMode === 'aux' || dimMode === 'partial-front' || dimMode === 'partial-right') return;
     const [a, b] = pending as [{ view: PickView; p: [number, number] }, { view: PickView; p: [number, number] }];
     const offset = dimOffsetAt(dimMode, toPaper(a.view, a.p), toPaper(b.view, b.p), P);
     const v = viewOf(a.view)!;
@@ -356,9 +375,16 @@ function DrawingWindow() {
         <label className="drawing-field">
           <span>단면도 (전단면 A-A)</span>
           <select
-            value={settings.section?.view ?? ''}
+            value={settings.section ? `${settings.section.view}${settings.section.rect ? '-partial' : ''}` : ''}
             onChange={(e) => {
-              const view = e.target.value as '' | 'front' | 'right';
+              const v = e.target.value as '' | 'front' | 'right' | 'front-partial' | 'right-partial';
+              if (v === 'front-partial' || v === 'right-partial') {
+                // 영역은 보기에서 두 번 클릭해 고른다
+                setDimMode(v === 'front-partial' ? 'partial-front' : 'partial-right');
+                setPending([]);
+                return;
+              }
+              const view = v;
               update({ section: view ? { view, offset: settings.section?.view === view ? settings.section.offset : sectionCenter(view) } : undefined });
             }}
             data-testid="drawing-section"
@@ -366,11 +392,15 @@ function DrawingWindow() {
             <option value="">없음</option>
             <option value="front">정면도를 단면으로 (앞쪽을 걷어냄)</option>
             <option value="right">우측면도를 단면으로 (오른쪽을 걷어냄)</option>
+            <option value="front-partial">정면도 부분 단면 (영역을 클릭)</option>
+            <option value="right-partial">우측면도 부분 단면 (영역을 클릭)</option>
           </select>
         </label>
         {settings.section && (
           <label className="drawing-field">
-            <span>자르는 위치 ({settings.section.view === 'front' ? 'Y' : 'X'}, mm)</span>
+            <span>
+              {settings.section.rect ? '걷어낼 깊이' : '자르는 위치'} ({settings.section.view === 'front' ? 'Y' : 'X'}, mm)
+            </span>
             <input
               type="number"
               step="any"
@@ -420,7 +450,11 @@ function DrawingWindow() {
           </div>
           {dimMode && (
             <p className="muted small" data-testid="dim-hint">
-              {dimMode === 'aux'
+              {dimMode === 'partial-front' || dimMode === 'partial-right'
+                ? pending.length === 0
+                  ? `${dimMode === 'partial-front' ? '정면도' : '우측면도'}에서 걷어낼 영역의 첫 모서리를 클릭하세요`
+                  : '반대쪽 모서리를 클릭하세요'
+                : dimMode === 'aux'
                 ? '기울어진 면의 모서리(보이는 선)를 클릭하세요 — 그 선에 수직인 방향에서 본 보조 투상도를 넣습니다'
                 : dimMode === 'roughness'
                 ? `표면(보이는 선)을 클릭하세요 — Ra ${ra}`
