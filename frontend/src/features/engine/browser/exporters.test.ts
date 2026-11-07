@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { executeCommand } from '../../../cad/commandExecutor';
 import { emptyModel, type ModelDefinition } from '../../../cad/commandTypes';
 import { worldMeshes } from './geometry';
-import { to3mf, toBinaryStl, toGlb } from './exporters';
+import { boxUv, to3mf, toBinaryStl, toGlb } from './exporters';
 
 let wasm: ManifoldToplevel;
 beforeAll(async () => {
@@ -101,6 +101,17 @@ describe('GLB', () => {
     };
     const { a, arr: pos } = acc(prim.attributes.POSITION);
     const { arr: nrm } = acc(prim.attributes.NORMAL);
+    // 박스 투영 UV: 점마다 하나, 윗면(glTF 법선 +Y = CAD +Z) 점은 uv = (x, −y_CAD) m = (pos.x, pos.z)
+    const { arr: uv } = acc(prim.attributes.TEXCOORD_0);
+    expect(uv.length / 2).toBe(pos.length / 3);
+    let top = 0;
+    for (let i = 0, j = 0; i < pos.length; i += 3, j += 2)
+      if (nrm[i + 1]! > 0.99) {
+        top++;
+        expect(uv[j]!).toBeCloseTo(pos[i]!, 6);
+        expect(uv[j + 1]!).toBeCloseTo(pos[i + 2]!, 6);
+      }
+    expect(top).toBeGreaterThan(0);
     // 높이 50mm 박스(x=30) → x 0.02~0.04, y(위) 0~0.05, z −0.01~0.01
     a.min.forEach((v: number, i: number) => expect(v).toBeCloseTo([0.02, 0, -0.01][i]!, 6));
     a.max.forEach((v: number, i: number) => expect(v).toBeCloseTo([0.04, 0.05, 0.01][i]!, 6));
@@ -121,5 +132,17 @@ describe('3MF 외관 색 (서버 test_export.py 와 같은 구조)', () => {
     expect(xml).toMatch(/<object id="1"[^>]*pid="4" pindex="0"/);
     expect(xml).toMatch(/<object id="2" type="model" name="b">/);
     expect(xml).toMatch(/<object id="3"[^>]*pid="4" pindex="1"/);
+  });
+});
+
+describe('박스 투영 UV (서버 exporter.py box_uv 와 같은 값)', () => {
+  it('가장 큰 법선 축의 면, 음수 쪽은 뒤집기, v 는 이미지 좌표', () => {
+    expect(boxUv(10, 20, 30, 0, 0, 1)).toEqual([0.01, -0.02]); // 윗면: u = x, v = −y
+    expect(boxUv(10, 20, 30, 0, 0, -1)).toEqual([0.01, 0.02]); // 아랫면: v = y
+    expect(boxUv(10, 20, 30, 1, 0, 0)).toEqual([0.02, -0.03]); // +X 면: u = y, v = −z
+    expect(boxUv(10, 20, 30, -1, 0, 0)).toEqual([-0.02, -0.03]);
+    expect(boxUv(10, 20, 30, 0, 1, 0)).toEqual([-0.01, -0.03]); // +Y 면: u = −x
+    expect(boxUv(10, 20, 30, 0, -1, 0)).toEqual([0.01, -0.03]);
+    expect(boxUv(10, 20, 30, 0.6, 0.6, 0.5)).toEqual([0.02, -0.03]); // 같으면 X 먼저
   });
 });

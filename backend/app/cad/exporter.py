@@ -164,6 +164,18 @@ def _vertex_normals(v: np.ndarray, t: np.ndarray) -> np.ndarray:
     return np.divide(n, length, out=np.zeros_like(n), where=length > 0)
 
 
+def box_uv(v: np.ndarray, n: np.ndarray) -> np.ndarray:
+    """박스 투영 UV (브라우저 exporters.ts boxUv 와 같은 규칙): 점 법선의 가장 큰 축으로 면을 고르고 나머지 두 좌표(m).
+    CAD 좌표(Z-up, mm) — X 면: u = ±y, Y 면: u = ∓x, Z 면: u = x, v = ±y; glTF 이미지 좌표라 v 는 뒤집는다. 1 UV = 1 m"""
+    a = np.abs(n)
+    x, y, z = v[:, 0], v[:, 1], v[:, 2]
+    use_x = (a[:, 0] >= a[:, 1]) & (a[:, 0] >= a[:, 2])
+    use_y = ~use_x & (a[:, 1] >= a[:, 2])
+    u = np.where(use_x, np.where(n[:, 0] >= 0, y, -y), np.where(use_y, np.where(n[:, 1] >= 0, -x, x), x))
+    w = np.where(use_x | use_y, z, np.where(n[:, 2] >= 0, y, -y))
+    return np.stack([u * 0.001, -w * 0.001], axis=1)
+
+
 def to_glb(objects: list[NamedShape]) -> bytes:
     bin_chunks: list[bytes] = []
     offset = 0
@@ -180,7 +192,9 @@ def to_glb(objects: list[NamedShape]) -> bytes:
     for obj in objects:
         v, t = _fine_mesh(obj.shape)
         pos = (v.astype(np.float64) @ _Z_UP_MM_TO_GLTF.T).astype("<f4")
-        nrm = (_vertex_normals(v.astype(np.float64), t) @ (_Z_UP_MM_TO_GLTF.T / 0.001)).astype("<f4")
+        n_cad = _vertex_normals(v.astype(np.float64), t)
+        nrm = (n_cad @ (_Z_UP_MM_TO_GLTF.T / 0.001)).astype("<f4")
+        uv = box_uv(v.astype(np.float64), n_cad).astype("<f4")
         idx = t.astype("<u4").reshape(-1)
 
         pv = add_view(pos.tobytes(), 34962)  # ARRAY_BUFFER
@@ -190,12 +204,15 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         nv = add_view(nrm.tobytes(), 34962)
         accessors.append({"bufferView": nv, "componentType": 5126, "count": len(nrm), "type": "VEC3"})
         a_nrm = len(accessors) - 1
+        tv = add_view(uv.tobytes(), 34962)
+        accessors.append({"bufferView": tv, "componentType": 5126, "count": len(uv), "type": "VEC2"})
+        a_uv = len(accessors) - 1
         iv = add_view(idx.tobytes(), 34963)  # ELEMENT_ARRAY_BUFFER
         accessors.append({"bufferView": iv, "componentType": 5125, "count": len(idx), "type": "SCALAR"})
         a_idx = len(accessors) - 1
 
         meshes.append({"name": obj.name, "primitives": [
-            {"attributes": {"POSITION": a_pos, "NORMAL": a_nrm}, "indices": a_idx, "material": 0}]})
+            {"attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv}, "indices": a_idx, "material": 0}]})
         nodes.append({"name": obj.name, "mesh": len(meshes) - 1})
 
     binary = b"".join(bin_chunks)

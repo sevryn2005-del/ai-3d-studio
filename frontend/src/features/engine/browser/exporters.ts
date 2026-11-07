@@ -99,6 +99,23 @@ export function to3mf(meshes: NamedMesh[]): Uint8Array {
 /** 화면과 같은 기준(30°)으로 법선을 분리해 곡면은 부드럽게, 모서리는 날카롭게 */
 const CREASE_ANGLE = Math.PI / 6;
 
+/**
+ * 박스 투영 UV (서버 exporter.py box_uv 와 같은 규칙): 점 법선에서 가장 큰 축으로 면을 고르고 나머지 두 좌표(m)를 UV 로.
+ * CAD 좌표 (Z-up, mm) 기준 — X 면: u = ±y, Y 면: u = ∓x, Z 면: u = x, v = ±y … 법선이 음수 쪽이면 거울상이 되지 않게 u(Z 면은 v)를 뒤집는다.
+ * glTF 는 이미지 위쪽이 v = 0 이라 v 는 뒤집어 넣는다. 1 UV = 1 m (텍스처 1장이 1 m 정사각형).
+ */
+export function boxUv(x: number, y: number, z: number, nx: number, ny: number, nz: number): [number, number] {
+  const ax = Math.abs(nx);
+  const ay = Math.abs(ny);
+  const az = Math.abs(nz);
+  let u: number;
+  let v: number;
+  if (ax >= ay && ax >= az) [u, v] = [nx >= 0 ? y : -y, z];
+  else if (ay >= az) [u, v] = [ny >= 0 ? -x : x, z];
+  else [u, v] = [x, nz >= 0 ? y : -y];
+  return [u * 0.001, -v * 0.001];
+}
+
 export function toGlb(meshes: NamedMesh[]): Uint8Array {
   const chunks: Uint8Array[] = [];
   let offset = 0;
@@ -125,6 +142,7 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     const srcN = creased.getAttribute('normal').array as Float32Array;
     const pos = new Float32Array(src.length);
     const nrm = new Float32Array(srcN.length);
+    const uv = new Float32Array((src.length / 3) * 2);
     const min = [Infinity, Infinity, Infinity];
     const max = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < src.length; i += 3) {
@@ -135,6 +153,9 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
       nrm[i] = srcN[i]!;
       nrm[i + 1] = srcN[i + 2]!;
       nrm[i + 2] = -srcN[i + 1]!;
+      const [u, v] = boxUv(src[i]!, src[i + 1]!, src[i + 2]!, srcN[i]!, srcN[i + 1]!, srcN[i + 2]!);
+      uv[(i / 3) * 2] = u;
+      uv[(i / 3) * 2 + 1] = v;
       for (let k = 0; k < 3; k++) {
         min[k] = Math.min(min[k]!, pos[i + k]!);
         max[k] = Math.max(max[k]!, pos[i + k]!);
@@ -144,7 +165,8 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     accessors.push({ bufferView: addView(pos), componentType: 5126, count: pos.length / 3, type: 'VEC3', min, max });
     const aPos = accessors.length - 1;
     accessors.push({ bufferView: addView(nrm), componentType: 5126, count: nrm.length / 3, type: 'VEC3' });
-    gltfMeshes.push({ name: m.name, primitives: [{ attributes: { POSITION: aPos, NORMAL: aPos + 1 }, material: 0 }] });
+    accessors.push({ bufferView: addView(uv), componentType: 5126, count: uv.length / 2, type: 'VEC2' });
+    gltfMeshes.push({ name: m.name, primitives: [{ attributes: { POSITION: aPos, NORMAL: aPos + 1, TEXCOORD_0: aPos + 2 }, material: 0 }] });
     nodes.push({ name: m.name, mesh: gltfMeshes.length - 1 });
   }
 

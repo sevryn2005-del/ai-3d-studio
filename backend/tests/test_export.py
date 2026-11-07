@@ -169,7 +169,8 @@ def _parse_glb(data: bytes):
 def _accessor(gltf, binary, i):
     a = gltf["accessors"][i]
     view = gltf["bufferViews"][a["bufferView"]]
-    dtype, width = {5126: ("<f4", 3), 5125: ("<u4", 1)}[a["componentType"]]
+    dtype = {5126: "<f4", 5125: "<u4"}[a["componentType"]]
+    width = {"VEC3": 3, "VEC2": 2, "SCALAR": 1}[a["type"]]
     arr = np.frombuffer(binary, dtype=dtype, count=a["count"] * width, offset=view["byteOffset"])
     return arr.reshape(-1, width) if width > 1 else arr
 
@@ -186,6 +187,12 @@ def test_glb_structure_and_y_up_meters(client, default_model):
     nrm = _accessor(gltf, binary, prim["attributes"]["NORMAL"])
     idx = _accessor(gltf, binary, prim["indices"])
     assert idx.max() < len(pos)
+    # 박스 투영 UV: 점마다 하나, 윗면(glTF 법선 +Y) 점은 uv = (pos.x, pos.z)
+    uv = _accessor(gltf, binary, prim["attributes"]["TEXCOORD_0"])
+    assert len(uv) == len(pos)
+    top = nrm[:, 1] > 0.99
+    assert top.any()
+    np.testing.assert_allclose(uv[top], pos[top][:, [0, 2]], atol=1e-6)
     np.testing.assert_allclose(np.linalg.norm(nrm, axis=1), 1, atol=1e-5)
     # CAD (x, y, z) mm Z-up → glTF (x, z, -y) m Y-up: 높이 50mm 박스 → Y 0~0.05
     np.testing.assert_allclose(pos.min(axis=0), [0.02, 0, -0.01], atol=1e-6)
@@ -209,3 +216,14 @@ def test_3mf_object_colors(client, default_model):
     assert '<basematerials id="3">' in xml and 'displaycolor="#E5534B"' in xml
     assert 'object id="1" type="model" name=' in xml and 'pid="3" pindex="0"' in xml
     assert xml.count("pid=") == 1
+
+
+def test_box_uv_matches_browser_rule():
+    """브라우저 exporters.test.ts 의 boxUv 예와 같은 값"""
+    from app.cad.exporter import box_uv
+
+    v = np.array([[10.0, 20.0, 30.0]] * 7)
+    n = np.array([[0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0.6, 0.6, 0.5]], dtype=float)
+    expect = [[0.01, -0.02], [0.01, 0.02], [0.02, -0.03], [-0.02, -0.03], [-0.01, -0.03], [0.01, -0.03], [0.02, -0.03]]
+    np.testing.assert_allclose(box_uv(v, n), expect, atol=1e-12)
+
