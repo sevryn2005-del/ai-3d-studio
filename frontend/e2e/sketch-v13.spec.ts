@@ -35,11 +35,22 @@ test('사각형 → 다각형 → 호 변 → 꼭짓점 필렛 → 대칭 구속
   await expect.poll(async () => (await sources(page)).e?.max[0] ?? 0, { timeout: 20_000 }).toBeCloseTo(20, 2);
 
   // 3. 호에 붙지 않은 꼭짓점 p3 만 필렛 R4 → 왼쪽 위 모서리만 둥글게 (정점 수 증가)
-  const before = (await sources(page)).e!.vertices;
+  // 빠른 메시(manifold)가 먼저 오고 정밀 메시(OCCT)가 뒤에 와서 점 수가 바뀌므로, 1초 동안 그대로일 때의 값을 기준으로
+  const stableVertices = async () => {
+    let prev = -1;
+    for (let k = 0; k < 40; k++) {
+      const v = (await sources(page)).e?.vertices ?? 0;
+      if (v === prev) return v;
+      prev = v;
+      await page.waitForTimeout(1000);
+    }
+    return prev;
+  };
+  const before = await stableVertices();
   await page.getByTestId('corner-v3').check();
   await page.getByTestId('corner-size').fill('4');
   await page.getByTestId('corner-size').press('Enter');
-  await expect.poll(async () => (await sources(page)).e?.vertices ?? 0, { timeout: 20_000 }).toBeGreaterThan(before);
+  await expect.poll(async () => (await sources(page)).e?.vertices ?? 0, { timeout: 45_000 }).toBeGreaterThan(before);
   await expect(page.getByText('처리된 꼭짓점: p3')).toBeVisible();
   // 호 변에 붙은 꼭짓점(p1)은 거부 (모델은 그대로)
   const rev = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).revision;

@@ -4,6 +4,7 @@
  * 도면 설정(용지·척도·보기·단면·주기)은 설계 원본 model.drawing 에 set_drawing 명령으로 저장된다 (실행 취소·프로젝트 저장).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DEFAULT_DRAWING, MAX_DRAWING_AUX, MAX_EXTRA_SHEETS, MAX_DRAWING_DETAILS, MAX_DRAWING_MARKS, type DrawingDim, type DrawingSettings } from '../../cad/commandTypes';
 import { DIM_KIND_LABEL, dimOffsetAt, makeAnchor, parseTol, RA_VALUES, snapCircle, snapEdge, snapVertex, tolInput } from '../../features/drawing/dims';
 import { create } from 'zustand';
@@ -11,7 +12,7 @@ import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { getActiveEngine, useActiveEngineId } from '../../features/engine/engines';
 import type { DrawingView, StandardViewName } from '../../features/engine/types';
 import { sheetToDxf, sheetToSvg } from '../../features/drawing/exportSheet';
-import { AUX_LABELS, buildSheet, DETAIL_LABELS, dimText, PAPERS, scaleLabel, STANDARD_SCALES, tolText, type Paper } from '../../features/drawing/sheet';
+import { AUX_LABELS, buildSheet, DETAIL_LABELS, type SheetOptions, dimText, PAPERS, scaleLabel, STANDARD_SCALES, tolText, type Paper } from '../../features/drawing/sheet';
 import { ALL_VIEWS, auxDirection, DRAWING_VIEWS } from '../../features/drawing/views';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
@@ -25,6 +26,25 @@ export const useDrawingStore = create<DrawingState>((set) => ({ open: false, set
 type PickView = 'front' | 'top' | 'right';
 /** 고르기 허용 거리 (종이 mm) */
 const PICK_MM = 3;
+
+/** 시트 설정 → 시트 그리기 옵션 (지금 시트·모든 시트 인쇄 공통) */
+function sheetOptions(s: DrawingSettings, idx: number, count: number, projectName: string): SheetOptions {
+  return {
+    paper: s.paper,
+    scale: s.scale,
+    title: s.title ?? projectName,
+    date: today(),
+    dimensions: s.dimensions,
+    centerlines: s.centerlines,
+    ...(s.section ? { section: s.section } : {}),
+    ...(s.notes ? { notes: s.notes } : {}),
+    ...(s.dims?.length ? { dims: s.dims } : {}),
+    ...(s.details?.length ? { details: s.details } : {}),
+    ...(s.marks?.length ? { marks: s.marks } : {}),
+    ...(s.aux?.length ? { aux: s.aux } : {}),
+    ...(count > 1 ? { sheetNo: [idx + 1, count] as [number, number] } : {}),
+  };
+}
 
 const today = () => {
   const d = new Date();
@@ -130,25 +150,48 @@ function DrawingWindow() {
   const sheet = useMemo(
     () =>
       views && chosen.length
-        ? buildSheet(views, {
-            paper: settings.paper,
-            scale: settings.scale,
-            title,
-            date: today(),
-            dimensions: settings.dimensions,
-            centerlines: settings.centerlines,
-            ...(settings.section ? { section: settings.section } : {}),
-            ...(settings.notes ? { notes: settings.notes } : {}),
-            ...(shownDims?.length ? { dims: shownDims } : {}),
-            ...(settings.details?.length ? { details: settings.details } : {}),
-            ...(settings.marks?.length ? { marks: settings.marks } : {}),
-            ...(settings.aux?.length ? { aux: settings.aux } : {}),
-            ...(sheetCount > 1 ? { sheetNo: [idx + 1, sheetCount] as [number, number] } : {}),
-          })
+        ? buildSheet(views, sheetOptions({ ...settings, ...(shownDims ? { dims: shownDims } : {}) }, idx, sheetCount, projectName))
         : null,
-    [views, chosen.length, settings, title, shownDims, idx, sheetCount],
+    [views, chosen.length, settings, shownDims, idx, sheetCount, projectName],
   );
   const svg = useMemo(() => (sheet ? sheetToSvg(sheet) : ''), [sheet]);
+  // 모든 시트 인쇄: 시트마다 투상 → SVG → 인쇄 전용 영역에 한 장씩 (용지는 시트마다 A4·A3 이름 있는 페이지)
+  const [printAll, setPrintAll] = useState<{ svg: string; paper: Paper }[] | null>(null);
+  const [printBusy, setPrintBusy] = useState(false);
+  const startPrintAll = async () => {
+    const engine = engineId ? getActiveEngine(engineId) : null;
+    if (!engine) return;
+    setPrintBusy(true);
+    try {
+      const all = [model.drawing ?? DEFAULT_DRAWING, ...extraSheets];
+      const pages: { svg: string; paper: Paper }[] = [];
+      for (let i = 0; i < all.length; i++) {
+        const s = all[i]!;
+        if (!s.views.length) continue;
+        const v = await engine.drawing(geometry, s.views, s.section, undefined, (s.aux ?? []).map((a) => auxDirection(a.view, a.angle)));
+        pages.push({ svg: sheetToSvg(buildSheet(v, sheetOptions(s, i, all.length, projectName))), paper: s.paper });
+      }
+      setPrintAll(pages);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPrintBusy(false);
+    }
+  };
+  useEffect(() => {
+    if (!printAll) return;
+    document.body.classList.add('print-all');
+    const done = () => {
+      document.body.classList.remove('print-all');
+      setPrintAll(null);
+    };
+    window.addEventListener('afterprint', done, { once: true });
+    window.print();
+    return () => {
+      window.removeEventListener('afterprint', done);
+      document.body.classList.remove('print-all');
+    };
+  }, [printAll]);
   const fileBase = `${title || projectName} 도면${sheetCount > 1 ? ` ${idx + 1}` : ''}`;
   const [W, H] = PAPERS[settings.paper];
   const toggle = (v: StandardViewName) => update({ views: chosen.includes(v) ? chosen.filter((x) => x !== v) : ALL_VIEWS.filter((x) => x === v || chosen.includes(x)) });
@@ -331,7 +374,17 @@ function DrawingWindow() {
   return (
     <div className="drawing-window" role="dialog" aria-label="도면" data-testid="drawing-window">
       {/* 인쇄: 시트만, 용지 크기 그대로 (브라우저 인쇄에서 'PDF 로 저장' 가능) */}
-      <style>{`@media print { @page { size: ${W}mm ${H}mm; margin: 0 } .drawing-print svg { width: ${W}mm !important; height: ${H}mm !important } }`}</style>
+      <style>{`@media print { @page { size: ${W}mm ${H}mm; margin: 0 } @page A4 { size: 297mm 210mm; margin: 0 } @page A3 { size: 420mm 297mm; margin: 0 } .drawing-print svg { width: ${W}mm !important; height: ${H}mm !important } ${(Object.keys(PAPERS) as Paper[]).map((p) => `.print-page[data-paper='${p}'] { page: ${p} } .print-page[data-paper='${p}'] svg { width: ${PAPERS[p][0]}mm !important; height: ${PAPERS[p][1]}mm !important }`).join(' ')} }`}</style>
+      {/* 모든 시트 인쇄 영역: body 바로 아래 (고정된 도면 창 안이면 한 쪽 높이에서 잘린다) */}
+      {printAll &&
+        createPortal(
+          <div className="drawing-print-all" data-testid="drawing-print-all-pages" aria-hidden="true">
+            {printAll.map((pg, i) => (
+              <div key={i} className="print-page" data-paper={pg.paper} dangerouslySetInnerHTML={{ __html: pg.svg }} />
+            ))}
+          </div>,
+          document.body,
+        )}
       <aside className="drawing-options">
         <div className="pm-head">
           <strong>도면</strong>
@@ -469,6 +522,11 @@ function DrawingWindow() {
           <button disabled={!sheet} onClick={() => sheet && void downloadBlob(new Blob([sheetToDxf(sheet)], { type: 'application/dxf' }), `${fileBase}.dxf`)} data-testid="drawing-dxf" title="다른 CAD 에서 여는 2D 도면 (DXF R12)">
             DXF 저장
           </button>
+          {sheetCount > 1 && (
+            <button disabled={printBusy} onClick={() => void startPrintAll()} data-testid="drawing-print-all" title={`시트 ${sheetCount}장을 한 번에 인쇄 (인쇄 창에서 'PDF 로 저장' = 여러 쪽 PDF)`}>
+              {printBusy ? '시트 준비 중…' : '모든 시트 인쇄'}
+            </button>
+          )}
           <button disabled={!sheet} onClick={() => window.print()} data-testid="drawing-print" title="인쇄 창에서 'PDF 로 저장'을 고르면 PDF 파일이 됩니다">
             인쇄 · PDF
           </button>

@@ -385,7 +385,15 @@ label.check.small { font-size: 12px; }
   body * { visibility: hidden !important; }
   .drawing-print, .drawing-print * { visibility: visible !important; }
   .drawing-print { position: fixed; left: 0; top: 0; box-shadow: none; max-width: none; width: auto; }
+  /* 모든 시트 인쇄: 한 장 인쇄 영역은 숨기고 시트들을 쪽마다 */
+  html:has(body.print-all), body.print-all { height: auto !important; overflow: visible !important; }
+  body.print-all > *:not(.drawing-print-all) { display: none !important; }
+  body.print-all .drawing-print-all, body.print-all .drawing-print-all * { visibility: visible !important; }
+  body.print-all .drawing-print-all { position: static; }
+  .drawing-print-all .print-page { break-after: page; line-height: 0; }
+  .drawing-print-all .print-page:last-child { break-after: auto; }
 }
+.drawing-print-all { position: fixed; left: -100000px; top: 0; }
 .region-items { margin: 4px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
 .region-items li { display: flex; align-items: center; gap: 6px; }
 .drawing-sheet-wrap { position: relative; width: 100%; max-width: 1100px; }

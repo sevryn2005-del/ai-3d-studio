@@ -234,6 +234,30 @@ test('도면 여러 장 (형식 v27): 시트 추가 → 따로 설정·표제란
   await expect(sheet.locator('text', { hasText: /^등각도$/ })).toHaveCount(1, { timeout: 40_000 });
   await expect(sheet.locator('text', { hasText: /^1\/2$/ })).toHaveCount(1);
 
+  // 모든 시트 인쇄: 시트마다 쪽 하나 (용지 A4·A3 따로), 인쇄가 끝나면 치운다
+  await page.evaluate(() => {
+    (window as unknown as { printed: number }).printed = 0;
+    window.print = () => void ((window as unknown as { printed: number }).printed += 1);
+  });
+  await page.getByTestId('drawing-print-all').click();
+  const pages = page.getByTestId('drawing-print-all-pages').locator('.print-page');
+  await expect(pages).toHaveCount(2, { timeout: 40_000 });
+  await expect(pages.nth(0)).toHaveAttribute('data-paper', 'A4');
+  await expect(pages.nth(1)).toHaveAttribute('data-paper', 'A3');
+  await expect(pages.nth(1).locator('text', { hasText: /^2\/2$/ })).toHaveCount(1);
+  expect(await page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
+  expect(await page.evaluate(() => document.body.classList.contains('print-all'))).toBe(true);
+  // 실제 인쇄(PDF) 결과: 2쪽, 1쪽 A4 가로(297×210mm) · 2쪽 A3 가로(420×297mm)
+  const pdf = (await page.pdf({ preferCSSPageSize: true })).toString('latin1');
+  const boxes = [...pdf.matchAll(/\/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)\s*\]/g)].map((m) => [Math.round((Number(m[1]) / 72) * 25.4), Math.round((Number(m[2]) / 72) * 25.4)]);
+  expect(boxes).toEqual([
+    [297, 210],
+    [420, 297],
+  ]);
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await expect(page.getByTestId('drawing-print-all-pages')).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.classList.contains('print-all'))).toBe(false);
+
   // 2장째 지우기 → 실행 취소로 되살리기 (모델에 저장)
   await page.getByTestId('drawing-sheet-tab-2').click();
   await page.getByTestId('drawing-sheet-delete').click();
