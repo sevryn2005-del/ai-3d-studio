@@ -5,7 +5,7 @@ import { Matrix3, Mesh, OrthographicCamera, PerspectiveCamera, Plane, Raycaster,
 import { useSceneStore } from '../../cad/sceneStore';
 import type { PolyMesh, V3 } from '../../cad/polymesh';
 import { BRUSH_LABEL, applyDab, grabStroke, paintMask, sculptContext, strokeEdit, type SculptContext } from '../../cad/sculpt';
-import { extendValues, refineNear } from '../../cad/dyntopo';
+import { collapseNear, extendValues, refineNear, remapValues } from '../../cad/dyntopo';
 import { MAX_POLY_FACES, MAX_POLY_VERTS } from '../../cad/commandTypes';
 import { useModelingStore } from '../../features/modeling/modelingStore';
 import { editTarget } from '../../features/modeling/modelingOps';
@@ -137,6 +137,15 @@ export function SculptController() {
             const prevMask = currentMask(t.id, s.current.verts.length);
             s.current = r.mesh;
             if (prevMask) useModelingStore.getState().setMask({ objectId: t.id, values: extendValues(prevMask, r.parents) });
+          }
+          // 너무 짧아진 선은 합친다 (최대 길이의 40%) — 점이 끝없이 늘지 않게
+          for (const c of centers) {
+            const r = collapseNear(s.current, c, h.radius, h.radius * set.detail * 0.4, 1);
+            if (!r) continue;
+            refined = true;
+            const prevMask = currentMask(t.id, s.current.verts.length);
+            s.current = r.mesh;
+            if (prevMask) useModelingStore.getState().setMask({ objectId: t.id, values: remapValues(prevMask, r.remap, r.mesh.verts.length) });
           }
           if (refined) s.ctx = sculptContext(s.current);
         }

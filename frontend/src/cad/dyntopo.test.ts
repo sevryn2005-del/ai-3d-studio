@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, polyMeshError, polyVolume, primitiveMesh, type V3 } from './polymesh';
-import { extendValues, refineNear } from './dyntopo';
+import { collapseNear, extendValues, refineNear, remapValues } from './dyntopo';
 
 const len = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -38,5 +38,28 @@ describe('다이나믹 토폴로지', () => {
 
   it('점별 값 이어 붙이기 = 부모 평균', () => {
     expect(extendValues([0, 1, 0.5], [[0, 1], [1, 3]])).toEqual([0, 1, 0.5, 0.5, 0.75]);
+  });
+});
+
+describe('짧은 선 합치기', () => {
+  it('촘촘하게 쪼갠 큐브 윗면을 다시 합치면: 점이 줄고, 닫힘·오류 없음·부피 그대로', () => {
+    const c = primitiveMesh('cube', { size: 20 });
+    const fine = refineNear(c, [0, 0, 10], 9, 1.2, 50_000, 8)!.mesh;
+    const r = collapseNear(fine, [0, 0, 10], 6, 2.5, 4)!;
+    expect(r).not.toBeNull();
+    expect(r.mesh.verts.length).toBeLessThan(fine.verts.length);
+    expect(boundaryEdgeCount(r.mesh)).toBe(0);
+    expect(polyMeshError(r.mesh)).toBeNull();
+    expect(polyVolume(r.mesh)).toBeCloseTo(8000, 3); // 평평한 윗면 안에서만 합쳐진다
+    // 점 번호 옮기기: 모든 원래 점이 새 점에 대응 (합쳐진 점 포함)
+    expect([...r.remap].every((j) => j >= 0 && j < r.mesh.verts.length)).toBe(true);
+    const vals = remapValues(fine.verts.map(() => 1), r.remap, r.mesh.verts.length);
+    expect(vals.every((v) => v === 1)).toBe(true);
+  });
+
+  it('짧은 선이 없으면 null, 다각형(사각형) 면 둘레는 건드리지 않는다', () => {
+    expect(collapseNear(primitiveMesh('cube', { size: 20 }), [0, 0, 10], 30, 1)).toBeNull();
+    const g = primitiveMesh('grid', { size: 4, subdivisions: 4 }); // 사각형 면
+    expect(collapseNear(g, [0, 0, 0], 3, 5)).toBeNull();
   });
 });

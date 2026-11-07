@@ -125,3 +125,127 @@ export function extendValues(values: ArrayLike<number>, parents: [number, number
   for (const [a, b] of parents) out.push(((out[a] ?? 0) + (out[b] ?? 0)) / 2);
   return out;
 }
+
+export interface CollapseResult {
+  mesh: PolyMesh;
+  /** 원래 점 번호 → 새 번호 (−1 = 없어짐: 다른 점과 합쳐짐 — 합쳐진 점 번호는 remap 의 그 점과 같다) */
+  remap: Int32Array;
+}
+
+const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross3 = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const triNormal = (p: V3, q: V3, r: V3) => cross3(sub3(q, p), sub3(r, p));
+
+/**
+ * 짧은 선 합치기 (블렌더 Dyntopo collapse): 붓 구를 지나는 선 중 minEdge 보다 짧은 것을 가운데 점 하나로 합친다.
+ * 삼각형 둘 사이의 선만, 두 점의 공통 이웃이 정확히 그 두 삼각형의 맞은편 점일 때만 (링크 조건 — 겹친 면·구멍이 생기지 않음),
+ * 합친 뒤 둘레 면이 뒤집히면 하지 않는다. 쓰이지 않는 점은 지우고 번호를 당긴다 (remap).
+ */
+export function collapseNear(m: PolyMesh, center: V3, radius: number, minEdge: number, passes = 2): CollapseResult | null {
+  if (!(minEdge > 0) || !(radius > 0)) return null;
+  const verts: V3[] = m.verts.map((v) => [...v] as V3);
+  let faces: (number[] | null)[] = m.faces.map((f) => [...f]);
+  const alias = new Int32Array(verts.length).map((_, i) => i); // 합쳐진 점 → 남은 점
+  const r2 = radius * radius;
+  const min2 = minEdge * minEdge;
+  let changed = false;
+  for (let pass = 0; pass < passes; pass++) {
+    const vf: number[][] = verts.map(() => []);
+    faces.forEach((f, fi) => f?.forEach((v) => vf[v]!.push(fi)));
+    const nbr = (v: number) => {
+      const s = new Set<number>();
+      for (const fi of vf[v]!) {
+        const f = faces[fi]!;
+        const k = f.indexOf(v);
+        s.add(f[(k + 1) % f.length]!);
+        s.add(f[(k - 1 + f.length) % f.length]!);
+      }
+      return s;
+    };
+    const cand: { a: number; b: number; len: number }[] = [];
+    const seen = new Set<string>();
+    faces.forEach((f) => {
+      if (!f || f.length !== 3) return;
+      for (let k = 0; k < 3; k++) {
+        const a = Math.min(f[k]!, f[(k + 1) % 3]!);
+        const b = Math.max(f[k]!, f[(k + 1) % 3]!);
+        const key = `${a},${b}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const len = d2(verts[a]!, verts[b]!);
+        if (len < min2 && segD2(center, verts[a]!, verts[b]!) <= r2) cand.push({ a, b, len });
+      }
+    });
+    if (!cand.length) break;
+    cand.sort((x, y) => x.len - y.len);
+    const locked = new Set<number>();
+    let done = 0;
+    for (const { a, b } of cand) {
+      if (locked.has(a) || locked.has(b)) continue;
+      const fa = vf[a]!.filter((fi) => faces[fi]);
+      const fb = vf[b]!.filter((fi) => faces[fi]);
+      // 둘레가 모두 삼각형이어야 (다각형 면이 끼면 건너뜀)
+      if ([...fa, ...fb].some((fi) => faces[fi]!.length !== 3)) continue;
+      const shared = fa.filter((fi) => fb.includes(fi));
+      if (shared.length !== 2) continue; // 열린 가장자리·이상한 위상
+      const opp = shared.map((fi) => faces[fi]!.find((x) => x !== a && x !== b)!);
+      const na = nbr(a);
+      const nb = nbr(b);
+      const common = [...na].filter((x) => nb.has(x));
+      if (common.length !== 2 || !opp.every((o) => common.includes(o))) continue; // 링크 조건
+      const mid: V3 = [(verts[a]![0] + verts[b]![0]) / 2, (verts[a]![1] + verts[b]![1]) / 2, (verts[a]![2] + verts[b]![2]) / 2];
+      // 면 뒤집힘 검사: 남는 둘레 면의 법선이 크게 바뀌면 하지 않는다
+      let flips = false;
+      for (const fi of [...fa, ...fb]) {
+        if (shared.includes(fi)) continue;
+        const f = faces[fi]!;
+        const before = triNormal(verts[f[0]!]!, verts[f[1]!]!, verts[f[2]!]!);
+        const p = f.map((x) => (x === a || x === b ? mid : verts[x]!));
+        const after = triNormal(p[0]!, p[1]!, p[2]!);
+        const dot = before[0] * after[0] + before[1] * after[1] + before[2] * after[2];
+        if (dot <= 0.2 * Math.hypot(...before) * Math.hypot(...after)) {
+          flips = true;
+          break;
+        }
+      }
+      if (flips) continue;
+      verts[a] = mid;
+      for (const fi of fb) if (faces[fi]) faces[fi] = faces[fi]!.map((x) => (x === b ? a : x));
+      for (const fi of shared) faces[fi] = null;
+      alias[b] = a;
+      for (const x of [a, b, ...na, ...nb]) locked.add(x);
+      done++;
+    }
+    if (!done) break;
+    changed = true;
+  }
+  if (!changed) return null;
+  faces = faces.filter((f) => f && new Set(f).size === f.length);
+  // 쓰이지 않는 점 지우고 번호 당기기
+  const used = new Uint8Array(verts.length);
+  for (const f of faces) for (const v of f!) used[v] = 1;
+  const newIdx = new Int32Array(verts.length).fill(-1);
+  const out: V3[] = [];
+  verts.forEach((v, i) => {
+    if (used[i]) {
+      newIdx[i] = out.length;
+      out.push(v);
+    }
+  });
+  const root = (i: number): number => (alias[i] === i ? i : (alias[i] = root(alias[i]!)));
+  const remap = new Int32Array(m.verts.length).map((_, i) => newIdx[root(i)] ?? -1);
+  return { mesh: { verts: out, faces: faces.map((f) => f!.map((v) => newIdx[v]!)) }, remap };
+}
+
+/** 합치기 뒤 점별 값 옮기기 (같은 점으로 합쳐진 값은 평균) */
+export function remapValues(values: ArrayLike<number>, remap: Int32Array, n: number): number[] {
+  const sum = new Array<number>(n).fill(0);
+  const cnt = new Array<number>(n).fill(0);
+  for (let i = 0; i < remap.length; i++) {
+    const j = remap[i]!;
+    if (j < 0) continue;
+    sum[j] = sum[j]! + (values[i] ?? 0);
+    cnt[j] = cnt[j]! + 1;
+  }
+  return sum.map((s, j) => (cnt[j] ? s / cnt[j]! : 0));
+}
