@@ -741,6 +741,15 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'subsurf', levels: 3 }, { type: 'displace', strength: 3, size: 4, seed: 7 }] },
     ],
   },
+  // 형식 v33: 베벨 모디파이어 — 모든 모서리 2mm 3단계 (서버가 같은 점을 만들어야 같은 부피)
+  'polymesh-bevel': {
+    volume: polyVolume(evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'bevel', width: 2, segments: 3, angle: 30 }])),
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'bevel', width: 2, segments: 3, angle: 30 }] },
+    ],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

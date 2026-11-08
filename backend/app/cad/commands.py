@@ -743,8 +743,17 @@ class DisplaceModifier(Strict):
     seed: Annotated[int, Field(strict=True, ge=0, le=9999)]
 
 
+class BevelModifier(Strict):
+    """형식 v33: 베벨 (두 면 사이 각 > angle° 인 선을 width mm, segments 단계)"""
+
+    type: Literal["bevel"]
+    width: Annotated[float, _num(0.001, Limits.MAX_DIMENSION)]
+    segments: Annotated[int, Field(strict=True, ge=1, le=12)]
+    angle: Annotated[float, _num(0, 180)]
+
+
 Modifier = Annotated[
-    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier, DisplaceModifier],
+    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier, DisplaceModifier, BevelModifier],
     Field(discriminator="type"),
 ]
 MAX_MODIFIERS = 16
@@ -1068,7 +1077,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[32]
+    schemaVersion: Literal[33]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

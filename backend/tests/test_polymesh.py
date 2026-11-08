@@ -97,3 +97,17 @@ def test_displace_hash_and_fixture_match_frontend():
     obj = case["model"]["objects"][0]
     verts, faces = evaluate(obj["polymesh"]["verts"], obj["polymesh"]["faces"], obj["modifiers"])
     assert abs(_volume(verts, faces) - case["volume"]) < 1e-6
+
+
+def test_bevel_modifier_matches_frontend():
+    """형식 v33: 베벨 모디파이어가 프론트 bevelEdges 와 같은 점을 만든다 (큐브 12선, 공유 픽스처 부피)"""
+    from app.cad.polymesh import bevel_edge_list, evaluate
+
+    case = load_json("examples/feature-cases.json")["polymesh-bevel"]
+    obj = case["model"]["objects"][0]
+    pm = obj["polymesh"]
+    assert len(bevel_edge_list(pm["verts"], pm["faces"], 30)) == 12
+    assert bevel_edge_list(pm["verts"], pm["faces"], 100) == []
+    verts, faces = evaluate(pm["verts"], pm["faces"], obj["modifiers"])
+    assert abs(_volume(verts, faces) - case["volume"]) < 1e-6
+    assert abs(case["volume"] - 7732.960295) < 1e-5

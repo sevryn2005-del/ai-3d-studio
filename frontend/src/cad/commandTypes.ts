@@ -510,6 +510,13 @@ export const ModifierSchema = z.discriminatedUnion('type', [
     size: z.number().min(0.1).max(LIMITS.maxDimension),
     seed: z.number().int().min(0).max(9999),
   }),
+  // 형식 v33: 베벨 (각 > angle° 인 선을 width mm 만큼, segments 단계)
+  z.strictObject({
+    type: z.literal('bevel'),
+    width: z.number().min(0.001).max(LIMITS.maxDimension),
+    segments: z.number().int().min(1).max(12),
+    angle: z.number().min(0).max(180),
+  }),
 ]);
 export const MAX_MODIFIERS = 16;
 
@@ -752,7 +759,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 32;
+export const MODEL_SCHEMA_VERSION = 33;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

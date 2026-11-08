@@ -239,6 +239,7 @@ const NEW_MODIFIER: Record<Mod['type'], Mod> = {
   smooth: { type: 'smooth', factor: 0.5, repeat: 2 },
   decimate: { type: 'decimate', ratio: 0.5 },
   displace: { type: 'displace', strength: 2, size: 5, seed: 0 },
+  bevel: { type: 'bevel', width: 1, segments: 3, angle: 30 },
 };
 
 /** 모디파이어 스택 (블렌더 속성 편집기의 렌치 탭): 위에서부터 적용. 추가·값·순서·삭제·적용, 부드러운 음영 */
@@ -331,6 +332,13 @@ export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }
           )}
           {m.type === 'decimate' && (
             <NumberField label="남길 비율" value={m.ratio} unit="×" onCommit={(v) => patch(i, { ...m, ratio: Math.max(0.02, Math.min(1, v)) })} testId={`mod-${i}-ratio`} />
+          )}
+          {m.type === 'bevel' && (
+            <>
+              <NumberField label="폭" value={m.width} unit="mm" onCommit={(v) => patch(i, { ...m, width: Math.max(0.001, v) })} testId={`mod-${i}-width`} />
+              <NumberField label="단계" value={m.segments} unit="개" onCommit={(v) => patch(i, { ...m, segments: Math.max(1, Math.min(12, Math.round(v))) })} testId={`mod-${i}-segments`} />
+              <NumberField label="각도 한계" value={m.angle} unit="°" onCommit={(v) => patch(i, { ...m, angle: Math.max(0, Math.min(180, v)) })} testId={`mod-${i}-angle`} />
+            </>
           )}
           {m.type === 'displace' && (
             <>

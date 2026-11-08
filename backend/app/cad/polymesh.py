@@ -1,6 +1,6 @@
 """편집 메시 모디파이어 (형식 v22) — frontend/src/cad/polymeshModifiers.ts 와 같은 규칙·같은 점/면 순서.
 
-세분 표면(캐트멀-클락), 미러, 배열, 두께, 매끈하게·면 줄이기(형식 v31), 표면 변형(형식 v32). 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
+세분 표면(캐트멀-클락), 미러, 배열, 두께, 매끈하게·면 줄이기(형식 v31), 표면 변형(형식 v32), 베벨(형식 v33 — 프론트 polymeshSelect.bevelEdges 와 같은 계산). 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
 """
 
 from __future__ import annotations
@@ -334,6 +334,196 @@ def displace(verts, faces, strength: float, size: float, seed: int):
     return out, [list(f) for f in faces]
 
 
+def _unit(a) -> V3:
+    ln = math.hypot(*a)
+    return _mul(a, 1 / ln) if ln > 1e-12 else (0.0, 0.0, 0.0)
+
+
+def _face_ring(faces, v: int):
+    """점 v 둘레 면 고리 [(면, 앞 점, 뒤 점)] — 프론트 faceRing 과 같은 순서. 열린 가장자리면 None"""
+    corners: dict[int, tuple[int, int, int]] = {}
+    for f, face in enumerate(faces):
+        if v not in face:
+            continue
+        k = face.index(v)
+        prev = face[(k - 1) % len(face)]
+        corners[prev] = (f, prev, face[(k + 1) % len(face)])
+    if not corners:
+        return None
+    first = next(iter(corners.values()))
+    ring = [first]
+    cur = first
+    for _ in range(len(corners)):
+        nxt = corners.get(cur[2])
+        if nxt is None:
+            return None
+        if nxt is first:
+            return ring if len(ring) == len(corners) else None
+        ring.append(nxt)
+        cur = nxt
+    return None
+
+
+def _compact(verts, faces):
+    used = {i for f in faces for i in f}
+    index: dict[int, int] = {}
+    out = []
+    for i, p in enumerate(verts):
+        if i in used:
+            index[i] = len(out)
+            out.append(p)
+    return out, [[index[i] for i in f] for f in faces]
+
+
+def bevel_edges(verts, faces, edge_list, width: float, segments: int):
+    """선 베벨 — 프론트 bevelEdges 와 같은 계산·같은 점 순서. 안 되면 None"""
+    bev = {_ekey(a, b) for a, b in edge_list}
+    m_verts = [tuple(p) for p in verts]
+    vs = list(m_verts)
+
+    def new_vert(p) -> int:
+        vs.append(_rv(p))
+        return len(vs) - 1
+
+    corner: dict[tuple[int, int], list[int]] = {}
+    extra: list[list[int]] = []
+    touched = list(dict.fromkeys(x for e in edge_list for x in e))
+    for v in touched:
+        ring = _face_ring(faces, v)
+        if ring is None:
+            return None
+        P = m_verts[v]
+        is_bev = [_ekey(v, r[2]) in bev for r in ring]
+        if not any(is_bev):
+            continue
+        start = is_bev.index(True)
+        fans, cur = [], []
+        for s_ in range(1, len(ring) + 1):
+            i = (start + s_) % len(ring)
+            cur.append(ring[i])
+            if is_bev[i]:
+                fans.append(cur)
+                cur = []
+        chains = []
+        for fan in fans:
+            k = len(fan)
+            g1, gk = fan[0], fan[-1]
+            if k == 1:
+                nid = new_vert(_add(P, _mul(_add(_unit(_sub(m_verts[g1[1]], P)), _unit(_sub(m_verts[g1[2]], P))), width)))
+                corner[(g1[0], v)] = [nid]
+                chain = [nid]
+            else:
+                A = new_vert(_add(P, _mul(_unit(_sub(m_verts[g1[2]], P)), width)))
+                B = A if k == 2 else new_vert(_add(P, _mul(_unit(_sub(m_verts[gk[1]], P)), width)))
+                corner[(g1[0], v)] = [A]
+                corner[(gk[0], v)] = [B]
+                if k == 2:
+                    chain = [A]
+                elif k == 3:
+                    corner[(fan[1][0], v)] = [A, B]
+                    chain = [A, B]
+                else:
+                    corner[(fan[1][0], v)] = [A, v]
+                    corner[(fan[k - 2][0], v)] = [v, B]
+                    chain = [A, v, B]
+            chains.append(chain)
+        flat = [x for c in chains for x in c]
+        seq = [x for i, x in enumerate(flat) if x != flat[i - 1]]
+        if len(seq) >= 3:
+            extra.append(seq[::-1])
+
+    def at(f: int, x: int) -> list[int]:
+        return corner.get((f, x), [x])
+
+    out_f = [[y for x in face for y in at(f, x)] for f, face in enumerate(faces)] + extra
+    n = max(1, min(12, int(segments)))
+    arcs: dict[tuple[int, int], list[int]] = {}
+
+    def cross(a: int, b: int, v: int) -> list[int]:
+        if n == 1 or a == b:
+            return []
+        if (a, b) in arcs:
+            return arcs[(a, b)]
+        if (b, a) in arcs:
+            return arcs[(b, a)][::-1]
+        A, B, P = vs[a], vs[b], m_verts[v]
+        ua, ub = _unit(_sub(A, P)), _unit(_sub(B, P))
+        cos_a = max(-1.0, min(1.0, ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2]))
+        w = math.sin(math.acos(cos_a) / 2)
+        pts = []
+        for k in range(1, n):
+            t = k / n
+            b0, b1, b2 = (1 - t) ** 2, 2 * t * (1 - t) * w, t * t
+            den = b0 + b1 + b2
+            pts.append(new_vert(tuple((b0 * A[i] + b1 * P[i] + b2 * B[i]) / den for i in range(3))))
+        arcs[(a, b)] = pts
+        return pts
+
+    def find_face(x: int, y: int) -> int:
+        for fi, face in enumerate(faces):
+            if any(face[i] == x and face[(i + 1) % len(face)] == y for i in range(len(face))):
+                return fi
+        return -1
+
+    strips = []
+    for u, v in edge_list:
+        fl, fr = find_face(v, u), find_face(u, v)
+        p0, p1, p2, p3 = at(fl, u)[0], at(fl, v)[-1], at(fr, v)[0], at(fr, u)[-1]
+        col_v = [p1, *cross(p1, p2, v), p2]
+        col_u = [p0, *cross(p3, p0, u)[::-1], p3]
+        for k in range(n):
+            q = [col_u[min(k, len(col_u) - 1)], col_v[min(k, len(col_v) - 1)], col_v[min(k + 1, len(col_v) - 1)], col_u[min(k + 1, len(col_u) - 1)]]
+            clean = [x for i, x in enumerate(q) if x != q[(i + 1) % len(q)]]
+            if len(clean) >= 3:
+                strips.append(clean)
+    if n > 1:
+        def widen(face):
+            out = []
+            for i, x in enumerate(face):
+                y = face[(i + 1) % len(face)]
+                out.append(x)
+                if (x, y) in arcs:
+                    out.extend(arcs[(x, y)])
+                elif (y, x) in arcs:
+                    out.extend(arcs[(y, x)][::-1])
+            return out
+
+        out_f = [widen(f) for f in out_f]
+    out_f.extend(strips)
+    return _compact(vs, out_f)
+
+
+def bevel_edge_list(verts, faces, angle: float) -> list[tuple[int, int]]:
+    """베벨할 선 — 프론트 bevelEdgeList 와 같은 조건·순서"""
+    by_edge: dict[tuple[int, int], list[int]] = {}
+    order: list[tuple[int, int]] = []
+    for fi, f in enumerate(faces):
+        for i, a in enumerate(f):
+            b = f[(i + 1) % len(f)]
+            k = _ekey(a, b)
+            if k not in by_edge:
+                by_edge[k] = []
+                order.append((a, b))
+            by_edge[k].append(fi)
+    open_v = {x for a, b in order if len(by_edge[_ekey(a, b)]) != 2 for x in (a, b)}
+    limit = math.cos(angle * math.pi / 180)
+    out = []
+    for a, b in order:
+        fs = by_edge[_ekey(a, b)]
+        if len(fs) != 2 or a in open_v or b in open_v:
+            continue
+        n1, n2 = face_normal(verts, faces[fs[0]]), face_normal(verts, faces[fs[1]])
+        if n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2] < limit:
+            out.append((a, b))
+    return out
+
+
+def bevel(verts, faces, width: float, segments: int, angle: float):
+    edge_list = bevel_edge_list(verts, faces, angle)
+    r = bevel_edges(verts, faces, edge_list, width, segments) if edge_list else None
+    return r if r is not None else (list(verts), [list(f) for f in faces])
+
+
 def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
     """모디파이어 스택 결과 (위에서부터 차례로). modifiers: Pydantic 모델 또는 dict"""
     vs = [tuple(p) for p in verts]
@@ -356,4 +546,6 @@ def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
             vs, fs = decimate(vs, fs, d["ratio"])
         elif t == "displace":
             vs, fs = displace(vs, fs, d["strength"], d["size"], d["seed"])
+        elif t == "bevel":
+            vs, fs = bevel(vs, fs, d["width"], d["segments"], d["angle"])
     return vs, fs

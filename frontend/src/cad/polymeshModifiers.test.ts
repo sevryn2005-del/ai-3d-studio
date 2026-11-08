@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, deleteElements, polyMeshError, polyVolume, primitiveMesh } from './polymesh';
-import { arrayMesh, catmullClark, decimateMesh, displaceMesh, hash3, valueNoise, estimateFaces, evaluateModifiers, mirrorMesh, smoothMesh, solidifyMesh } from './polymeshModifiers';
+import { arrayMesh, bevelEdgeList, bevelMesh, catmullClark, decimateMesh, displaceMesh, hash3, valueNoise, estimateFaces, evaluateModifiers, mirrorMesh, smoothMesh, solidifyMesh } from './polymeshModifiers';
 
 const cube = () => primitiveMesh('cube', { size: 2 });
 
@@ -100,5 +100,25 @@ describe('표면 변형 (형식 v32, 서버 polymesh.py 와 같은 해시)', () 
     });
     expect(moved).toBeGreaterThan(c.verts.length / 2);
     expect(displaceMesh(c, 0, 3, 1).verts).toEqual(c.verts);
+  });
+});
+
+describe('베벨 모디파이어 (형식 v33, 서버 polymesh.py 와 같은 계산)', () => {
+  it('큐브: 각 30° 넘는 12개 선을 모두 깎아 닫힌 메시, 부피 줄어듦, 한계 100° 면 그대로', () => {
+    const c = primitiveMesh('cube', { size: 20 });
+    expect(bevelEdgeList(c, 30)).toHaveLength(12);
+    const b = bevelMesh(c, 2, 3, 30);
+    expect(polyMeshError(b)).toBeNull();
+    expect(boundaryEdgeCount(b)).toBe(0);
+    expect(polyVolume(b)).toBeCloseTo(7732.960295, 5); // 서버 시험과 같은 값
+    expect(polyVolume(b)).toBeLessThan(8000);
+    expect(bevelMesh(c, 2, 3, 100)).toBe(c);
+    expect(estimateFaces(c, [{ type: 'bevel', width: 2, segments: 3, angle: 30 }])).toBeGreaterThanOrEqual(b.faces.length);
+  });
+  it('세분된 둥근 메시는 각이 작아 깎을 선이 없고, 열린 평면은 그대로', () => {
+    const s = evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'subsurf', levels: 3 }]);
+    expect(bevelEdgeList(s, 30)).toHaveLength(0);
+    const g = primitiveMesh('grid', { size: 20, subdivisions: 4 });
+    expect(bevelMesh(g, 1, 2, 0)).toBe(g);
   });
 });

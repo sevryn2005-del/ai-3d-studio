@@ -11,8 +11,11 @@
  *   열린 가장자리·뒤집히는 면·꼬이는 연결(이웃 공유 ≠ 2)은 건너뛴다 → 닫힌 메시는 닫힌 채로
  * - displace (형식 v32): 표면 변형 — 점 법선 방향으로 (노이즈 − 0.5) × strength. 노이즈 = 정수 해시 값 노이즈 (size mm 격자, seed),
  *   같은 점 위치 → 같은 값이라 서버와 비트 단위로 같은 해시
+ * - bevel (형식 v33): 두 면 사이 각이 angle° 보다 큰 선을 width 만큼 깎는다 (segments 단계 = 둥글게). 편집 모드 베벨(polymeshSelect.bevelEdges)과 같은 계산.
+ *   열린 가장자리에 닿은 선은 건너뛴다
  */
 import { centroid, faceNormal, type PolyMesh, type V3 } from './polymesh';
+import { bevelEdges } from './polymeshSelect';
 
 export type Modifier =
   | { type: 'subsurf'; levels: number }
@@ -21,7 +24,8 @@ export type Modifier =
   | { type: 'solidify'; thickness: number }
   | { type: 'smooth'; factor: number; repeat: number }
   | { type: 'decimate'; ratio: number }
-  | { type: 'displace'; strength: number; size: number; seed: number };
+  | { type: 'displace'; strength: number; size: number; seed: number }
+  | { type: 'bevel'; width: number; segments: number; angle: number };
 
 export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   subsurf: '세분 표면',
@@ -31,6 +35,7 @@ export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   smooth: '매끈하게',
   decimate: '면 줄이기',
   displace: '표면 변형',
+  bevel: '베벨',
 };
 
 /** 결과 메시가 이보다 크면 거부 (브라우저가 멈추지 않도록) */
@@ -326,6 +331,40 @@ export function displaceMesh(m: PolyMesh, strength: number, size: number, seed: 
   return { verts, faces: m.faces };
 }
 
+/** 베벨할 선: 면 두 개 사이, 양 끝 점이 열린 가장자리에 닿지 않고, 두 면 법선 사이 각 > angle. 면을 돌며 처음 만난 순서 */
+export function bevelEdgeList(m: PolyMesh, angle: number): [number, number][] {
+  const faces = new Map<string, number[]>();
+  const order: [number, number][] = [];
+  m.faces.forEach((f, fi) =>
+    f.forEach((a, i) => {
+      const b = f[(i + 1) % f.length]!;
+      const k = ekey(a, b);
+      if (!faces.has(k)) {
+        faces.set(k, []);
+        order.push([a, b]);
+      }
+      faces.get(k)!.push(fi);
+    }),
+  );
+  const open = new Set<number>();
+  for (const [a, b] of order) if (faces.get(ekey(a, b))!.length !== 2) (open.add(a), open.add(b));
+  const limit = Math.cos((angle * Math.PI) / 180);
+  return order.filter(([a, b]) => {
+    const fs = faces.get(ekey(a, b))!;
+    if (fs.length !== 2 || open.has(a) || open.has(b)) return false;
+    const n1 = faceNormal(m, m.faces[fs[0]!]!);
+    const n2 = faceNormal(m, m.faces[fs[1]!]!);
+    return n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2] < limit;
+  });
+}
+
+export function bevelMesh(m: PolyMesh, width: number, segments: number, angle: number): PolyMesh {
+  const list = bevelEdgeList(m, angle);
+  if (!list.length) return m;
+  const r = bevelEdges(m, list, width, segments);
+  return typeof r === 'string' ? m : r.mesh;
+}
+
 export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
   switch (mod.type) {
     case 'subsurf': {
@@ -345,6 +384,8 @@ export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
       return decimateMesh(m, mod.ratio);
     case 'displace':
       return displaceMesh(m, mod.strength, mod.size, mod.seed);
+    case 'bevel':
+      return bevelMesh(m, mod.width, mod.segments, mod.angle);
   }
 }
 
@@ -364,6 +405,10 @@ export function estimateFaces(m: PolyMesh, mods: readonly Modifier[]): number {
     } else if (mod.type === 'array') {
       faces *= mod.count;
       corners *= mod.count;
+    } else if (mod.type === 'bevel') {
+      // 원래 면 + 선마다 띠 segments 개 + 점마다 모서리 메움 — 넉넉히 (선 수 = 모서리 합 / 2)
+      faces = faces + (corners / 2) * mod.segments + corners;
+      corners = faces * 4;
     } else if (mod.type === 'smooth' || mod.type === 'displace') {
       // 그대로
     } else if (mod.type === 'decimate') {
