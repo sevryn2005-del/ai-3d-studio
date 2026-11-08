@@ -10,7 +10,7 @@ import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import { ModelDefinitionSchema, type CadObject, type ModelDefinition } from '../../../cad/commandTypes';
 import { byId } from '../../../cad/modelGraph';
 import { objectNeedsPrecise } from '../../../cad/features';
-import { computedRoots, evaluateMeshes, GeometryError, modelIssues, Scope, worldManifold, worldMeshes } from './geometry';
+import { computedRoots, evaluateMeshes, GeometryError, modelIssues, Scope, textureInfo, worldManifold, worldMeshes } from './geometry';
 import { byId as indexOf, sketchIndex } from '../../../cad/modelGraph';
 import { INTERFERENCE_MIN_VOLUME } from '../types';
 import { to3mf, toBinaryStl, toGlb } from './exporters';
@@ -65,7 +65,7 @@ async function exportMeshes(w: ManifoldToplevel, model: ModelDefinition) {
   const byObj = new Map<string, (typeof fastMeshes)[number]>(fast.map((o, i) => [o.id, fastMeshes[i]!]));
   if (slow.length) {
     const { geo, oc } = await precise();
-    for (const o of slow) byObj.set(o.id, { name: o.name, ...(o.color ? { color: o.color } : {}), ...(o.material ? { material: o.material } : {}), ...geo.occtWorldMesh(oc, model, o) });
+    for (const o of slow) byObj.set(o.id, { name: o.name, ...(o.color ? { color: o.color } : {}), ...(o.material ? { material: o.material } : {}), ...textureInfo(o), ...geo.occtWorldMesh(oc, model, o) });
   }
   return roots.map((o) => byObj.get(o.id)!);
 }

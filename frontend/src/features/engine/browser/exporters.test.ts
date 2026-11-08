@@ -168,3 +168,41 @@ describe('GLB 재질 (형식 v29, 서버 exporter.py 와 같은 값)', () => {
   });
 });
 
+
+describe('GLB 텍스처 (형식 v30, 서버 exporter.py 와 같은 규칙)', () => {
+  const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+  it('색 없으면 흰색 + baseColorTexture, 이름에 t{번호}', () => {
+    expect(glbMaterial(undefined, undefined, 0)).toEqual({
+      name: 'default m0.05 r0.55 t0',
+      pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0.05, roughnessFactor: 0.55, baseColorTexture: { index: 0 } },
+    });
+    expect(glbMaterial('#e5534b', undefined, 1).pbrMetallicRoughness.baseColorFactor).toEqual([0.783538, 0.0865, 0.07036, 1]);
+  });
+  it('이미지는 한 번만 넣고, UV 는 객체 로컬 좌표 / tile', () => {
+    // 객체가 x = 100 에 있음: 월드 삼각형 (100,0,0)(110,0,0)(100,10,0) → 로컬 (0,0)(10,0)(0,10), 윗면 (u = x, v = −y) / 20
+    const toLocal = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -100, 0, 0, 1];
+    const tri = { positions: new Float32Array([100, 0, 0, 110, 0, 0, 100, 10, 0]), indices: new Uint32Array([0, 1, 2]) };
+    const texture = { image: PNG_1PX, tile: 20 };
+    const data = toGlb([
+      { name: 'a', texture, toLocal, ...tri },
+      { name: 'b', texture, toLocal, ...tri },
+    ]);
+    const dv = new DataView(data.buffer, data.byteOffset);
+    const jlen = dv.getUint32(12, true);
+    const gltf = JSON.parse(strFromU8(data.subarray(20, 20 + jlen)));
+    const bin = data.subarray(28 + jlen);
+    expect(gltf.images).toHaveLength(1);
+    expect(gltf.images[0].mimeType).toBe('image/png');
+    const iv = gltf.bufferViews[gltf.images[0].bufferView];
+    expect(iv.target).toBeUndefined();
+    expect(btoa(String.fromCharCode(...bin.subarray(iv.byteOffset, iv.byteOffset + iv.byteLength)))).toBe(PNG_1PX.split(',')[1]);
+    expect(gltf.textures).toEqual([{ source: 0, sampler: 0 }]);
+    expect(gltf.samplers[0].wrapS).toBe(10497);
+    expect(gltf.materials).toHaveLength(1);
+    expect(gltf.materials[0].pbrMetallicRoughness.baseColorTexture).toEqual({ index: 0 });
+    const acc = gltf.accessors[gltf.meshes[0].primitives[0].attributes.TEXCOORD_0];
+    const bv = gltf.bufferViews[acc.bufferView];
+    const uv = [...new Float32Array(bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength).buffer)].map((x) => Math.round(x * 1e6) / 1e6 + 0);
+    expect(uv).toEqual([0, 0, 0.5, 0, 0, -0.5]);
+  });
+});

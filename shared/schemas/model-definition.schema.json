@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 29
+      "const": 30
     },
     "units": {
       "type": "string",
@@ -913,6 +913,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "box"
@@ -1118,6 +1138,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "cylinder"
@@ -1287,6 +1327,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "sphere"
@@ -1411,6 +1471,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -1550,6 +1630,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -1749,6 +1849,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "revolve"
@@ -1895,6 +2015,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "boolean"
@@ -2037,6 +2177,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -2188,6 +2348,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -2473,6 +2653,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "helix"
@@ -2625,6 +2825,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "sweep"
@@ -2763,6 +2983,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -2911,6 +3151,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "mesh"
@@ -3041,6 +3301,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },
@@ -3326,6 +3606,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "fillet"
@@ -3517,6 +3817,26 @@
                 ],
                 "additionalProperties": false
               },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
+                ],
+                "additionalProperties": false
+              },
               "kind": {
                 "type": "string",
                 "const": "draft"
@@ -3646,6 +3966,26 @@
                 "required": [
                   "metallic",
                   "roughness"
+                ],
+                "additionalProperties": false
+              },
+              "texture": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 4000000,
+                    "pattern": "^data:image\\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$"
+                  },
+                  "tile": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "image",
+                  "tile"
                 ],
                 "additionalProperties": false
               },

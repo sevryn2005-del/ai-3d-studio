@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_MATERIAL, type CadObject } from '../../cad/commandTypes';
+import { DEFAULT_MATERIAL, MAX_TEXTURE_CHARS, type CadObject } from '../../cad/commandTypes';
 import { useSceneStore } from '../../cad/sceneStore';
+import { NumberField } from './NumberField';
+
+/** 텍스처 한 장이 덮는 기본 크기 (mm) */
+export const DEFAULT_TEXTURE_TILE = 50;
+
+/** 파일 → data URL (로컬에서만 읽음, 업로드 없음) */
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error ?? new Error('파일을 읽지 못했습니다'));
+    r.readAsDataURL(file);
+  });
+}
 
 /** 자주 쓰는 재질 (금속성·거칠기). 첫 항목 = 기본 (재질 지우기) */
 export const MATERIAL_PRESETS: { id: string; label: string; m: { metallic: number; roughness: number } | null }[] = [
@@ -66,6 +80,63 @@ export function MaterialFields({ object }: { object: CadObject }) {
       </label>
       {slider('metallic', '금속성')}
       {slider('roughness', '거칠기')}
+      <TextureFields object={object} />
+    </div>
+  );
+}
+
+/**
+ * 텍스처 이미지 (형식 v30): PNG·JPEG 를 저장 파일 안에 넣고 객체 로컬 박스 투영으로 입힌다 (한 장 = tile mm).
+ * 화면과 GLB 내보내기(두 엔진)에 같은 규칙 — STL·3MF·STEP 에는 형상만 나간다
+ */
+function TextureFields({ object }: { object: CadObject }) {
+  const submit = useSceneStore((s) => s.submitNow);
+  const [error, setError] = useState<string | null>(null);
+  const tex = object.texture;
+  const pick = async (file: File | undefined) => {
+    setError(null);
+    if (!file) return;
+    if (!/^image\/(png|jpeg)$/.test(file.type)) return setError('PNG 또는 JPEG 이미지만 넣을 수 있습니다');
+    const image = await readDataUrl(file);
+    if (image.length > MAX_TEXTURE_CHARS) return setError(`이미지가 너무 큽니다 (약 ${Math.floor((MAX_TEXTURE_CHARS * 3) / 4 / 1e6)}MB 까지) — 줄여서 넣으세요`);
+    submit({ type: 'set_appearance', target: object.id, texture: { image, tile: tex?.tile ?? DEFAULT_TEXTURE_TILE } });
+  };
+  return (
+    <div className="texture-fields" data-testid="texture-fields">
+      <label className="drawing-field" title="PNG·JPEG 이미지를 겉면에 반복해 입힙니다 (저장 파일에 함께 들어가고, GLB 로 내보내짐)">
+        <span>텍스처</span>
+        <input
+          type="file"
+          accept="image/png,image/jpeg"
+          onChange={(e) => {
+            void pick(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+          data-testid="texture-file"
+        />
+      </label>
+      {tex && (
+        <>
+          <div className="texture-current">
+            <img src={tex.image} alt="텍스처" className="texture-thumb" data-testid="texture-thumb" />
+            <button type="button" onClick={() => submit({ type: 'set_appearance', target: object.id, texture: 'default' })} data-testid="texture-remove">
+              텍스처 지우기
+            </button>
+          </div>
+          <NumberField
+            label="한 장 크기"
+            value={tex.tile}
+            unit="mm"
+            onCommit={(tile) => submit({ type: 'set_appearance', target: object.id, texture: { ...tex, tile } })}
+            testId="texture-tile"
+          />
+        </>
+      )}
+      {error && (
+        <p className="error" role="alert" data-testid="texture-error">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

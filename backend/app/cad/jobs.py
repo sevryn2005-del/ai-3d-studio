@@ -10,8 +10,11 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
+
 from app.cad.commands import ModelDefinition
 from app.cad.exporter import FORMATS, NamedShape, export_shapes
+from app.cad.frames import transform_matrix
 from app.cad.mesh import encode_mesh, tessellate
 from app.cad.primitives import GeometryError, apply_transform, build_solid
 from app.cad.validation import active_top_level_ids
@@ -72,7 +75,9 @@ def export_file(payload: dict[str, Any]) -> bytes:
         obj = index[oid]
         try:
             objects.append(NamedShape(obj.name, apply_transform(build_solid(obj, index, {sk.id: sk for sk in model.sketches}), obj.transform), obj.color,
-                                       obj.material.model_dump() if obj.material else None))
+                                       obj.material.model_dump() if obj.material else None,
+                                       obj.texture.model_dump() if obj.texture else None,
+                                       np.linalg.inv(transform_matrix(obj.transform)) if obj.texture else None))
         except GeometryError:
             raise
         except Exception as e:

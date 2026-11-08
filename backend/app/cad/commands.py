@@ -531,6 +531,16 @@ class Material(Strict):
     roughness: Annotated[float, _num(0, 1)]
 
 
+MAX_TEXTURE_CHARS = 4_000_000
+
+
+class Texture(Strict):
+    """텍스처 이미지 (형식 v30): PNG·JPEG data URL, tile = 이미지 한 장이 덮는 크기 (mm)"""
+
+    image: Annotated[str, StringConstraints(max_length=MAX_TEXTURE_CHARS, pattern=r"^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$")]
+    tile: Annotated[float, _num(0.1, 100_000)]
+
+
 class _ObjectBase(Strict):
     id: ObjectId
     name: Name
@@ -541,6 +551,8 @@ class _ObjectBase(Strict):
     color: Color | None = _opt()
     # 형식 v29: PBR 재질 (화면·GLB)
     material: Material | None = _opt()
+    # 형식 v30: 텍스처 이미지 (화면·GLB)
+    texture: Texture | None = _opt()
 
     @property
     def child_ids(self) -> list[str]:
@@ -1029,7 +1041,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[29]
+    schemaVersion: Literal[30]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1692,11 +1704,12 @@ class SetAppearance(Strict):
     color: Color | Literal["default"] | None = None
     hidden: StrictBool | None = None
     material: Material | Literal["default"] | None = None
+    texture: Texture | Literal["default"] | None = None
 
     @model_validator(mode="after")
     def _something(self) -> SetAppearance:
-        if self.color is None and self.hidden is None and self.material is None:
-            raise ValueError("color·hidden·material 중 하나가 필요합니다")
+        if self.color is None and self.hidden is None and self.material is None and self.texture is None:
+            raise ValueError("color·hidden·material·texture 중 하나가 필요합니다")
         return self
 
 

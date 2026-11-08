@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BufferAttribute, BufferGeometry } from 'three';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { CadObject, Transform } from '../../cad/commandTypes';
@@ -6,6 +6,8 @@ import { DEFAULT_MATERIAL } from '../../cad/commandTypes';
 import { edges, selectedFaces, triangulate, type PolyMesh } from '../../cad/polymesh';
 import type { SelectMode } from '../../features/modeling/modelingStore';
 import { evaluateModifiers } from '../../cad/polymeshModifiers';
+import { boxUvGeometry } from '../../cad/textureMap';
+import { useImageTexture } from '../Viewport/useImageTexture';
 
 const DEG = Math.PI / 180;
 export const MESH_COLOR = '#b4b4b4';
@@ -91,6 +93,11 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
   const result = useMemo(() => (hasMods ? evaluateModifiers(m, object.modifiers) : m), [m, object.modifiers, hasMods]);
   const showMask = !hasMods && !!mask;
   const shaded = useMemo(() => (smooth ? smoothGeometry(result, showMask ? mask : null) : hasMods ? polyGeometry(result) : geo), [result, smooth, hasMods, geo, showMask, mask]);
+  // 텍스처 (형식 v30): 객체 로컬 박스 투영 — 설계 모드 화면·GLB 와 같은 규칙. 마스크 보기 중에는 끈다
+  const map = useImageTexture(showMask ? undefined : object.texture?.image);
+  const tile = object.texture?.tile;
+  const texturedGeo = useMemo(() => (map && tile ? boxUvGeometry(shaded, tile) : null), [map, tile, shaded]);
+  useEffect(() => () => texturedGeo?.dispose(), [texturedGeo]);
   const resultEdges = useMemo(() => (hasMods && selected && !editing ? edgeGeometry(result, edges(result)) : null), [hasMods, selected, editing, result]);
   const allEdges = useMemo(() => edges(m), [m]);
   const edgeGeo = useMemo(() => edgeGeometry(m, allEdges), [m, allEdges]);
@@ -117,13 +124,13 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
       {/* 음영 결과 (모디파이어·부드러운 음영 반영). 편집 모드에서 모디파이어가 있으면 고르기는 아래 케이지가 받는다 */}
       {(!editing || hasMods || smooth) && (
         <mesh
-          geometry={shaded}
+          geometry={texturedGeo ?? shaded}
           name={editing ? 'polymesh-result' : `polymesh-${object.id}`}
           userData={{ objectId: object.id }}
           onClick={editing ? undefined : onPick}
           raycast={editing ? () => null : undefined}
         >
-          <meshStandardMaterial key={`${smooth ? 'smooth' : 'flat'}${showMask ? '-mask' : ''}`} vertexColors={showMask && smooth} color={object.color ?? MESH_COLOR} metalness={object.material?.metallic ?? DEFAULT_MATERIAL.metallic} roughness={object.material?.roughness ?? DEFAULT_MATERIAL.roughness} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+          <meshStandardMaterial key={`${smooth ? 'smooth' : 'flat'}${showMask ? '-mask' : ''}${map ? '-tex' : ''}`} vertexColors={showMask && smooth} map={map} color={object.color ?? (map ? '#ffffff' : MESH_COLOR)} metalness={object.material?.metallic ?? DEFAULT_MATERIAL.metallic} roughness={object.material?.roughness ?? DEFAULT_MATERIAL.roughness} flatShading={!smooth} side={2} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
         </mesh>
       )}
       {editing && (

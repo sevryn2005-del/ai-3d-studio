@@ -1,5 +1,6 @@
 """STL 내보내기: 출력 파일이 CAD 형상과 같은지 (치수, 부피, 닫힌 메시, 법선 방향)."""
 
+import base64
 import math
 
 import numpy as np
@@ -67,7 +68,7 @@ def test_invalid_model_returns_issues(client, default_model):
 
 
 def test_empty_model(client):
-    r = client.post("/api/export/stl", json={"schemaVersion": 29, "units": "mm", "sketches": [], "objects": []})
+    r = client.post("/api/export/stl", json={"schemaVersion": 30, "units": "mm", "sketches": [], "objects": []})
     assert r.status_code == 422
     assert "내보낼 객체가 없습니다" in r.json()["issues"][0]["message"]
 
@@ -249,3 +250,37 @@ def test_glb_per_object_material(client, default_model):
     first = gltf["materials"][gltf["meshes"][0]["primitives"][0]["material"]]
     assert first["pbrMetallicRoughness"] == {"baseColorFactor": [0.783538, 0.0865, 0.07036, 1], "metallicFactor": 1, "roughnessFactor": 0.2}
 
+
+
+PNG_1PX = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+
+
+def test_glb_texture_material_rule():
+    """브라우저 exporters.test.ts '텍스처' 와 같은 값: 색 없으면 흰색, 이름에 t{번호}"""
+    from app.cad.exporter import _glb_material
+
+    assert _glb_material(None, None, 0) == {"name": "default m0.05 r0.55 t0", "pbrMetallicRoughness": {
+        "baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0.05, "roughnessFactor": 0.55, "baseColorTexture": {"index": 0}}}
+    assert _glb_material("#e5534b", None, 1)["pbrMetallicRoughness"]["baseColorFactor"] == [0.783538, 0.0865, 0.07036, 1]
+
+
+def test_glb_texture_embeds_image_and_local_uv(client, default_model):
+    """텍스처: 이미지 한 번만 넣기 + UV 는 객체 로컬 좌표 / tile (옮기고 돌려도 같은 무늬)"""
+    obj = default_model["objects"][0]
+    obj["transform"] = {"position": [500, 0, 0], "rotation": [0, 0, 90]}
+    obj["texture"] = {"image": PNG_1PX, "tile": 20}
+    gltf, binary = _parse_glb(fetch(client, "glb", default_model))
+    assert len(gltf["images"]) == 1 and gltf["images"][0]["mimeType"] == "image/png"
+    view = gltf["bufferViews"][gltf["images"][0]["bufferView"]]
+    assert "target" not in view
+    assert base64.b64encode(binary[view["byteOffset"] : view["byteOffset"] + view["byteLength"]]).decode() == PNG_1PX.split(",", 1)[1]
+    assert gltf["textures"] == [{"source": 0, "sampler": 0}]
+    assert gltf["samplers"][0]["wrapS"] == 10497
+    prim = gltf["meshes"][0]["primitives"][0]
+    assert gltf["materials"][prim["material"]]["pbrMetallicRoughness"]["baseColorTexture"] == {"index": 0}
+    acc = gltf["accessors"][prim["attributes"]["TEXCOORD_0"]]
+    bv = gltf["bufferViews"][acc["bufferView"]]
+    uv = np.frombuffer(binary[bv["byteOffset"] : bv["byteOffset"] + bv["byteLength"]], dtype="<f4").reshape(-1, 2)
+    # 로컬 박스 x, y ∈ [−10, 10], z ∈ [0, 20] → u ∈ [−0.5, 0.5], v ∈ [−1, 0.5]
+    np.testing.assert_allclose(uv.min(axis=0), [-0.5, -1], atol=1e-5)
+    np.testing.assert_allclose(uv.max(axis=0), [0.5, 0.5], atol=1e-5)

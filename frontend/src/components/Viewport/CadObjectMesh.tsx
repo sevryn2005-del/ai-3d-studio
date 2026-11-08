@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DoubleSide, Euler, FrontSide, Matrix4, Quaternion, Shape, Vector2, Vector3, type BufferGeometry } from 'three';
 import { LATHE_TO_PLANE, extrudeLocalMatrix, extrudePreviewMatrix } from '../../cad/sketchPlane';
 import { Edges } from '@react-three/drei';
@@ -15,6 +15,8 @@ import { useBackendStore } from '../../features/backend/backendStore';
 import { geometryKey } from '../../features/backend/renderMesh';
 import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
+import { boxUvGeometry } from '../../cad/textureMap';
+import { useImageTexture } from './useImageTexture';
 
 type Index = Map<ObjectId, CadObject>;
 
@@ -30,7 +32,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 29, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 30, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -55,6 +57,7 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
         variant="solid"
         baseColor={object.color}
         material={object.material}
+        texture={object.texture}
         source={serverGeometry.userData.engine === 'browser' ? 'browser' : 'server'}
       />
     ) : (
@@ -172,7 +175,10 @@ function ObjectMesh({
   source,
   baseColor,
   material,
+  texture,
 }: {
+  /** 텍스처 (형식 v30) — 엔진 메시(객체 로컬)에만 입힌다. 미리보기 도형은 계산이 끝날 때까지 색만 */
+  texture?: { image: string; tile: number };
   /** 외관 색 (없으면 기본 회색) */
   baseColor?: string;
   /** PBR 재질 (형식 v29, 없으면 기본) */
@@ -197,12 +203,18 @@ function ObjectMesh({
   const color = variant === 'ghost' ? '#4c9aff' : selected ? '#7fb6ff' : hovered ? '#c9d0da' : (baseColor ?? '#aeb6c2');
   const xray = displayMode === 'xray' && variant === 'solid';
   const transparent = variant !== 'solid' || xray;
+  const map = useImageTexture(geometry && variant === 'solid' ? texture?.image : undefined);
+  const tile = texture?.tile;
+  const uvGeometry = useMemo(() => (geometry && map && tile ? boxUvGeometry(geometry, tile) : undefined), [geometry, map, tile]);
+  useEffect(() => () => uvGeometry?.dispose(), [uvGeometry]);
+  // 텍스처가 있으면 색은 곱해지는 값 — 색이 없으면 흰색(이미지 그대로), 선택·강조색은 그대로
+  const shown = map && !selected && !hovered ? (baseColor ?? '#ffffff') : color;
 
   return (
     <mesh
       {...(primitive ? primitivePlacement(primitive, profile ?? null, local ?? null) : {})}
-      geometry={geometry}
-      userData={{ source }}
+      geometry={uvGeometry ?? geometry}
+      userData={{ source, textured: !!uvGeometry }}
       onClick={(e) => {
         const ed = useEditorStore.getState();
         if (ed.drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
@@ -226,7 +238,9 @@ function ObjectMesh({
     >
       {primitive && <PrimitiveGeometry object={primitive} profile={profile ?? null} />}
       <meshStandardMaterial
-        color={color}
+        key={map ? 'textured' : 'plain'}
+        color={shown}
+        map={map}
         roughness={material?.roughness ?? DEFAULT_MATERIAL.roughness}
         metalness={material?.metallic ?? DEFAULT_MATERIAL.metallic}
         transparent={transparent}

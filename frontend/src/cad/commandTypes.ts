@@ -352,6 +352,14 @@ export const TransformSchema = z.strictObject({
 });
 export type Transform = z.infer<typeof TransformSchema>;
 
+/** 텍스처 이미지 (형식 v30): PNG·JPEG data URL (최대 약 3MB), tile = 이미지 한 장이 덮는 크기 (mm) */
+export const MAX_TEXTURE_CHARS = 4_000_000;
+export const TextureSchema = z.strictObject({
+  image: z.string().max(MAX_TEXTURE_CHARS).regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/, '텍스처는 PNG·JPEG data URL 이어야 합니다'),
+  tile: z.number().min(0.1).max(100_000),
+});
+export type Texture = z.infer<typeof TextureSchema>;
+
 /** 외관 색 (#rrggbb 소문자) */
 export const ColorSchema = z.string().regex(/^#[0-9a-f]{6}$/, '색은 #rrggbb (소문자 16진수) 형식이어야 합니다');
 
@@ -370,6 +378,8 @@ const objectBase = {
   color: ColorSchema.optional(),
   /** 형식 v29: PBR 재질 (화면·GLB). 없으면 기본 (금속성 0.05, 거칠기 0.55) */
   material: z.strictObject({ metallic: z.number().min(0).max(1), roughness: z.number().min(0).max(1) }).optional(),
+  /** 형식 v30: 텍스처 이미지 (객체 로컬 박스 투영, 이미지 한 장 = tile mm 정사각형) — 화면·GLB */
+  texture: TextureSchema.optional(),
 };
 
 /**
@@ -732,7 +742,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 29;
+export const MODEL_SCHEMA_VERSION = 30;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -1312,8 +1322,10 @@ export const SetAppearanceCommandSchema = z
     hidden: z.boolean().optional(),
     /** 형식 v29: PBR 재질 ('default' = 기본으로) */
     material: z.union([z.strictObject({ metallic: z.number().min(0).max(1), roughness: z.number().min(0).max(1) }), z.literal('default')]).optional(),
+    /** 형식 v30: 텍스처 ('default' = 지우기) */
+    texture: z.union([TextureSchema, z.literal('default')]).optional(),
   })
-  .refine((c) => c.color !== undefined || c.hidden !== undefined || c.material !== undefined, { message: 'color·hidden·material 중 하나가 필요합니다' });
+  .refine((c) => c.color !== undefined || c.hidden !== undefined || c.material !== undefined || c.texture !== undefined, { message: 'color·hidden·material·texture 중 하나가 필요합니다' });
 /** 재질 기본값 (화면·GLB 공통) */
 export const DEFAULT_MATERIAL = { metallic: 0.05, roughness: 0.55 } as const;
 

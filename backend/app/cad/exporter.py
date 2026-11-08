@@ -12,6 +12,7 @@ CadQuery 내장 3MF 는 객체 id 가 0 으로 출력되는데, 3MF 코어 사�
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -37,6 +38,8 @@ class NamedShape:
     shape: cq.Shape  # 월드 좌표 (mm)
     color: str | None = None  # 외관 색 #rrggbb (3MF basematerials)
     material: dict | None = None  # PBR 재질 {metallic, roughness} (형식 v29, GLB 만)
+    texture: dict | None = None  # 텍스처 {image: data URL, tile: mm} (형식 v30, GLB 만)
+    to_local: np.ndarray | None = None  # 월드 → 객체 로컬 4×4 (텍스처 UV 를 객체 로컬 좌표로)
 
 
 def _fine_mesh(shape: cq.Shape) -> tuple[np.ndarray, np.ndarray]:
@@ -165,7 +168,7 @@ def _vertex_normals(v: np.ndarray, t: np.ndarray) -> np.ndarray:
     return np.divide(n, length, out=np.zeros_like(n), where=length > 0)
 
 
-def box_uv(v: np.ndarray, n: np.ndarray) -> np.ndarray:
+def box_uv(v: np.ndarray, n: np.ndarray, scale: float = 0.001) -> np.ndarray:
     """박스 투영 UV (브라우저 exporters.ts boxUv 와 같은 규칙): 점 법선의 가장 큰 축으로 면을 고르고 나머지 두 좌표(m).
     CAD 좌표(Z-up, mm) — X 면: u = ±y, Y 면: u = ∓x, Z 면: u = x, v = ±y; glTF 이미지 좌표라 v 는 뒤집는다. 1 UV = 1 m"""
     a = np.abs(n)
@@ -174,7 +177,7 @@ def box_uv(v: np.ndarray, n: np.ndarray) -> np.ndarray:
     use_y = ~use_x & (a[:, 1] >= a[:, 2])
     u = np.where(use_x, np.where(n[:, 0] >= 0, y, -y), np.where(use_y, np.where(n[:, 1] >= 0, -x, x), x))
     w = np.where(use_x | use_y, z, np.where(n[:, 2] >= 0, y, -y))
-    return np.stack([u * 0.001, -w * 0.001], axis=1)
+    return np.stack([u * scale, -w * scale], axis=1)
 
 
 _GLB_DEFAULT_BASE = [0.64, 0.68, 0.73, 1.0]
@@ -189,12 +192,23 @@ def _linear_rgba(hex_color: str) -> list[float]:
     return [*out, 1.0]
 
 
-def _glb_material(color: str | None, m: dict | None) -> dict:
-    """객체별 glTF 재질 (같은 색·재질은 하나로) — 브라우저 glbMaterial 과 같은 규칙"""
+def _glb_material(color: str | None, m: dict | None, texture: int | None = None) -> dict:
+    """객체별 glTF 재질 (같은 색·재질·텍스처는 하나로) — 브라우저 glbMaterial 과 같은 규칙.
+    텍스처가 있으면 색은 곱해지는 값이라 색이 없을 때 흰색(이미지 그대로)"""
     metal = m["metallic"] if m else 0.05
     rough = m["roughness"] if m else 0.55
-    return {"name": f"{color or 'default'} m{_num_str(metal)} r{_num_str(rough)}", "pbrMetallicRoughness": {
-        "baseColorFactor": _linear_rgba(color) if color else _GLB_DEFAULT_BASE, "metallicFactor": metal, "roughnessFactor": rough}}
+    base = _linear_rgba(color) if color else ([1, 1, 1, 1] if texture is not None else _GLB_DEFAULT_BASE)
+    pbr: dict = {"baseColorFactor": base, "metallicFactor": metal, "roughnessFactor": rough}
+    if texture is not None:
+        pbr["baseColorTexture"] = {"index": texture}
+    suffix = f" t{texture}" if texture is not None else ""
+    return {"name": f"{color or 'default'} m{_num_str(metal)} r{_num_str(rough)}{suffix}", "pbrMetallicRoughness": pbr}
+
+
+def _data_url_bytes(url: str) -> tuple[bytes, str]:
+    """data:image/(png|jpeg);base64,… → (바이트, mime) — 스키마가 형식을 이미 검사했다"""
+    head, data = url.split(",", 1)
+    return base64.b64decode(data), head[len("data:"):].split(";", 1)[0]
 
 
 def _num_str(v: float) -> str:
@@ -207,19 +221,35 @@ def to_glb(objects: list[NamedShape]) -> bytes:
     offset = 0
     buffer_views, accessors, meshes, nodes = [], [], [], []
     materials: list[dict] = []
+    images: list[dict] = []
+    textures: list[dict] = []
+    image_index: dict[str, int] = {}  # 같은 이미지는 하나로
+
+    def texture_index(obj: NamedShape) -> int | None:
+        if not obj.texture:
+            return None
+        image = obj.texture["image"]
+        if image in image_index:
+            return image_index[image]
+        data, mime = _data_url_bytes(image)
+        images.append({"bufferView": add_view(data, None), "mimeType": mime})
+        textures.append({"source": len(images) - 1, "sampler": 0})
+        image_index[image] = len(textures) - 1
+        return len(textures) - 1
 
     def material_index(obj: NamedShape) -> int:
-        mat = _glb_material(obj.color, obj.material)
+        mat = _glb_material(obj.color, obj.material, texture_index(obj))
         for k, x in enumerate(materials):
             if x["name"] == mat["name"]:
                 return k
         materials.append(mat)
         return len(materials) - 1
 
-    def add_view(data: bytes, target: int) -> int:
+    def add_view(data: bytes, target: int | None) -> int:
         nonlocal offset
         pad = (-len(data)) % 4
-        buffer_views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(data), "target": target})
+        view = {"buffer": 0, "byteOffset": offset, "byteLength": len(data)}
+        buffer_views.append(view if target is None else {**view, "target": target})
         bin_chunks.append(data + b"\x00" * pad)
         offset += len(data) + pad
         return len(buffer_views) - 1
@@ -229,7 +259,12 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         pos = (v.astype(np.float64) @ _Z_UP_MM_TO_GLTF.T).astype("<f4")
         n_cad = _vertex_normals(v.astype(np.float64), t)
         nrm = (n_cad @ (_Z_UP_MM_TO_GLTF.T / 0.001)).astype("<f4")
-        uv = box_uv(v.astype(np.float64), n_cad).astype("<f4")
+        if obj.texture and obj.to_local is not None:
+            # 객체 로컬 좌표·법선으로 (객체를 옮겨도 무늬가 따라감), 한 장 = tile mm — 화면·브라우저와 같은 규칙
+            lm = obj.to_local
+            uv = box_uv(v.astype(np.float64) @ lm[:3, :3].T + lm[:3, 3], n_cad @ lm[:3, :3].T, 1 / obj.texture["tile"]).astype("<f4")
+        else:
+            uv = box_uv(v.astype(np.float64), n_cad).astype("<f4")
         idx = t.astype("<u4").reshape(-1)
 
         pv = add_view(pos.tobytes(), 34962)  # ARRAY_BUFFER
@@ -258,6 +293,8 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         "nodes": nodes,
         "meshes": meshes,
         "materials": materials or [_glb_material(None, None)],
+        **({"images": images, "textures": textures,
+            "samplers": [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]} if images else {}),
         "accessors": accessors,
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(binary)}],

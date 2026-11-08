@@ -302,6 +302,8 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       else if (cmd.hidden) next.hidden = true;
       if (cmd.material === 'default') delete next.material;
       else if (cmd.material) next.material = { ...cmd.material };
+      if (cmd.texture === 'default') delete next.texture;
+      else if (cmd.texture) next.texture = { ...cmd.texture };
       return done(model, replaceObject(model, next as CadObject), cmd, target.id);
     }
 

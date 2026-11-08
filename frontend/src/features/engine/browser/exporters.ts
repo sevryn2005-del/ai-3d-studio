@@ -8,6 +8,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import { BufferAttribute, BufferGeometry } from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { boxUv } from '../../../cad/textureMap';
 
 export interface NamedMesh {
   name: string;
@@ -15,6 +16,9 @@ export interface NamedMesh {
   color?: string;
   /** PBR 재질 (형식 v29, GLB 만) */
   material?: { metallic: number; roughness: number };
+  /** 텍스처 (형식 v30, GLB 만): 이미지 + 한 장 크기(mm). toLocal = 월드 → 객체 로컬 4×4 (열 우선, three Matrix4.elements) */
+  texture?: { image: string; tile: number };
+  toLocal?: number[];
   positions: Float32Array; // 월드 좌표 mm
   indices: Uint32Array;
 }
@@ -101,21 +105,14 @@ export function to3mf(meshes: NamedMesh[]): Uint8Array {
 /** 화면과 같은 기준(30°)으로 법선을 분리해 곡면은 부드럽게, 모서리는 날카롭게 */
 const CREASE_ANGLE = Math.PI / 6;
 
-/**
- * 박스 투영 UV (서버 exporter.py box_uv 와 같은 규칙): 점 법선에서 가장 큰 축으로 면을 고르고 나머지 두 좌표(m)를 UV 로.
- * CAD 좌표 (Z-up, mm) 기준 — X 면: u = ±y, Y 면: u = ∓x, Z 면: u = x, v = ±y … 법선이 음수 쪽이면 거울상이 되지 않게 u(Z 면은 v)를 뒤집는다.
- * glTF 는 이미지 위쪽이 v = 0 이라 v 는 뒤집어 넣는다. 1 UV = 1 m (텍스처 1장이 1 m 정사각형).
- */
-export function boxUv(x: number, y: number, z: number, nx: number, ny: number, nz: number): [number, number] {
-  const ax = Math.abs(nx);
-  const ay = Math.abs(ny);
-  const az = Math.abs(nz);
-  let u: number;
-  let v: number;
-  if (ax >= ay && ax >= az) [u, v] = [nx >= 0 ? y : -y, z];
-  else if (ay >= az) [u, v] = [ny >= 0 ? -x : x, z];
-  else [u, v] = [x, nz >= 0 ? y : -y];
-  return [u * 0.001, -v * 0.001];
+/** 박스 투영 UV — 화면과 같은 규칙 (cad/textureMap.ts, 서버 exporter.py box_uv) */
+export { boxUv };
+
+/** data URL → 바이트 (GLB 이미지) */
+function dataUrlBytes(url: string): { bytes: Uint8Array; mime: string } {
+  const m = /^data:(image\/(?:png|jpeg));base64,(.*)$/.exec(url)!;
+  const bin = atob(m[2]!);
+  return { bytes: Uint8Array.from(bin, (c) => c.charCodeAt(0)), mime: m[1]! };
 }
 
 /** 기본 GLB 재질 (색·재질이 없는 객체) — 서버 exporter.py 와 같은 값 */
@@ -126,10 +123,16 @@ export function linearRgba(hex: string): number[] {
   return [...c.map((v) => Math.round((v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * 1e6) / 1e6), 1];
 }
 /** 객체별 glTF 재질 (같은 색·재질은 하나로) — 서버 _glb_material 과 같은 규칙 */
-export function glbMaterial(color: string | undefined, m: { metallic: number; roughness: number } | undefined) {
+export function glbMaterial(color: string | undefined, m: { metallic: number; roughness: number } | undefined, texture?: number) {
   return {
-    name: `${color ?? 'default'} m${m?.metallic ?? 0.05} r${m?.roughness ?? 0.55}`,
-    pbrMetallicRoughness: { baseColorFactor: color ? linearRgba(color) : GLB_DEFAULT_BASE, metallicFactor: m?.metallic ?? 0.05, roughnessFactor: m?.roughness ?? 0.55 },
+    name: `${color ?? 'default'} m${m?.metallic ?? 0.05} r${m?.roughness ?? 0.55}${texture !== undefined ? ` t${texture}` : ''}`,
+    pbrMetallicRoughness: {
+      // 텍스처가 있으면 색은 곱해지는 값 — 색이 없으면 흰색(이미지 그대로)
+      baseColorFactor: color ? linearRgba(color) : texture !== undefined ? [1, 1, 1, 1] : GLB_DEFAULT_BASE,
+      metallicFactor: m?.metallic ?? 0.05,
+      roughnessFactor: m?.roughness ?? 0.55,
+      ...(texture !== undefined ? { baseColorTexture: { index: texture } } : {}),
+    },
   };
 }
 
@@ -141,8 +144,30 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
   const gltfMeshes: object[] = [];
   const nodes: object[] = [];
   const materials: ReturnType<typeof glbMaterial>[] = [];
+  const images: object[] = [];
+  const textures: object[] = [];
+  const imageIndex = new Map<string, number>(); // 같은 이미지는 하나로
+  const addBytes = (bytes: Uint8Array) => {
+    bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: bytes.length });
+    const pad = (4 - (bytes.length % 4)) % 4;
+    const padded = new Uint8Array(bytes.length + pad);
+    padded.set(bytes);
+    chunks.push(padded);
+    offset += padded.length;
+    return bufferViews.length - 1;
+  };
+  const textureIndex = (m: NamedMesh) => {
+    if (!m.texture) return undefined;
+    const known = imageIndex.get(m.texture.image);
+    if (known !== undefined) return known;
+    const { bytes, mime } = dataUrlBytes(m.texture.image);
+    images.push({ bufferView: addBytes(bytes), mimeType: mime });
+    textures.push({ source: images.length - 1, sampler: 0 });
+    imageIndex.set(m.texture.image, textures.length - 1);
+    return textures.length - 1;
+  };
   const materialIndex = (m: NamedMesh) => {
-    const mat = glbMaterial(m.color, m.material);
+    const mat = glbMaterial(m.color, m.material, textureIndex(m));
     const k = materials.findIndex((x) => x.name === mat.name);
     if (k >= 0) return k;
     materials.push(mat);
@@ -168,6 +193,7 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     const pos = new Float32Array(src.length);
     const nrm = new Float32Array(srcN.length);
     const uv = new Float32Array((src.length / 3) * 2);
+    const L = m.toLocal;
     const min = [Infinity, Infinity, Infinity];
     const max = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < src.length; i += 3) {
@@ -178,7 +204,14 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
       nrm[i] = srcN[i]!;
       nrm[i + 1] = srcN[i + 2]!;
       nrm[i + 2] = -srcN[i + 1]!;
-      const [u, v] = boxUv(src[i]!, src[i + 1]!, src[i + 2]!, srcN[i]!, srcN[i + 1]!, srcN[i + 2]!);
+      // 텍스처가 있으면 객체 로컬 좌표·법선으로 (객체를 옮겨도 무늬가 따라감), 한 장 = tile mm. 없으면 월드 m
+      let uvp = [src[i]!, src[i + 1]!, src[i + 2]!];
+      let uvn = [srcN[i]!, srcN[i + 1]!, srcN[i + 2]!];
+      if (m.texture && L) {
+        uvp = [0, 1, 2].map((r) => L[r]! * src[i]! + L[4 + r]! * src[i + 1]! + L[8 + r]! * src[i + 2]! + L[12 + r]!);
+        uvn = [0, 1, 2].map((r) => L[r]! * srcN[i]! + L[4 + r]! * srcN[i + 1]! + L[8 + r]! * srcN[i + 2]!);
+      }
+      const [u, v] = boxUv(uvp[0]!, uvp[1]!, uvp[2]!, uvn[0]!, uvn[1]!, uvn[2]!, m.texture ? 1 / m.texture.tile : 0.001);
       uv[(i / 3) * 2] = u;
       uv[(i / 3) * 2 + 1] = v;
       for (let k = 0; k < 3; k++) {
@@ -202,6 +235,7 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
     nodes,
     meshes: gltfMeshes,
     materials: materials.length ? materials : [glbMaterial(undefined, undefined)],
+    ...(images.length ? { images, textures, samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }] } : {}),
     accessors,
     bufferViews,
     buffers: [{ byteLength: offset }],

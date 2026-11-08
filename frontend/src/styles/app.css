@@ -549,3 +549,33 @@ label.check.small { font-size: 12px; }
 .drawing-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px; }
 .drawing-sheet-tabs [role='tab'] { min-width: 28px; }
 .drawing-sheet-tabs [role='tab'][aria-selected='true'] { background: var(--accent, #2f81f7); color: #fff; border-color: transparent; }
+
+/* 텍스처 이미지 (형식 v30) */
+.texture-fields input[type='file'] {
+  max-width: 100%;
+  font-size: 12px;
+}
+.texture-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+.texture-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 3px;
+  image-rendering: pixelated;
+}
+.material-fields .slider {
+  display: grid;
+  grid-template-columns: 52px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.material-fields .slider input { width: 100%; accent-color: var(--accent); }
+.material-fields .slider span { text-align: right; color: var(--text); }
