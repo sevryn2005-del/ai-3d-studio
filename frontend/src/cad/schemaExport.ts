@@ -727,6 +727,20 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       },
     ],
   },
+  // 형식 v32: 표면 변형 — 정수 해시 노이즈가 서버와 같아야 같은 부피
+  'polymesh-displace': {
+    volume: polyVolume(
+      evaluateModifiers(primitiveMesh('cube', { size: 20 }), [
+        { type: 'subsurf', levels: 3 },
+        { type: 'displace', strength: 3, size: 4, seed: 7 },
+      ]),
+    ),
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'subsurf', levels: 3 }, { type: 'displace', strength: 3, size: 4, seed: 7 }] },
+    ],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

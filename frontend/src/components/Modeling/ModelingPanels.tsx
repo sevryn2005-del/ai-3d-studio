@@ -238,6 +238,7 @@ const NEW_MODIFIER: Record<Mod['type'], Mod> = {
   solidify: { type: 'solidify', thickness: 2 },
   smooth: { type: 'smooth', factor: 0.5, repeat: 2 },
   decimate: { type: 'decimate', ratio: 0.5 },
+  displace: { type: 'displace', strength: 2, size: 5, seed: 0 },
 };
 
 /** 모디파이어 스택 (블렌더 속성 편집기의 렌치 탭): 위에서부터 적용. 추가·값·순서·삭제·적용, 부드러운 음영 */
@@ -330,6 +331,13 @@ export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }
           )}
           {m.type === 'decimate' && (
             <NumberField label="남길 비율" value={m.ratio} unit="×" onCommit={(v) => patch(i, { ...m, ratio: Math.max(0.02, Math.min(1, v)) })} testId={`mod-${i}-ratio`} />
+          )}
+          {m.type === 'displace' && (
+            <>
+              <NumberField label="세기" value={m.strength} unit="mm" onCommit={(v) => patch(i, { ...m, strength: v })} testId={`mod-${i}-strength`} />
+              <NumberField label="무늬 크기" value={m.size} unit="mm" onCommit={(v) => patch(i, { ...m, size: Math.max(0.1, v) })} testId={`mod-${i}-size`} />
+              <NumberField label="시드" value={m.seed} unit="개" onCommit={(v) => patch(i, { ...m, seed: Math.max(0, Math.min(9999, Math.round(v))) })} testId={`mod-${i}-seed`} />
+            </>
           )}
         </div>
       ))}

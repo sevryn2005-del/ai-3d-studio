@@ -734,8 +734,17 @@ class DecimateModifier(Strict):
     ratio: Annotated[float, _num(0.02, 1)]
 
 
+class DisplaceModifier(Strict):
+    """형식 v32: 표면 변형 (점 법선 방향으로 노이즈 × strength, 노이즈 격자 size mm, seed)"""
+
+    type: Literal["displace"]
+    strength: Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
+    size: Annotated[float, _num(0.1, Limits.MAX_DIMENSION)]
+    seed: Annotated[int, Field(strict=True, ge=0, le=9999)]
+
+
 Modifier = Annotated[
-    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier],
+    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier, DisplaceModifier],
     Field(discriminator="type"),
 ]
 MAX_MODIFIERS = 16
@@ -1059,7 +1068,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[31]
+    schemaVersion: Literal[32]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

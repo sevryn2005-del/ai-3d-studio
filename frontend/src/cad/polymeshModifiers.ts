@@ -9,6 +9,8 @@
  * - smooth (형식 v31): 라플라스 매끈하게 — 점마다 이웃 평균 쪽으로 factor 만큼, repeat 번 (모든 점, 블렌더 Smooth 와 같음)
  * - decimate (형식 v31): 면 줄이기 — 삼각형으로 나눈 뒤 짧은 선부터 합쳐(가운데 점) 삼각형 수를 ratio 배로.
  *   열린 가장자리·뒤집히는 면·꼬이는 연결(이웃 공유 ≠ 2)은 건너뛴다 → 닫힌 메시는 닫힌 채로
+ * - displace (형식 v32): 표면 변형 — 점 법선 방향으로 (노이즈 − 0.5) × strength. 노이즈 = 정수 해시 값 노이즈 (size mm 격자, seed),
+ *   같은 점 위치 → 같은 값이라 서버와 비트 단위로 같은 해시
  */
 import { centroid, faceNormal, type PolyMesh, type V3 } from './polymesh';
 
@@ -18,7 +20,8 @@ export type Modifier =
   | { type: 'array'; count: number; offset: V3 }
   | { type: 'solidify'; thickness: number }
   | { type: 'smooth'; factor: number; repeat: number }
-  | { type: 'decimate'; ratio: number };
+  | { type: 'decimate'; ratio: number }
+  | { type: 'displace'; strength: number; size: number; seed: number };
 
 export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   subsurf: '세분 표면',
@@ -27,6 +30,7 @@ export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   solidify: '두께',
   smooth: '매끈하게',
   decimate: '면 줄이기',
+  displace: '표면 변형',
 };
 
 /** 결과 메시가 이보다 크면 거부 (브라우저가 멈추지 않도록) */
@@ -282,6 +286,46 @@ export function decimateMesh(m: PolyMesh, ratio: number): PolyMesh {
   return { verts: used.map((v) => pos[v]!), faces: tris.map((t) => t.map((v) => map.get(v)!)) };
 }
 
+/** 정수 격자점 해시 → [0, 1) — 서버 _hash3 와 같은 32비트 연산 */
+export function hash3(x: number, y: number, z: number, seed: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177) + Math.imul(seed, 144665)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/** 3D 값 노이즈 (부드러운 보간) → [0, 1] */
+export function valueNoise(x: number, y: number, z: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const iz = Math.floor(z);
+  const f = (t: number) => t * t * (3 - 2 * t);
+  const [u, v, w] = [f(x - ix), f(y - iy), f(z - iz)];
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const c = (dx: number, dy: number, dz: number) => hash3(ix + dx, iy + dy, iz + dz, seed);
+  return lerp(
+    lerp(lerp(c(0, 0, 0), c(1, 0, 0), u), lerp(c(0, 1, 0), c(1, 1, 0), u), v),
+    lerp(lerp(c(0, 0, 1), c(1, 0, 1), u), lerp(c(0, 1, 1), c(1, 1, 1), u), v),
+    w,
+  );
+}
+
+export function displaceMesh(m: PolyMesh, strength: number, size: number, seed: number): PolyMesh {
+  const normals: V3[] = m.verts.map(() => [0, 0, 0]);
+  for (const f of m.faces) {
+    const n = faceNormal(m, f);
+    for (const v of f) normals[v] = add(normals[v]!, n);
+  }
+  const verts = m.verts.map((p, i) => {
+    const n = normals[i]!;
+    const l = Math.hypot(...n);
+    if (l <= 1e-12) return p;
+    const d = (valueNoise(p[0] / size, p[1] / size, p[2] / size, seed) - 0.5) * strength;
+    return rv(add(p, mul(n, d / l)));
+  });
+  return { verts, faces: m.faces };
+}
+
 export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
   switch (mod.type) {
     case 'subsurf': {
@@ -299,6 +343,8 @@ export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
       return smoothMesh(m, mod.factor, mod.repeat);
     case 'decimate':
       return decimateMesh(m, mod.ratio);
+    case 'displace':
+      return displaceMesh(m, mod.strength, mod.size, mod.seed);
   }
 }
 
@@ -318,7 +364,7 @@ export function estimateFaces(m: PolyMesh, mods: readonly Modifier[]): number {
     } else if (mod.type === 'array') {
       faces *= mod.count;
       corners *= mod.count;
-    } else if (mod.type === 'smooth') {
+    } else if (mod.type === 'smooth' || mod.type === 'displace') {
       // 그대로
     } else if (mod.type === 'decimate') {
       faces = Math.max(4, Math.ceil((corners - 2 * faces) * mod.ratio));

@@ -1,6 +1,6 @@
 """편집 메시 모디파이어 (형식 v22) — frontend/src/cad/polymeshModifiers.ts 와 같은 규칙·같은 점/면 순서.
 
-세분 표면(캐트멀-클락), 미러, 배열, 두께, 매끈하게·면 줄이기(형식 v31). 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
+세분 표면(캐트멀-클락), 미러, 배열, 두께, 매끈하게·면 줄이기(형식 v31), 표면 변형(형식 v32). 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
 """
 
 from __future__ import annotations
@@ -284,6 +284,56 @@ def decimate(verts, faces, ratio: float):
     return [pos[v] for v in used], [[index[v] for v in t] for t in tris]
 
 
+def _u32(v: int) -> int:
+    return v & 0xFFFFFFFF
+
+
+def hash3(x: int, y: int, z: int, seed: int) -> float:
+    """정수 격자점 해시 → [0, 1) — 프론트 hash3 (Math.imul) 와 같은 32비트 연산"""
+    h = _u32(_u32(x * 374761393) + _u32(y * 668265263) + _u32(z * 1274126177) + _u32(seed * 144665))
+    h = _u32((h ^ (h >> 13)) * 1274126177)
+    h ^= h >> 16
+    return h / 4294967296
+
+
+def value_noise(x: float, y: float, z: float, seed: int) -> float:
+    ix, iy, iz = math.floor(x), math.floor(y), math.floor(z)
+
+    def f(t: float) -> float:
+        return t * t * (3 - 2 * t)
+
+    u, v, w = f(x - ix), f(y - iy), f(z - iz)
+
+    def lerp(a: float, b: float, t: float) -> float:
+        return a + (b - a) * t
+
+    def c(dx: int, dy: int, dz: int) -> float:
+        return hash3(ix + dx, iy + dy, iz + dz, seed)
+
+    return lerp(
+        lerp(lerp(c(0, 0, 0), c(1, 0, 0), u), lerp(c(0, 1, 0), c(1, 1, 0), u), v),
+        lerp(lerp(c(0, 0, 1), c(1, 0, 1), u), lerp(c(0, 1, 1), c(1, 1, 1), u), v),
+        w,
+    )
+
+
+def displace(verts, faces, strength: float, size: float, seed: int):
+    normals = [(0.0, 0.0, 0.0)] * len(verts)
+    for f in faces:
+        n = face_normal(verts, f)
+        for v in f:
+            normals[v] = _add(normals[v], n)
+    out = []
+    for p, n in zip(verts, normals):
+        ln = math.hypot(*n)
+        if ln <= 1e-12:
+            out.append(tuple(p))
+            continue
+        d = (value_noise(p[0] / size, p[1] / size, p[2] / size, seed) - 0.5) * strength
+        out.append(_rv(_add(p, _mul(n, d / ln))))
+    return out, [list(f) for f in faces]
+
+
 def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
     """모디파이어 스택 결과 (위에서부터 차례로). modifiers: Pydantic 모델 또는 dict"""
     vs = [tuple(p) for p in verts]
@@ -304,4 +354,6 @@ def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
             vs, fs = smooth(vs, fs, d["factor"], d["repeat"])
         elif t == "decimate":
             vs, fs = decimate(vs, fs, d["ratio"])
+        elif t == "displace":
+            vs, fs = displace(vs, fs, d["strength"], d["size"], d["seed"])
     return vs, fs

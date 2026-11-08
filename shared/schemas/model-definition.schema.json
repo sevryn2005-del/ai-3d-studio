@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 31
+      "const": 32
     },
     "units": {
       "type": "string",
@@ -3532,6 +3532,37 @@
                       "required": [
                         "type",
                         "ratio"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "displace"
+                        },
+                        "strength": {
+                          "type": "number",
+                          "minimum": -1000,
+                          "maximum": 1000
+                        },
+                        "size": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 1000
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9999
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "strength",
+                        "size",
+                        "seed"
                       ],
                       "additionalProperties": false
                     }

@@ -503,6 +503,13 @@ export const ModifierSchema = z.discriminatedUnion('type', [
   // 형식 v31: 매끈하게 (이웃 평균 쪽으로 factor, repeat 번), 면 줄이기 (삼각형 수 × ratio)
   z.strictObject({ type: z.literal('smooth'), factor: z.number().min(0).max(1), repeat: z.number().int().min(1).max(30) }),
   z.strictObject({ type: z.literal('decimate'), ratio: z.number().min(0.02).max(1) }),
+  // 형식 v32: 표면 변형 (점 법선 방향으로 노이즈 × strength mm, 노이즈 격자 size mm, seed)
+  z.strictObject({
+    type: z.literal('displace'),
+    strength: z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension),
+    size: z.number().min(0.1).max(LIMITS.maxDimension),
+    seed: z.number().int().min(0).max(9999),
+  }),
 ]);
 export const MAX_MODIFIERS = 16;
 
@@ -745,7 +752,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 31;
+export const MODEL_SCHEMA_VERSION = 32;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),

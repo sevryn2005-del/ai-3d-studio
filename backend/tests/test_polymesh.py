@@ -83,3 +83,17 @@ def test_smooth_cube_and_decimate_keeps_open_border():
     v, f = evaluate(grid, quads, [{"type": "decimate", "ratio": 0.3}])
     border = [p for p in v if abs(abs(p[0]) - 12) < 1e-9 or abs(abs(p[1]) - 12) < 1e-9]
     assert len(border) == 4 * n and len(f) < 2 * n * n
+
+
+def test_displace_hash_and_fixture_match_frontend():
+    """형식 v32: 정수 해시 노이즈가 프론트(Math.imul)와 비트 단위로 같고, 공유 픽스처 부피도 같다"""
+    from app.cad.polymesh import evaluate, hash3, value_noise
+
+    assert hash3(0, 0, 0, 0) == 0
+    assert hash3(1, 2, 3, 7) == 0.5102371710818261
+    assert hash3(-5, 9, -2, 42) == 0.3035380213987082
+    assert value_noise(0.5, 0.5, 0.5, 7) == 0.5745925091323443
+    case = load_json("examples/feature-cases.json")["polymesh-displace"]
+    obj = case["model"]["objects"][0]
+    verts, faces = evaluate(obj["polymesh"]["verts"], obj["polymesh"]["faces"], obj["modifiers"])
+    assert abs(_volume(verts, faces) - case["volume"]) < 1e-6

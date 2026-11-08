@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, deleteElements, polyMeshError, polyVolume, primitiveMesh } from './polymesh';
-import { arrayMesh, catmullClark, decimateMesh, estimateFaces, evaluateModifiers, mirrorMesh, smoothMesh, solidifyMesh } from './polymeshModifiers';
+import { arrayMesh, catmullClark, decimateMesh, displaceMesh, hash3, valueNoise, estimateFaces, evaluateModifiers, mirrorMesh, smoothMesh, solidifyMesh } from './polymeshModifiers';
 
 const cube = () => primitiveMesh('cube', { size: 2 });
 
@@ -77,5 +77,28 @@ describe('매끈하게 · 면 줄이기 (형식 v31, 서버 polymesh.py 와 같�
     const edge = (p: number[]) => Math.abs(Math.abs(p[0]!) - 10) < 1e-9 || Math.abs(Math.abs(p[1]!) - 10) < 1e-9;
     expect(d.verts.filter(edge).length).toBe(g.verts.filter(edge).length);
     expect(d.faces.length).toBeLessThan(g.faces.length * 2);
+  });
+});
+
+describe('표면 변형 (형식 v32, 서버 polymesh.py 와 같은 해시)', () => {
+  it('해시: 서버 시험과 같은 값 (음수 좌표 포함)', () => {
+    expect(hash3(0, 0, 0, 0)).toBe(0);
+    expect(hash3(1, 2, 3, 7)).toBe(0.5102371710818261);
+    expect(hash3(-5, 9, -2, 42)).toBe(0.3035380213987082);
+    expect(valueNoise(0.5, 0.5, 0.5, 7)).toBe(0.5745925091323443);
+  });
+  it('점 법선 방향으로만, 노이즈가 [0,1] 이라 변위는 ±strength/2 안', () => {
+    const c = evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'subsurf', levels: 2 }]);
+    const d = displaceMesh(c, 4, 3, 1);
+    expect(d.faces).toBe(c.faces);
+    let moved = 0;
+    d.verts.forEach((p, i) => {
+      const q = c.verts[i]!;
+      const dist = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+      expect(dist).toBeLessThanOrEqual(2 + 1e-6);
+      if (dist > 1e-3) moved++;
+    });
+    expect(moved).toBeGreaterThan(c.verts.length / 2);
+    expect(displaceMesh(c, 0, 3, 1).verts).toEqual(c.verts);
   });
 });

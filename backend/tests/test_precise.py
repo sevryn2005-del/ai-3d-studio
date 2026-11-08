@@ -14,7 +14,7 @@ from app.cad.primitives import GeometryError, build_solid
 
 
 def model(*objects) -> ModelDefinition:
-    return ModelDefinition.model_validate({"schemaVersion": 31, "units": "mm", "sketches": [], "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 32, "units": "mm", "sketches": [], "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -65,7 +65,7 @@ def test_ai_validator_knows_wrappers():
 
 def test_topology_api_and_picked_edges(client):
     t0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
-    model = {"schemaVersion": 31, "units": "mm", "sketches": [], "objects": [
+    model = {"schemaVersion": 32, "units": "mm", "sketches": [], "objects": [
         {"id": "c", "name": "원통", "kind": "cylinder", "params": {"radius": 4, "height": 9}, "transform": t0}]}
     r = client.post("/api/model/topology", json={"model": model, "id": "c"}).json()
     assert r["ok"] is True
