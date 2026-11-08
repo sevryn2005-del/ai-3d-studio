@@ -23,7 +23,7 @@ export function DevProbe() {
       /** 카메라가 바라보는 방향(단위 벡터, 소수 셋째 자리) — 표준 보기 검사용 */
       cameraDir: () => camera.getWorldDirection(new Vector3()).toArray().map((v) => Math.round(v * 1000) / 1000 + 0),
       meshSources: () => {
-        const out: Record<string, { source: string; min: number[]; max: number[]; vertices: number; textured: boolean }> = {};
+        const out: Record<string, { source: string; min: number[]; max: number[]; vertices: number; textured: boolean; draft: Record<string, number> | null }> = {};
         scene.updateMatrixWorld(true);
         scene.traverse((o) => {
           if (!o.userData.cadObject) return;
@@ -36,6 +36,7 @@ export function DevProbe() {
             max: box.max.toArray().map((v) => Math.round(v * 1000) / 1000),
             vertices: mesh.geometry.getAttribute('position').count,
             textured: !!mesh.userData.textured,
+            draft: (mesh.userData.draft as Record<string, number> | null) ?? null,
           };
         });
         return out;

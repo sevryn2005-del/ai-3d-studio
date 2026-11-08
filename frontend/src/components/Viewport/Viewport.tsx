@@ -26,7 +26,7 @@ import { DrawingPanel } from '../Drawing/DrawingPanel';
 import { PickBar, PickOverlay } from './PickOverlay';
 import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
-import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel } from './ViewTools';
+import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel, DraftPanel } from './ViewTools';
 import { startSketch } from '../../features/selection/featureFlow';
 
 /**
@@ -109,6 +109,7 @@ export function Viewport() {
       <SketchOptionsBar />
       <ConfirmationCorner />
       <SectionPanel />
+      <DraftPanel />
       <MeasureReadout />
       <MassPanel />
       <LoftPanel />

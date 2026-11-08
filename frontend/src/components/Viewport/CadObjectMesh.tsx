@@ -16,6 +16,7 @@ import { geometryKey } from '../../features/backend/renderMesh';
 import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
 import { boxUvGeometry } from '../../cad/textureMap';
+import { draftGeometry, localPull, useDraftStats } from '../../cad/draftAnalysis';
 import { useImageTexture } from './useImageTexture';
 
 type Index = Map<ObjectId, CadObject>;
@@ -58,6 +59,7 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
         baseColor={object.color}
         material={object.material}
         texture={object.texture}
+        rotation={object.transform.rotation}
         source={serverGeometry.userData.engine === 'browser' ? 'browser' : 'server'}
       />
     ) : (
@@ -176,7 +178,10 @@ function ObjectMesh({
   baseColor,
   material,
   texture,
+  rotation,
 }: {
+  /** 객체 회전 (구배 분석의 빼는 방향을 객체 로컬로) — 최상위 엔진 메시만 */
+  rotation?: readonly number[];
   /** 텍스처 (형식 v30) — 엔진 메시(객체 로컬)에만 입힌다. 미리보기 도형은 계산이 끝날 때까지 색만 */
   texture?: { image: string; tile: number };
   /** 외관 색 (없으면 기본 회색) */
@@ -207,14 +212,28 @@ function ObjectMesh({
   const tile = texture?.tile;
   const uvGeometry = useMemo(() => (geometry && map && tile ? boxUvGeometry(geometry, tile) : undefined), [geometry, map, tile]);
   useEffect(() => () => uvGeometry?.dispose(), [uvGeometry]);
+  // 구배 분석 (화면만): 삼각형마다 색 — 엔진 메시에만
+  const draft = useEditorStore((s) => s.draft);
+  const draftResult = useMemo(
+    () => (draft && geometry && variant === 'solid' ? draftGeometry(geometry, localPull(draft.axis, draft.flip, rotation ?? [0, 0, 0]), draft.angle) : null),
+    [draft, geometry, variant, rotation],
+  );
+  useEffect(() => {
+    if (!draftResult) return;
+    useDraftStats.getState().put(selectId, draftResult.area);
+    return () => {
+      draftResult.geometry.dispose();
+      useDraftStats.getState().put(selectId, null);
+    };
+  }, [draftResult, selectId]);
   // 텍스처가 있으면 색은 곱해지는 값 — 색이 없으면 흰색(이미지 그대로), 선택·강조색은 그대로
   const shown = map && !selected && !hovered ? (baseColor ?? '#ffffff') : color;
 
   return (
     <mesh
       {...(primitive ? primitivePlacement(primitive, profile ?? null, local ?? null) : {})}
-      geometry={uvGeometry ?? geometry}
-      userData={{ source, textured: !!uvGeometry }}
+      geometry={draftResult?.geometry ?? uvGeometry ?? geometry}
+      userData={{ source, textured: !!uvGeometry && !draftResult, draft: draftResult?.area ?? null }}
       onClick={(e) => {
         const ed = useEditorStore.getState();
         if (ed.drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
@@ -238,9 +257,10 @@ function ObjectMesh({
     >
       {primitive && <PrimitiveGeometry object={primitive} profile={profile ?? null} />}
       <meshStandardMaterial
-        key={map ? 'textured' : 'plain'}
-        color={shown}
-        map={map}
+        key={draftResult ? 'draft' : map ? 'textured' : 'plain'}
+        color={draftResult ? '#ffffff' : shown}
+        map={draftResult ? null : map}
+        vertexColors={!!draftResult}
         roughness={material?.roughness ?? DEFAULT_MATERIAL.roughness}
         metalness={material?.metallic ?? DEFAULT_MATERIAL.metallic}
         transparent={transparent}

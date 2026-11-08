@@ -47,3 +47,31 @@ test('표시 모드·단면·측정·질량 특성·이미지 저장', async ({ 
 
   expect((await scene(page)).revision).toBe(before.revision);
 });
+
+test('구배 분석: 빼는 방향 Z → 윗면 양·아랫면 음·옆면 구배 부족, 축 바꾸기·회전한 객체, 끄기 (원본 그대로)', async ({ page }, info) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  const box = async () => (await page.evaluate(() => window.__AI3D_DEV__!.meshSources())).box_1;
+  await expect.poll(async () => (await box())?.source, { timeout: 20_000 }).toBe('server');
+  const rev = (await scene(page)).revision;
+  await page.getByRole('tab', { name: '보기' }).click();
+  await page.getByTestId('cmd-draft-analysis').click();
+  await expect(page.getByTestId('draft-panel')).toBeVisible();
+  // 큐브 20: 윗면 400 · 아랫면 400 · 옆면 1600 mm²
+  await expect.poll(async () => (await box())?.draft).toEqual({ positive: 400, negative: 400, insufficient: 1600 });
+  await expect(page.getByTestId('draft-insufficient')).toContainText('67%');
+  await page.screenshot({ path: info.outputPath('draft.png') });
+  await page.getByTestId('draft-flip').click();
+  await expect(page.getByTestId('draft-axis-z')).toHaveText('−Z');
+  // 객체를 X 축으로 30° 돌리면 옆면 두 개가 ±30° 구배 → 한계 1° 넘음
+  await page.evaluate(() =>
+    window.__AI3D_DEV__!.dispatch({ type: 'set_transform', target: 'box_1', rotation: [30, 0, 0] }),
+  );
+  await expect.poll(async () => (await box())?.draft?.insufficient, { timeout: 20_000 }).toBeCloseTo(800, 3);
+  await page.getByTestId('draft-angle').fill('40');
+  await expect.poll(async () => (await box())?.draft?.insufficient).toBeCloseTo(1600, 3);
+  await page.getByTestId('cmd-draft-analysis').click();
+  await expect(page.getByTestId('draft-panel')).toHaveCount(0);
+  await expect.poll(async () => (await box())?.draft).toBeNull();
+  expect((await scene(page)).revision).toBe(rev + 1); // 회전 명령 하나만
+});

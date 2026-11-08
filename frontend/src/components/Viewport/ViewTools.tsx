@@ -4,11 +4,12 @@
  * Canvas 밖: SectionPanel(단면 위치), MassPanel(질량 특성), MeasureReadout(측정 값)
  * 모두 표시 상태만 바꾼다 — 설계 원본은 그대로.
  */
+import { DRAFT_COLORS, DRAFT_LABELS, useDraftStats, type DraftClass } from '../../cad/draftAnalysis';
 import { useEffect, useMemo, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Html, Line } from '@react-three/drei';
 import { Plane, Vector3 } from 'three';
-import { useEditorStore, type SectionView } from '../../features/selection/editorStore';
+import { useEditorStore, type SectionView, type DraftView } from '../../features/selection/editorStore';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
 import { byId, sketchIndex, topLevelObjects } from '../../cad/modelGraph';
 import { isSuppressed } from '../../cad/features';
@@ -107,6 +108,59 @@ export function SectionPanel() {
         ⇄
       </button>
       <button onClick={() => setSection(null)} title="단면 끄기">
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** 구배 분석 패널: 빼는 방향(축·뒤집기)·한계 각, 색 범례와 넓이 비율 */
+export function DraftPanel() {
+  const draft = useEditorStore((s) => s.draft);
+  const setDraft = useEditorStore((s) => s.setDraft);
+  const stats = useDraftStats((s) => s.byObject);
+  if (!draft) return null;
+  const set = (patch: Partial<DraftView>) => setDraft({ ...draft, ...patch });
+  const total: Record<DraftClass, number> = { positive: 0, negative: 0, insufficient: 0 };
+  for (const a of Object.values(stats)) for (const k of Object.keys(total) as DraftClass[]) total[k] += a[k];
+  const sum = total.positive + total.negative + total.insufficient;
+  return (
+    <div className="view-panel draft-panel" role="group" aria-label="구배 분석" data-testid="draft-panel">
+      <strong>구배 분석</strong>
+      <span className="muted">빼는 방향</span>
+      {(['x', 'y', 'z'] as const).map((a) => (
+        <button key={a} aria-pressed={draft.axis === a} onClick={() => set({ axis: a })} data-testid={`draft-axis-${a}`}>
+          {draft.flip ? '−' : '+'}
+          {a.toUpperCase()}
+        </button>
+      ))}
+      <button onClick={() => set({ flip: !draft.flip })} title="빼는 방향 뒤집기" data-testid="draft-flip">
+        ⇅
+      </button>
+      <label className="muted">
+        한계{' '}
+        <input
+          type="number"
+          min={0}
+          max={45}
+          step={0.5}
+          value={draft.angle}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v)) set({ angle: Math.max(0, Math.min(45, v)) });
+          }}
+          data-testid="draft-angle"
+          style={{ width: 52 }}
+        />
+        °
+      </label>
+      {(Object.keys(DRAFT_LABELS) as DraftClass[]).map((k) => (
+        <span key={k} className="draft-legend" data-testid={`draft-${k}`}>
+          <i style={{ background: `rgb(${DRAFT_COLORS[k].map((c) => Math.round(c * 255)).join(',')})` }} />
+          {DRAFT_LABELS[k]} {sum > 0 ? `${Math.round((total[k] / sum) * 100)}%` : '—'}
+        </span>
+      ))}
+      <button onClick={() => setDraft(null)} title="구배 분석 끄기">
         ✕
       </button>
     </div>

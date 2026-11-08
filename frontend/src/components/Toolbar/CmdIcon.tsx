@@ -41,6 +41,7 @@ const PATHS: Record<string, string> = {
   wireframe: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5M4 7.5l16 9M20 7.5L4 16.5M12 3v18',
   xray: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10',
   section: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M2 13h20',
+  draftAnalysis: 'M12 2v6M9 5l3-3 3 3M5 21l2-11h10l2 11zM9 14h6',
   measure: 'M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
   mass: 'M6 8h12l2 13H4zM9 8a3 3 0 0 1 6 0',
   extrudeCut: 'M4 8l8-4 8 4v8l-8 4-8-4zM9 9.5l3 1.5 3-1.5v5l-3 1.5-3-1.5zM12 2v6',

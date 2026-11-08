@@ -21,6 +21,13 @@ export type ViewName = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 
 /** 표시 모드: 음영+모서리(기본) · 음영 · 와이어프레임 · 투명(X-ray) */
 export type DisplayMode = 'shadedEdges' | 'shaded' | 'wireframe' | 'xray';
 /** 단면 보기: axis 에 수직인 평면(위치 offset)으로 잘라 한쪽만 보여 준다 (flip = 반대쪽) */
+export interface DraftView {
+  axis: 'x' | 'y' | 'z';
+  flip: boolean;
+  /** 이보다 작은 구배(°)는 "구배 부족" */
+  angle: number;
+}
+
 export interface SectionView {
   axis: 'x' | 'y' | 'z';
   offset: number;
@@ -53,6 +60,9 @@ interface EditorState {
   pending: PendingFeature | null;
   displayMode: DisplayMode;
   section: SectionView | null;
+  /** 구배 분석 (화면만): 빼는 방향 축·뒤집기, 한계 각(°) */
+  draft: DraftView | null;
+  setDraft: (d: DraftView | null) => void;
   /** 측정 도구: 켜져 있으면 모델 클릭 = 측정 점 (최근 2개) */
   measuring: boolean;
   measurePoints: Point3[];
@@ -117,6 +127,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   pending: null,
   displayMode: loadPref('ai3d.displayMode', ['shadedEdges', 'shaded', 'wireframe', 'xray'] as const, 'shadedEdges'),
   section: null,
+  draft: null,
+  setDraft: (draft) => set({ draft }),
   measuring: false,
   measurePoints: [],
   massOpen: false,
