@@ -63,6 +63,9 @@ interface EditorState {
   /** 구배 분석 (화면만): 빼는 방향 축·뒤집기, 한계 각(°) */
   draft: DraftView | null;
   setDraft: (d: DraftView | null) => void;
+  /** 두께 분석 (화면만): 이보다 얇은 벽(mm)을 빨강으로 */
+  thickness: { limit: number } | null;
+  setThickness: (t: { limit: number } | null) => void;
   /** 측정 도구: 켜져 있으면 모델 클릭 = 측정 점 (최근 2개) */
   measuring: boolean;
   measurePoints: Point3[];
@@ -128,7 +131,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   displayMode: loadPref('ai3d.displayMode', ['shadedEdges', 'shaded', 'wireframe', 'xray'] as const, 'shadedEdges'),
   section: null,
   draft: null,
-  setDraft: (draft) => set({ draft }),
+  // 두 분석은 같은 색 자리를 쓰므로 하나만 켠다
+  setDraft: (draft) => set(draft ? { draft, thickness: null } : { draft }),
+  thickness: null,
+  setThickness: (thickness) => set(thickness ? { thickness, draft: null } : { thickness }),
   measuring: false,
   measurePoints: [],
   massOpen: false,

@@ -4,6 +4,7 @@
  * 화면 분석만 (저장 형식 무관). 광선 검사는 삼각형 경계 상자 나무(BVH)로 빠르게.
  */
 import { BufferAttribute, type BufferGeometry } from 'three';
+import { create } from 'zustand';
 
 interface Node {
   min: [number, number, number];
@@ -156,3 +157,15 @@ export function thicknessGeometry(g: BufferGeometry, limit: number): { geometry:
   out.setAttribute('color', new BufferAttribute(colors, 3));
   return { geometry: out, stats };
 }
+
+/** 객체별 통계 (패널이 모아 보여 줌) */
+export const useThicknessStats = create<{ byObject: Record<string, ThicknessStats>; put: (id: string, s: ThicknessStats | null) => void }>((set) => ({
+  byObject: {},
+  put: (id, st) =>
+    set((s) => {
+      const next = { ...s.byObject };
+      if (st) next[id] = st;
+      else delete next[id];
+      return { byObject: next };
+    }),
+}));

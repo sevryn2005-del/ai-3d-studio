@@ -4,6 +4,7 @@
  * Canvas 밖: SectionPanel(단면 위치), MassPanel(질량 특성), MeasureReadout(측정 값)
  * 모두 표시 상태만 바꾼다 — 설계 원본은 그대로.
  */
+import { thicknessColor, useThicknessStats } from '../../cad/thicknessAnalysis';
 import { DRAFT_COLORS, DRAFT_LABELS, useDraftStats, type DraftClass } from '../../cad/draftAnalysis';
 import { useEffect, useMemo, useState } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -161,6 +162,55 @@ export function DraftPanel() {
         </span>
       ))}
       <button onClick={() => setDraft(null)} title="구배 분석 끄기">
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** 두께 분석 패널: 한계 두께, 가장 얇은 곳, 얇은 넓이 비율, 색 범례 */
+export function ThicknessPanel() {
+  const th = useEditorStore((s) => s.thickness);
+  const setThickness = useEditorStore((s) => s.setThickness);
+  const stats = useThicknessStats((s) => s.byObject);
+  if (!th) return null;
+  let min = Infinity;
+  let thin = 0;
+  let total = 0;
+  for (const s of Object.values(stats)) {
+    min = Math.min(min, s.min);
+    thin += s.thinArea;
+    total += s.totalArea;
+  }
+  const swatch = (c: [number, number, number]) => ({ background: `rgb(${c.map((x) => Math.round(x * 255)).join(',')})` });
+  return (
+    <div className="view-panel draft-panel" role="group" aria-label="두께 분석" data-testid="thickness-panel">
+      <strong>두께 분석</strong>
+      <label className="muted">
+        한계{' '}
+        <input
+          type="number"
+          min={0.05}
+          max={1000}
+          step={0.1}
+          value={th.limit}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v) && v > 0) setThickness({ limit: Math.min(1000, v) });
+          }}
+          data-testid="thickness-limit"
+          style={{ width: 60 }}
+        />{' '}
+        mm
+      </label>
+      <span data-testid="thickness-min">가장 얇은 곳 {Number.isFinite(min) ? `${formatMm(min)} mm` : '—'}</span>
+      <span data-testid="thickness-thin">한계보다 얇음 {total > 0 ? `${Math.round((thin / total) * 100)}%` : '—'}</span>
+      <span className="draft-legend">
+        <i style={swatch(thicknessColor(0, 1))} />얇음 <i style={swatch(thicknessColor(1, 1))} />
+        <i style={swatch(thicknessColor(2.5, 1))} />
+        <i style={swatch(thicknessColor(4, 1))} />두꺼움 <i style={swatch(thicknessColor(Infinity, 1))} />열림
+      </span>
+      <button onClick={() => setThickness(null)} title="두께 분석 끄기">
         ✕
       </button>
     </div>

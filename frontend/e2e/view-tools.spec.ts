@@ -75,3 +75,27 @@ test('구배 분석: 빼는 방향 Z → 윗면 양·아랫면 음·옆면 구�
   await expect.poll(async () => (await box())?.draft).toBeNull();
   expect((await scene(page)).revision).toBe(rev + 1); // 회전 명령 하나만
 });
+
+test('두께 분석: 큐브 20 → 가장 얇은 곳 20 mm, 한계 25 → 모두 얇음, 구배 분석과는 하나만', async ({ page }, info) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  const box = async () => (await page.evaluate(() => window.__AI3D_DEV__!.meshSources())).box_1;
+  await expect.poll(async () => (await box())?.source, { timeout: 20_000 }).toBe('server');
+  const rev = (await scene(page)).revision;
+  await page.getByRole('tab', { name: '보기' }).click();
+  await page.getByTestId('cmd-thickness-analysis').click();
+  await expect(page.getByTestId('thickness-panel')).toBeVisible();
+  await expect(page.getByTestId('thickness-min')).toHaveText('가장 얇은 곳 20 mm');
+  await expect(page.getByTestId('thickness-thin')).toHaveText('한계보다 얇음 0%');
+  await expect.poll(async () => (await box())?.thickness?.totalArea).toBeCloseTo(2400, 3);
+  await page.getByTestId('thickness-limit').fill('25');
+  await expect(page.getByTestId('thickness-thin')).toHaveText('한계보다 얇음 100%');
+  await page.screenshot({ path: info.outputPath('thickness.png') });
+  // 구배 분석을 켜면 두께 분석은 꺼진다
+  await page.getByTestId('cmd-draft-analysis').click();
+  await expect(page.getByTestId('thickness-panel')).toHaveCount(0);
+  await expect(page.getByTestId('draft-panel')).toBeVisible();
+  await expect.poll(async () => (await box())?.thickness).toBeNull();
+  await page.getByTestId('cmd-draft-analysis').click();
+  expect((await scene(page)).revision).toBe(rev); // 원본 그대로
+});

@@ -50,6 +50,7 @@ export function Toolbar() {
   const displayMode = useEditorStore((s) => s.displayMode);
   const section = useEditorStore((s) => s.section);
   const draft = useEditorStore((s) => s.draft);
+  const thickness = useEditorStore((s) => s.thickness);
   const measuring = useEditorStore((s) => s.measuring);
   const massOpen = useEditorStore((s) => s.massOpen);
   const projection = useEditorStore((s) => s.projection);
@@ -205,6 +206,7 @@ export function Toolbar() {
             <Cmd icon="perspective" label={projection === 'perspective' ? '원근' : '직교'} title="원근 / 직교 투영 전환 (직교: 치수 확인·도면처럼 평행하게)" pressed={projection === 'orthographic'} onClick={editor.toggleProjection} testId="cmd-projection" />
             <Cmd icon="section" label="단면 보기" title="모델을 평면으로 잘라 안쪽을 봅니다" pressed={!!section} onClick={() => editor.setSection(section ? null : { axis: 'x', offset: 0, flip: false })} testId="cmd-section" />
             <Cmd icon="draftAnalysis" label="구배 분석" title="빼는 방향 기준으로 면마다 구배가 충분한지 색으로 (금형)" pressed={!!draft} onClick={() => editor.setDraft(draft ? null : { axis: 'z', flip: false, angle: 1 })} testId="cmd-draft-analysis" />
+            <Cmd icon="thicknessAnalysis" label="두께 분석" title="벽 두께를 색으로 — 한계보다 얇은 곳은 빨강 (3D 프린팅·사출)" pressed={!!thickness} onClick={() => editor.setThickness(thickness ? null : { limit: 1 })} testId="cmd-thickness-analysis" />
             <Cmd icon="measure" label="측정" title="모델 위 두 점 사이 거리" pressed={measuring} onClick={editor.toggleMeasure} testId="cmd-measure" />
             <Cmd icon="mass" label="질량 특성" title="부피·겉넓이·무게 중심·질량(재료별)" pressed={massOpen} onClick={editor.toggleMass} testId="cmd-mass" />
             <Cmd icon="camera" label="이미지 저장" title="현재 화면을 PNG 로 저장" onClick={editor.requestScreenshot} testId="cmd-screenshot" />

@@ -17,6 +17,7 @@ import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
 import { boxUvGeometry } from '../../cad/textureMap';
 import { draftGeometry, localPull, useDraftStats } from '../../cad/draftAnalysis';
+import { thicknessGeometry, useThicknessStats } from '../../cad/thicknessAnalysis';
 import { useImageTexture } from './useImageTexture';
 
 type Index = Map<ObjectId, CadObject>;
@@ -226,14 +227,26 @@ function ObjectMesh({
       useDraftStats.getState().put(selectId, null);
     };
   }, [draftResult, selectId]);
+  // 두께 분석 (화면만): 삼각형마다 벽 두께 색 — 엔진 메시에만
+  const thick = useEditorStore((s) => s.thickness);
+  const thickResult = useMemo(() => (thick && geometry && variant === 'solid' ? thicknessGeometry(geometry, thick.limit) : null), [thick, geometry, variant]);
+  useEffect(() => {
+    if (!thickResult) return;
+    useThicknessStats.getState().put(selectId, thickResult.stats);
+    return () => {
+      thickResult.geometry.dispose();
+      useThicknessStats.getState().put(selectId, null);
+    };
+  }, [thickResult, selectId]);
+  const analysis = draftResult?.geometry ?? thickResult?.geometry;
   // 텍스처가 있으면 색은 곱해지는 값 — 색이 없으면 흰색(이미지 그대로), 선택·강조색은 그대로
   const shown = map && !selected && !hovered ? (baseColor ?? '#ffffff') : color;
 
   return (
     <mesh
       {...(primitive ? primitivePlacement(primitive, profile ?? null, local ?? null) : {})}
-      geometry={draftResult?.geometry ?? uvGeometry ?? geometry}
-      userData={{ source, textured: !!uvGeometry && !draftResult, draft: draftResult?.area ?? null }}
+      geometry={analysis ?? uvGeometry ?? geometry}
+      userData={{ source, textured: !!uvGeometry && !analysis, draft: draftResult?.area ?? null, thickness: thickResult?.stats ?? null }}
       onClick={(e) => {
         const ed = useEditorStore.getState();
         if (ed.drawTool) return; // 그리기 중 클릭은 그리기 평면이 처리
@@ -257,10 +270,10 @@ function ObjectMesh({
     >
       {primitive && <PrimitiveGeometry object={primitive} profile={profile ?? null} />}
       <meshStandardMaterial
-        key={draftResult ? 'draft' : map ? 'textured' : 'plain'}
-        color={draftResult ? '#ffffff' : shown}
-        map={draftResult ? null : map}
-        vertexColors={!!draftResult}
+        key={analysis ? 'analysis' : map ? 'textured' : 'plain'}
+        color={analysis ? '#ffffff' : shown}
+        map={analysis ? null : map}
+        vertexColors={!!analysis}
         roughness={material?.roughness ?? DEFAULT_MATERIAL.roughness}
         metalness={material?.metallic ?? DEFAULT_MATERIAL.metallic}
         transparent={transparent}
