@@ -236,6 +236,8 @@ const NEW_MODIFIER: Record<Mod['type'], Mod> = {
   mirror: { type: 'mirror', axis: 'x', merge: true },
   array: { type: 'array', count: 3, offset: [30, 0, 0] },
   solidify: { type: 'solidify', thickness: 2 },
+  smooth: { type: 'smooth', factor: 0.5, repeat: 2 },
+  decimate: { type: 'decimate', ratio: 0.5 },
 };
 
 /** 모디파이어 스택 (블렌더 속성 편집기의 렌치 탭): 위에서부터 적용. 추가·값·순서·삭제·적용, 부드러운 음영 */
@@ -319,6 +321,15 @@ export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }
           )}
           {m.type === 'solidify' && (
             <NumberField label="두께" value={m.thickness} unit="mm" onCommit={(v) => patch(i, { ...m, thickness: Math.max(0.01, v) })} testId={`mod-${i}-thickness`} />
+          )}
+          {m.type === 'smooth' && (
+            <>
+              <NumberField label="세기" value={m.factor} unit="×" onCommit={(v) => patch(i, { ...m, factor: Math.max(0, Math.min(1, v)) })} testId={`mod-${i}-factor`} />
+              <NumberField label="반복" value={m.repeat} unit="개" onCommit={(v) => patch(i, { ...m, repeat: Math.max(1, Math.min(30, Math.round(v))) })} testId={`mod-${i}-repeat`} />
+            </>
+          )}
+          {m.type === 'decimate' && (
+            <NumberField label="남길 비율" value={m.ratio} unit="×" onCommit={(v) => patch(i, { ...m, ratio: Math.max(0.02, Math.min(1, v)) })} testId={`mod-${i}-ratio`} />
           )}
         </div>
       ))}

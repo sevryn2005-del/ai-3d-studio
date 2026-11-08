@@ -1,6 +1,6 @@
 """편집 메시 모디파이어 (형식 v22) — frontend/src/cad/polymeshModifiers.ts 와 같은 규칙·같은 점/면 순서.
 
-세분 표면(캐트멀-클락), 미러, 배열, 두께. 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
+세분 표면(캐트멀-클락), 미러, 배열, 두께, 매끈하게·면 줄이기(형식 v31). 서버 엔진은 모디파이어를 적용한 메시를 솔리드로 꿰맨다 (mesh_import.polymesh_solid).
 """
 
 from __future__ import annotations
@@ -173,6 +173,117 @@ def solidify(verts, faces, thickness: float):
     return [_rv(p) for p in list(verts) + inner], out_f
 
 
+def _neighbors(verts, faces) -> list[list[int]]:
+    """점마다 이웃 (면을 돌며 처음 만난 순서) — 프론트 neighbors 와 같은 순서"""
+    out: list[list[int]] = [[] for _ in verts]
+    for f in faces:
+        for i, a in enumerate(f):
+            b = f[(i + 1) % len(f)]
+            if b not in out[a]:
+                out[a].append(b)
+            if a not in out[b]:
+                out[b].append(a)
+    return out
+
+
+def smooth(verts, faces, factor: float, repeat: int):
+    nb = _neighbors(verts, faces)
+    vs = list(verts)
+    for _ in range(repeat):
+        cur = vs
+        vs = []
+        for i, p in enumerate(cur):
+            ns = nb[i]
+            if not ns:
+                vs.append(p)
+                continue
+            c = (0.0, 0.0, 0.0)
+            for j in ns:
+                c = _add(c, cur[j])
+            c = _mul(c, 1 / len(ns))
+            vs.append(_rv(_add(p, _mul((c[0] - p[0], c[1] - p[1], c[2] - p[2]), factor))))
+    return vs, [list(f) for f in faces]
+
+
+def _sub(a, b) -> V3:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _cross(a, b) -> V3:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _dot(a, b) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def decimate(verts, faces, ratio: float):
+    """면 줄이기 (짧은 선 합치기) — 프론트 decimateMesh 와 같은 차례·같은 검사"""
+    pos = list(verts)
+    tris = [[f[0], f[i], f[i + 1]] for f in faces for i in range(1, len(f) - 1)]
+    target = max(4, math.floor(len(tris) * ratio + 0.5))
+    for _ in range(100):
+        if len(tris) <= target:
+            break
+        edge_count: dict[tuple[int, int], int] = {}
+        nb: dict[int, set[int]] = {}
+        vt: dict[int, list[int]] = {}
+        edges: list[tuple[float, int, int]] = []
+        for ti, t in enumerate(tris):
+            for k in range(3):
+                a, b = t[k], t[(k + 1) % 3]
+                key = _ekey(a, b)
+                c = edge_count.get(key, 0)
+                edge_count[key] = c + 1
+                if not c:
+                    d = _sub(pos[key[0]], pos[key[1]])
+                    edges.append((_dot(d, d), key[0], key[1]))
+                nb.setdefault(a, set()).add(b)
+                nb.setdefault(b, set()).add(a)
+                vt.setdefault(a, []).append(ti)
+        boundary = {v for key, c in edge_count.items() if c != 2 for v in key}
+        edges.sort()
+        locked: set[int] = set()
+        dead: set[int] = set()
+        alive = len(tris)
+        for _l, a, b in edges:
+            if alive <= target:
+                break
+            if a in locked or b in locked or a in boundary or b in boundary:
+                continue
+            na, nbb = nb[a], nb[b]
+            if len(na & nbb) != 2:
+                continue
+            mid = _rv(_mul(_add(pos[a], pos[b]), 0.5))
+            flips = False
+            for ti in vt[a] + vt[b]:
+                t = tris[ti]
+                if a in t and b in t:
+                    continue
+                p = [pos[v] for v in t]
+                q = [mid if v in (a, b) else pos[v] for v in t]
+                if _dot(_cross(_sub(p[1], p[0]), _sub(p[2], p[0])), _cross(_sub(q[1], q[0]), _sub(q[2], q[0]))) <= 0:
+                    flips = True
+                    break
+            if flips:
+                continue
+            pos[a] = mid
+            for ti in vt[b]:
+                t = tris[ti]
+                if a in t:
+                    dead.add(ti)
+                else:
+                    tris[ti] = [a if v == b else v for v in t]
+            alive -= 2
+            locked.update((a, b), na, nbb)
+        if not dead:
+            break
+        tris = [t for ti, t in enumerate(tris) if ti not in dead]
+    used = sorted({v for t in tris for v in t})
+    index = {v: i for i, v in enumerate(used)}
+    return [pos[v] for v in used], [[index[v] for v in t] for t in tris]
+
+
 def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
     """모디파이어 스택 결과 (위에서부터 차례로). modifiers: Pydantic 모델 또는 dict"""
     vs = [tuple(p) for p in verts]
@@ -189,4 +300,8 @@ def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
             vs, fs = array(vs, fs, d["count"], d["offset"])
         elif t == "solidify":
             vs, fs = solidify(vs, fs, d["thickness"])
+        elif t == "smooth":
+            vs, fs = smooth(vs, fs, d["factor"], d["repeat"])
+        elif t == "decimate":
+            vs, fs = decimate(vs, fs, d["ratio"])
     return vs, fs

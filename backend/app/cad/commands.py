@@ -719,7 +719,25 @@ class SolidifyModifier(Strict):
     thickness: Annotated[float, _num(0.01, Limits.MAX_DIMENSION)]
 
 
-Modifier = Annotated[Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier], Field(discriminator="type")]
+class SmoothModifier(Strict):
+    """형식 v31: 매끈하게 (이웃 평균 쪽으로 factor, repeat 번)"""
+
+    type: Literal["smooth"]
+    factor: Annotated[float, _num(0, 1)]
+    repeat: Annotated[int, Field(strict=True, ge=1, le=30)]
+
+
+class DecimateModifier(Strict):
+    """형식 v31: 면 줄이기 (삼각형 수 × ratio)"""
+
+    type: Literal["decimate"]
+    ratio: Annotated[float, _num(0.02, 1)]
+
+
+Modifier = Annotated[
+    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier],
+    Field(discriminator="type"),
+]
 MAX_MODIFIERS = 16
 
 
@@ -1041,7 +1059,7 @@ class DrawingSettings(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[30]
+    schemaVersion: Literal[31]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

@@ -704,6 +704,29 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'set_modifiers', target: 'p', modifiers: [{ type: 'solidify', thickness: 2 }, { type: 'array', count: 3, offset: [30, 0, 0] }] },
     ],
   },
+  // 형식 v31: 매끈하게·면 줄이기 — 프론트 규칙으로 계산한 부피, 서버 polymesh.py 가 같은 점을 만들어야 같은 부피
+  'polymesh-smooth-decimate': {
+    volume: polyVolume(
+      evaluateModifiers(primitiveMesh('cube', { size: 20 }), [
+        { type: 'subsurf', levels: 2 },
+        { type: 'decimate', ratio: 0.4 },
+        { type: 'smooth', factor: 0.5, repeat: 3 },
+      ]),
+    ),
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      {
+        type: 'set_modifiers',
+        target: 'm',
+        modifiers: [
+          { type: 'subsurf', levels: 2 },
+          { type: 'decimate', ratio: 0.4 },
+          { type: 'smooth', factor: 0.5, repeat: 3 },
+        ],
+      },
+    ],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

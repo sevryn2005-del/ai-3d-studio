@@ -41,9 +41,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 28: + 도면 계단 단면(drawing.section.steps). v27 내용은 그대로 유효
  * - 29: + 객체 PBR 재질(material: 금속성·거칠기). v28 내용은 그대로 유효
  * - 30: + 객체 텍스처 이미지(texture). v29 내용은 그대로 유효
- * 읽기는 1~30 모두, 쓰기는 항상 최신(30). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 31: + 모디파이어 매끈하게·면 줄이기. v30 내용은 그대로 유효
+ * 읽기는 1~31 모두, 쓰기는 항상 최신(31). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 30;
+export const PROJECT_FORMAT_VERSION = 31;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -282,8 +283,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 30) {
     // v29 → v30: 객체 텍스처 이미지(texture)(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 29 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 29 ? { ...model, schemaVersion: 30 } : model;
     file = { ...file, formatVersion: 30, model: migrated };
+  }
+  if ((file.formatVersion as number) < 31) {
+    // v30 → v31: 모디파이어 매끈하게·면 줄이기(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 30 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 31, model: migrated };
   }
   return file;
 }

@@ -137,7 +137,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 30, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 31, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

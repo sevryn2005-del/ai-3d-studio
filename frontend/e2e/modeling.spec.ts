@@ -65,7 +65,7 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   await expect(page.getByTestId('mode-object')).toHaveAttribute('aria-pressed', 'true');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(30);
+  expect(saved.formatVersion).toBe(31);
   expect(saved.model.workspace).toBe('modeling');
   const obj = saved.model.objects[0];
   expect(obj.kind).toBe('polymesh');
@@ -118,8 +118,39 @@ test('모디파이어: Ctrl+2 세분 표면 → 미러 추가 → 부드러운 �
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(30);
+  expect(saved.formatVersion).toBe(31);
   expect(saved.model.objects[0]).toMatchObject({ smooth: true, modifiers: [{ type: 'subsurf', levels: 2 }, { type: 'mirror', axis: 'x', merge: true }] });
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('모디파이어 (형식 v31): 세분 → 면 줄이기 0.5 → 매끈하게 → 모두 적용 → 삼각형 수 줄어듦, 실행 취소', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.getByTestId('guide-add-cube').click();
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  const vp = page.locator('.modeling-viewport canvas');
+  const box = (await vp.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Control+2'); // 96 사각형 = 192 삼각형
+  await page.getByTestId('modifier-add').selectOption('decimate');
+  await expect(page.getByTestId('modifier-1')).toContainText('면 줄이기');
+  await expect(page.getByTestId('mod-1-ratio')).toHaveValue('0.5');
+  await page.getByTestId('mod-1-ratio').fill('0.4');
+  await page.getByTestId('mod-1-ratio').press('Enter');
+  await page.getByTestId('modifier-add').selectOption('smooth');
+  await expect(page.getByTestId('modifier-2')).toContainText('매끈하게');
+  await page.getByTestId('mod-2-repeat').fill('3');
+  await page.getByTestId('mod-2-repeat').press('Enter');
+  await page.getByRole('button', { name: '모두 적용' }).click();
+  await expect(page.getByTestId('modifier-0')).toHaveCount(0);
+  const faces = async () => Number(/면\s*(\d+)/.exec((await page.getByTestId('mesh-stats').textContent()) ?? '')?.[1]);
+  await expect.poll(faces).toBeGreaterThanOrEqual(76);
+  expect(await faces()).toBeLessThanOrEqual(90);
+  await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
+  await page.keyboard.press('Control+z');
+  await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  await expect(page.getByTestId('modifier-2')).toContainText('매끈하게');
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 

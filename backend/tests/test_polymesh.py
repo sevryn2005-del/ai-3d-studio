@@ -58,3 +58,28 @@ def test_mirror_merge_closes_half_and_solidify_closes_plane():
     assert abs(_volume(v, f) - 8) < 1e-9
     v, f = evaluate([(-1, -1, 0), (1, -1, 0), (1, 1, 0), (-1, 1, 0)], [[0, 1, 2, 3]], [{"type": "solidify", "thickness": 0.5}])
     assert abs(_volume(v, f) - 2) < 1e-9
+
+
+def test_smooth_decimate_match_frontend_exactly():
+    """형식 v31: 매끈하게·면 줄이기가 프론트와 같은 점을 만든다 (공유 픽스처 부피가 소수 6자리까지 같음)"""
+    from app.cad.polymesh import evaluate
+
+    case = load_json("examples/feature-cases.json")["polymesh-smooth-decimate"]
+    obj = case["model"]["objects"][0]
+    verts, faces = evaluate(obj["polymesh"]["verts"], obj["polymesh"]["faces"], obj["modifiers"])
+    assert all(len(f) == 3 for f in faces) and len(faces) < 192
+    assert abs(_volume(verts, faces) - case["volume"]) < 1e-6
+
+
+def test_smooth_cube_and_decimate_keeps_open_border():
+    from app.cad.polymesh import evaluate
+
+    cube = [(x, y, z) for z in (-10, 10) for y in (-10, 10) for x in (-10, 10)]
+    v, _ = evaluate(cube, [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [1, 3, 7, 5], [3, 2, 6, 7], [2, 0, 4, 6]], [{"type": "smooth", "factor": 0.5, "repeat": 1}])
+    assert all(abs(abs(c) - 6.666667) < 1e-9 for p in v for c in p)
+    n = 6
+    grid = [(x * 4.0 - 12, y * 4.0 - 12, 0.0) for y in range(n + 1) for x in range(n + 1)]
+    quads = [[y * (n + 1) + x, y * (n + 1) + x + 1, (y + 1) * (n + 1) + x + 1, (y + 1) * (n + 1) + x] for y in range(n) for x in range(n)]
+    v, f = evaluate(grid, quads, [{"type": "decimate", "ratio": 0.3}])
+    border = [p for p in v if abs(abs(p[0]) - 12) < 1e-9 or abs(abs(p[1]) - 12) < 1e-9]
+    assert len(border) == 4 * n and len(f) < 2 * n * n

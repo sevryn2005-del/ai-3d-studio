@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boundaryEdgeCount, deleteElements, polyMeshError, polyVolume, primitiveMesh } from './polymesh';
-import { arrayMesh, catmullClark, estimateFaces, evaluateModifiers, mirrorMesh, solidifyMesh } from './polymeshModifiers';
+import { arrayMesh, catmullClark, decimateMesh, estimateFaces, evaluateModifiers, mirrorMesh, smoothMesh, solidifyMesh } from './polymeshModifiers';
 
 const cube = () => primitiveMesh('cube', { size: 2 });
 
@@ -44,5 +44,38 @@ describe('메시 모디파이어', () => {
     const s = solidifyMesh(primitiveMesh('plane', { size: 2 }), 0.5);
     expect(boundaryEdgeCount(s)).toBe(0);
     expect(polyVolume(s)).toBeCloseTo(2); // 2 × 2 × 0.5
+  });
+});
+
+describe('매끈하게 · 면 줄이기 (형식 v31, 서버 polymesh.py 와 같은 규칙)', () => {
+  it('매끈하게: 큐브 꼭짓점이 이웃 평균 쪽으로 — 대칭 유지, 부피 줄어듦, 세기 0 은 그대로', () => {
+    const c = primitiveMesh('cube', { size: 20 });
+    expect(smoothMesh(c, 0, 3).verts).toEqual(c.verts);
+    const s = smoothMesh(c, 0.5, 1);
+    // 꼭짓점 (±10,±10,±10) 의 이웃 셋 평균 = (±10/3, …) → 반만큼: 10 − (10 − 10/3)/2 = 6.666667
+    for (const p of s.verts) for (const x of p) expect(Math.abs(x)).toBeCloseTo(6.666667, 6);
+    expect(polyVolume(s)).toBeLessThan(polyVolume(c));
+  });
+  it('면 줄이기: 닫힌 메시는 닫힌 채로 삼각형 수가 목표 근처, 비율 1 은 삼각형만', () => {
+    const sphere = evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'subsurf', levels: 3 }]);
+    const tris = sphere.faces.length * 2;
+    const d = decimateMesh(sphere, 0.25);
+    expect(polyMeshError(d)).toBeNull();
+    expect(boundaryEdgeCount(d)).toBe(0);
+    expect(d.faces.every((f) => f.length === 3)).toBe(true);
+    expect(d.faces.length).toBeLessThanOrEqual(Math.round(tris * 0.3));
+    expect(d.faces.length).toBeGreaterThanOrEqual(Math.round(tris * 0.25));
+    expect(polyVolume(d) / polyVolume(sphere)).toBeGreaterThan(0.9);
+    expect(estimateFaces(sphere, [{ type: 'decimate', ratio: 0.25 }])).toBe(Math.ceil(tris * 0.25));
+    const full = decimateMesh(sphere, 1);
+    expect(full.faces.length).toBe(tris);
+    expect(polyVolume(full)).toBeCloseTo(polyVolume(sphere), 6);
+  });
+  it('면 줄이기: 열린 가장자리는 그대로 (격자 평면의 테두리 점이 남는다)', () => {
+    const g = primitiveMesh('grid', { size: 20, subdivisions: 8 });
+    const d = decimateMesh(g, 0.3);
+    const edge = (p: number[]) => Math.abs(Math.abs(p[0]!) - 10) < 1e-9 || Math.abs(Math.abs(p[1]!) - 10) < 1e-9;
+    expect(d.verts.filter(edge).length).toBe(g.verts.filter(edge).length);
+    expect(d.faces.length).toBeLessThan(g.faces.length * 2);
   });
 });

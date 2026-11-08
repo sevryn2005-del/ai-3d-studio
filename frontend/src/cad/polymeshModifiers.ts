@@ -6,6 +6,9 @@
  * - mirror: 객체 로컬 축 평면(원점)에 대칭 복사. merge 면 평면 위 점을 합치고 평면 위 면(안쪽 면)은 지운다
  * - array: 같은 메시를 offset 만큼씩 count 개 (상대 아님, mm)
  * - solidify: 점 법선 반대쪽으로 thickness 만큼 안쪽 면을 만들고 열린 가장자리는 옆면으로 닫는다
+ * - smooth (형식 v31): 라플라스 매끈하게 — 점마다 이웃 평균 쪽으로 factor 만큼, repeat 번 (모든 점, 블렌더 Smooth 와 같음)
+ * - decimate (형식 v31): 면 줄이기 — 삼각형으로 나눈 뒤 짧은 선부터 합쳐(가운데 점) 삼각형 수를 ratio 배로.
+ *   열린 가장자리·뒤집히는 면·꼬이는 연결(이웃 공유 ≠ 2)은 건너뛴다 → 닫힌 메시는 닫힌 채로
  */
 import { centroid, faceNormal, type PolyMesh, type V3 } from './polymesh';
 
@@ -13,13 +16,17 @@ export type Modifier =
   | { type: 'subsurf'; levels: number }
   | { type: 'mirror'; axis: 'x' | 'y' | 'z'; merge: boolean }
   | { type: 'array'; count: number; offset: V3 }
-  | { type: 'solidify'; thickness: number };
+  | { type: 'solidify'; thickness: number }
+  | { type: 'smooth'; factor: number; repeat: number }
+  | { type: 'decimate'; ratio: number };
 
 export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   subsurf: '세분 표면',
   mirror: '미러',
   array: '배열',
   solidify: '두께',
+  smooth: '매끈하게',
+  decimate: '면 줄이기',
 };
 
 /** 결과 메시가 이보다 크면 거부 (브라우저가 멈추지 않도록) */
@@ -162,6 +169,119 @@ export function solidifyMesh(m: PolyMesh, thickness: number): PolyMesh {
   return { verts: [...m.verts, ...inner].map(rv), faces };
 }
 
+/** 점마다 이웃(선으로 이어진 점, 면을 돌며 처음 만난 순서) — 서버 _neighbors 와 같은 순서 */
+function neighbors(m: PolyMesh): number[][] {
+  const out: number[][] = m.verts.map(() => []);
+  const link = (a: number, b: number) => {
+    if (!out[a]!.includes(b)) out[a]!.push(b);
+  };
+  for (const f of m.faces)
+    f.forEach((a, i) => {
+      const b = f[(i + 1) % f.length]!;
+      link(a, b);
+      link(b, a);
+    });
+  return out;
+}
+
+export function smoothMesh(m: PolyMesh, factor: number, repeat: number): PolyMesh {
+  const nb = neighbors(m);
+  let verts = m.verts;
+  for (let r = 0; r < repeat; r++) {
+    const cur = verts;
+    verts = cur.map((p, i) => {
+      const ns = nb[i]!;
+      if (!ns.length) return p;
+      let c: V3 = [0, 0, 0];
+      for (const j of ns) c = add(c, cur[j]!);
+      c = mul(c, 1 / ns.length);
+      return rv(add(p, mul([c[0] - p[0], c[1] - p[1], c[2] - p[2]], factor)));
+    });
+  }
+  return { verts, faces: m.faces };
+}
+
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** 면 줄이기 (짧은 선 합치기). 한 번 돌 때 합친 점과 그 이웃은 잠가서 같은 차례의 연결 정보가 맞게 한다 */
+export function decimateMesh(m: PolyMesh, ratio: number): PolyMesh {
+  const pos = m.verts.slice();
+  let tris: [number, number, number][] = [];
+  for (const f of m.faces) for (let i = 1; i + 1 < f.length; i++) tris.push([f[0]!, f[i]!, f[i + 1]!]);
+  const target = Math.max(4, Math.floor(tris.length * ratio + 0.5));
+  for (let pass = 0; pass < 100 && tris.length > target; pass++) {
+    const edgeCount = new Map<string, number>();
+    const nb = new Map<number, Set<number>>();
+    const vt = new Map<number, number[]>(); // 점 → 삼각형 번호
+    const edges: { a: number; b: number; l: number }[] = [];
+    tris.forEach((t, ti) => {
+      for (let k = 0; k < 3; k++) {
+        const a = t[k]!;
+        const b = t[(k + 1) % 3]!;
+        const key = ekey(a, b);
+        const c = edgeCount.get(key) ?? 0;
+        edgeCount.set(key, c + 1);
+        if (!c) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          const d = sub(pos[lo]!, pos[hi]!);
+          edges.push({ a: lo, b: hi, l: dot(d, d) });
+        }
+        for (const [x, y] of [[a, b], [b, a]] as const) {
+          if (!nb.has(x)) nb.set(x, new Set());
+          nb.get(x)!.add(y);
+        }
+        if (!vt.has(a)) vt.set(a, []);
+        vt.get(a)!.push(ti);
+      }
+    });
+    const boundary = new Set<number>();
+    for (const [key, c] of edgeCount)
+      if (c !== 2) for (const v of key.split(',')) boundary.add(Number(v));
+    edges.sort((x, y) => x.l - y.l || x.a - y.a || x.b - y.b);
+    const locked = new Set<number>();
+    const dead = new Set<number>();
+    let alive = tris.length;
+    for (const { a, b } of edges) {
+      if (alive <= target) break;
+      if (locked.has(a) || locked.has(b) || boundary.has(a) || boundary.has(b)) continue;
+      const na = nb.get(a)!;
+      const nbB = nb.get(b)!;
+      let common = 0;
+      for (const v of na) if (nbB.has(v)) common++;
+      if (common !== 2) continue;
+      const mid = rv(mul(add(pos[a]!, pos[b]!), 0.5));
+      // 뒤집힘 검사: a 나 b 하나만 가진 삼각형의 법선이 반대가 되면 건너뜀
+      let flips = false;
+      for (const ti of [...vt.get(a)!, ...vt.get(b)!]) {
+        const t = tris[ti]!;
+        if (t.includes(a) && t.includes(b)) continue;
+        const p = t.map((v) => pos[v]!) as [V3, V3, V3];
+        const q = t.map((v) => (v === a || v === b ? mid : pos[v]!)) as [V3, V3, V3];
+        if (dot(cross(sub(p[1], p[0]), sub(p[2], p[0])), cross(sub(q[1], q[0]), sub(q[2], q[0]))) <= 0) {
+          flips = true;
+          break;
+        }
+      }
+      if (flips) continue;
+      pos[a] = mid;
+      for (const ti of vt.get(b)!) {
+        const t = tris[ti]!;
+        if (t.includes(a)) dead.add(ti);
+        else tris[ti] = t.map((v) => (v === b ? a : v)) as [number, number, number];
+      }
+      alive -= 2;
+      for (const v of [a, b, ...na, ...nbB]) locked.add(v);
+    }
+    if (!dead.size) break;
+    tris = tris.filter((_, ti) => !dead.has(ti));
+  }
+  const used = [...new Set(tris.flat())].sort((x, y) => x - y);
+  const map = new Map(used.map((v, i) => [v, i]));
+  return { verts: used.map((v) => pos[v]!), faces: tris.map((t) => t.map((v) => map.get(v)!)) };
+}
+
 export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
   switch (mod.type) {
     case 'subsurf': {
@@ -175,6 +295,10 @@ export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
       return arrayMesh(m, mod.count, mod.offset);
     case 'solidify':
       return solidifyMesh(m, mod.thickness);
+    case 'smooth':
+      return smoothMesh(m, mod.factor, mod.repeat);
+    case 'decimate':
+      return decimateMesh(m, mod.ratio);
   }
 }
 
@@ -194,6 +318,11 @@ export function estimateFaces(m: PolyMesh, mods: readonly Modifier[]): number {
     } else if (mod.type === 'array') {
       faces *= mod.count;
       corners *= mod.count;
+    } else if (mod.type === 'smooth') {
+      // 그대로
+    } else if (mod.type === 'decimate') {
+      faces = Math.max(4, Math.ceil((corners - 2 * faces) * mod.ratio));
+      corners = faces * 3;
     } else {
       faces = faces * 2 + corners;
       corners = corners * 2 + corners * 4;
