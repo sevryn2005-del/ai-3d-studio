@@ -57,6 +57,7 @@ export function patternCopyCount(p: PatternDef): number {
   if (p.type === 'scale') return 1;
   if (p.type === 'mirror') return 2;
   if (p.type === 'circular' || p.type === 'curve') return p.count;
+  if (p.type === 'split') return 1;
   if (p.type === 'sketch') return 0; // 원 개수는 스케치에 따라 (검사는 patternError 가 스케치로)
   return p.count * (p.axis2 ? (p.count2 ?? 1) : 1);
 }
@@ -118,7 +119,20 @@ export function sketchPatternInput(p: Extract<PatternDef, { type: 'sketch' }>, s
   return { centers, plane: planeMatrix(sk.plane) };
 }
 
+/** 평면 자르기: 평면 법선 축 (XY → z …) */
+export const SPLIT_AXIS = { XY: 2, XZ: 1, YZ: 0 } as const;
+/** 평면 자르기에서 버리는 쪽 큰 상자 [x0, y0, z0, w, d, h] (패턴 좌표계) — 서버 features.py split_cut_box 와 같은 값 */
+export function splitCutBox(p: Extract<PatternDef, { type: 'split' }>): [number, number, number, number, number, number] {
+  const L = LIMITS.maxCoordinate * 4;
+  const lo = [-L / 2, -L / 2, -L / 2];
+  const size = [L, L, L];
+  const a = SPLIT_AXIS[p.plane];
+  lo[a] = p.keep === 'positive' ? p.offset - L : p.offset;
+  return [lo[0]!, lo[1]!, lo[2]!, size[0]!, size[1]!, size[2]!];
+}
+
 export function patternMatrices(p: PatternDef, sketches: Map<ObjectId, Sketch> = new Map()): Matrix4[] {
+  if (p.type === 'split') return [new Matrix4()]; // 자르기는 사본이 아니다 (엔진이 원본을 자른다)
   if (p.type === 'sketch') {
     const input = sketchPatternInput(p, sketches);
     if (typeof input === 'string') return [new Matrix4()];

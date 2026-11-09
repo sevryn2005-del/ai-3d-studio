@@ -450,6 +450,17 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     count: patternCount,
     align: z.boolean(),
   }),
+  /**
+   * 평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면(XY·XZ·YZ, 법선 방향 offset)으로 자르고 keep 쪽만 남긴다.
+   * 솔리드웍스 Split / 블렌더 Bisect. 두 조각 = 같은 원본을 복제해 반대쪽을 남긴 객체 둘
+   */
+  z.strictObject({
+    type: z.literal('split'),
+    source: ObjectIdSchema,
+    plane: z.enum(['XY', 'XZ', 'YZ']),
+    offset: z.number().min(-LIMITS.maxCoordinate).max(LIMITS.maxCoordinate),
+    keep: z.enum(['positive', 'negative']),
+  }),
   /** 스케치 위치 (형식 v36): 스케치의 원 중심마다 (원본 = 첫 원 중심 기준, 요소 순서). 솔리드웍스 Sketch Driven Pattern */
   z.strictObject({ type: z.literal('sketch'), source: ObjectIdSchema, sketch: ObjectIdSchema }),
   z.strictObject({
@@ -770,7 +781,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 36;
+export const MODEL_SCHEMA_VERSION = 37;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

@@ -21,7 +21,7 @@ import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { ringSolid } from './ringSolid';
 import { Vector3, type Matrix4 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
-import { isSuppressed, patternMatrices } from '../../../cad/features';
+import { isSuppressed, patternMatrices, SPLIT_AXIS } from '../../../cad/features';
 import type { CrossSection, ManifoldToplevel, Manifold } from 'manifold-3d';
 
 export const DISPLAY_TOLERANCE = 0.05; // mm (서버 DISPLAY_LINEAR_TOLERANCE 와 같음)
@@ -70,7 +70,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 36, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 37, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -185,7 +185,7 @@ export function localManifold(
         if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
       } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 36, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 37, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -310,6 +310,15 @@ export function localManifold(
       const placedSrc = scope.keep(
         localManifold(wasm, src, index, tol, scope, sketches).transform(toMatrix(src.transform).elements as unknown as Parameters<Manifold['transform']>[0]),
       );
+      if (obj.pattern.type === 'split') {
+        const n = [0, 0, 0] as [number, number, number];
+        const a = SPLIT_AXIS[obj.pattern.plane];
+        const sign = obj.pattern.keep === 'positive' ? 1 : -1;
+        n[a] = sign;
+        const kept = scope.keep(placedSrc.trimByPlane(n, sign * obj.pattern.offset));
+        if (kept.isEmpty()) throw new GeometryError(`'${obj.name}': 자른 결과가 비어 있습니다 (평면 위치·남길 쪽을 확인하세요)`);
+        return kept;
+      }
       const copies = patternMatrices(obj.pattern, sketches).map((m) => scope.keep(placedSrc.transform(m.elements as unknown as Parameters<Manifold['transform']>[0])));
       const result = scope.keep(Manifold.union(copies));
       if (result.status() !== 'NoError') throw new GeometryError(`'${obj.name}': 패턴 결과 형상이 올바르지 않습니다`);

@@ -6463,6 +6463,47 @@
                             "properties": {
                               "type": {
                                 "type": "string",
+                                "const": "split"
+                              },
+                              "source": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                              },
+                              "plane": {
+                                "type": "string",
+                                "enum": [
+                                  "XY",
+                                  "XZ",
+                                  "YZ"
+                                ]
+                              },
+                              "offset": {
+                                "type": "number",
+                                "minimum": -10000,
+                                "maximum": 10000
+                              },
+                              "keep": {
+                                "type": "string",
+                                "enum": [
+                                  "positive",
+                                  "negative"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "source",
+                              "plane",
+                              "offset",
+                              "keep"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
                                 "const": "sketch"
                               },
                               "source": {
@@ -9302,6 +9343,47 @@
               "properties": {
                 "type": {
                   "type": "string",
+                  "const": "split"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "plane": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                },
+                "keep": {
+                  "type": "string",
+                  "enum": [
+                    "positive",
+                    "negative"
+                  ]
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "plane",
+                "offset",
+                "keep"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
                   "const": "sketch"
                 },
                 "source": {
@@ -9542,6 +9624,47 @@
                 "path",
                 "count",
                 "align"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "split"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "plane": {
+                  "type": "string",
+                  "enum": [
+                    "XY",
+                    "XZ",
+                    "YZ"
+                  ]
+                },
+                "offset": {
+                  "type": "number",
+                  "minimum": -10000,
+                  "maximum": 10000
+                },
+                "keep": {
+                  "type": "string",
+                  "enum": [
+                    "positive",
+                    "negative"
+                  ]
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "plane",
+                "offset",
+                "keep"
               ],
               "additionalProperties": false
             },

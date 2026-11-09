@@ -51,7 +51,7 @@ test('시작 화면 → 설계 모드: 빈 부품에서 스케치 → 돌출, �
   // 4. 저장 → 파일에 모드가 남는다
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(36);
+  expect(saved.formatVersion).toBe(37);
   expect(saved.model.workspace).toBe('design');
 
   // 5. 새로 고침 → 시작 화면, 자동 저장본을 "이어서 작업" 으로

@@ -86,7 +86,7 @@ describe('형식 v1 → v2 마이그레이션 경계', () => {
     expect(parseProject(bad).ok).toBe(false);
   });
   it('v2 파일인데 스케치 참조가 깨졌으면 거부 (현재 작업 유지)', () => {
-    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 36, units: 'mm', sketches: [], objects: [] }));
+    const v2 = JSON.parse(serializeProject('판', { schemaVersion: 37, units: 'mm', sketches: [], objects: [] }));
     v2.model.objects.push({
       id: 'plate', name: '판', kind: 'extrude', params: { distance: 4 }, extrude: { sketch: 'sk1', profile: 'r1' },
       transform: { position: [0, 0, 0], rotation: [0, 0, 0] },

@@ -109,6 +109,7 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
         p.type === 'scale' ? `크기 조정 ×(${[p.x, p.y, p.z].map(formatMm).join(', ')})`
         : p.type === 'mirror' ? `대칭 복사 (${p.plane} 평면${p.offset ? ` ${formatMm(p.offset)}mm` : ''})`
         : p.type === 'circular' ? `원형 패턴 ${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`
+        : p.type === 'split' ? `평면 자르기 (${p.plane} ${formatMm(p.offset)}mm, ${p.keep === 'positive' ? '+' : '−'} 쪽 남김)`
         : p.type === 'sketch' ? `스케치 위치 패턴 (${sketchName(p.sketch)} 원 중심마다)`
         : p.type === 'curve' ? `곡선 패턴 (${sketchName(p.sketch)} ${p.path}) ${p.count}개${p.align ? ', 접선 따라 돌림' : ''}`
         : `선형 패턴 ${p.axis.toUpperCase()} ${p.count}개 × ${formatMm(p.spacing)}mm${p.axis2 ? `, ${p.axis2.toUpperCase()} ${p.count2}개 × ${formatMm(p.spacing2 ?? 0)}mm` : ''}`;

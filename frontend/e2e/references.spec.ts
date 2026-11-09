@@ -59,7 +59,7 @@ test('참조 형상: 세 점 기준 평면 → 스케치, 좌표로 기준 축, 
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(36);
+  expect(saved.formatVersion).toBe(37);
   expect(saved.model.references.map((r: { id: string; type: string }) => [r.id, r.type])).toEqual([
     ['ref_plane_1', 'plane'],
     ['ref_axis_1', 'axis'],
@@ -146,3 +146,31 @@ test('스케치 위치 패턴 (형식 v36): 원 셋 → 원 중심마다 큐브,
   await page.evaluate(() => window.__AI3D_DEV__!.dispatch({ type: 'add_circle', sketch: 'ps', id: 'c4', center: [-40, 0], diameter: 3 }));
   await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-50, -10, 0]);
 });
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`평면 자르기·두 조각 (형식 v37, ${engine === 'server' ? 'CadQuery 서버' : '브라우저'} 엔진)`, async ({ page }) => {
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    const src = async () => await page.evaluate(() => window.__AI3D_DEV__!.meshSources());
+    await expect.poll(async () => (await src()).box_1?.source, { timeout: 20_000 }).toBe(engine);
+    await page.locator('[data-object-id="box_1"]').click();
+    await page.getByTestId('cmd-split').click();
+    // 큐브 20 (z 0..20) 을 높이 가운데 z = 10 에서 잘라 위쪽
+    await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-10, -10, 10]);
+    await expect(page.getByTestId('split-offset')).toHaveValue('10');
+    await page.getByTestId('split-offset').fill('5');
+    await page.getByTestId('split-offset').press('Enter');
+    await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-10, -10, 5]);
+    // 두 조각: 반대쪽(아래 0..5)을 남긴 객체가 하나 더
+    await page.getByTestId('split-both').click();
+    await expect.poll(async () => (await src()).pattern_2?.max, { timeout: 20_000 }).toEqual([10, 10, 5]);
+    expect((await src()).pattern_2!.min).toEqual([-10, -10, 0]);
+    await expect(page.locator('.object-list')).toContainText('(반대쪽)');
+    await page.keyboard.press('Control+z'); // 두 조각 만들기는 실행 취소 1번
+    await expect.poll(async () => Object.keys(await src())).not.toContain('pattern_2');
+    await page.locator('[data-object-id="pattern_1"]').click();
+    await page.getByTestId('split-keep').selectOption('negative');
+    await expect.poll(async () => (await src()).pattern_1?.max, { timeout: 20_000 }).toEqual([10, 10, 5]);
+  });
+}

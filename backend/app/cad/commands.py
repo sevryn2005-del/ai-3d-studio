@@ -883,7 +883,20 @@ class SketchPattern(Strict):
     sketch: ObjectId
 
 
-PatternDef = Annotated[Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
+class SplitPattern(Strict):
+    """평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면으로 잘라 keep 쪽만 남김"""
+
+    type: Literal["split"]
+    source: ObjectId
+    plane: Literal["XY", "XZ", "YZ"]
+    offset: Coordinate
+    keep: Literal["positive", "negative"]
+
+
+PatternDef = Annotated[
+    Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, SplitPattern, MirrorPattern, ScalePattern],
+    Field(discriminator="type"),
+]
 
 
 class PatternObject(_ObjectBase):
@@ -1137,7 +1150,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[36]
+    schemaVersion: Literal[37]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

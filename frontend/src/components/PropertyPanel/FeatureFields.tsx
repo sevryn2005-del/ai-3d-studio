@@ -5,6 +5,7 @@ import { MaterialFields } from './MaterialFields';
  */
 import { alignPatternToAxisCommands } from '../../cad/references';
 import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
+import { splitOtherSide } from '../../features/selection/featureFlow';
 import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
@@ -158,6 +159,25 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
+        </>
+      ) : p.type === 'split' ? (
+        <>
+          <AxisSelect label="자르는 평면" value={p.plane} options={['XY', 'XZ', 'YZ']} onChange={(v) => set({ plane: v as 'XY' })} />
+          <NumberField label="평면 위치 (법선 방향)" unit="mm" value={p.offset} onCommit={(v) => set({ offset: v })} testId="split-offset" />
+          <label className="drawing-field">
+            <span>남길 쪽</span>
+            <select value={p.keep} onChange={(e) => set({ keep: e.target.value as 'positive' })} data-testid="split-keep">
+              <option value="positive">+ 쪽 ({p.plane === 'XY' ? '위' : p.plane === 'XZ' ? '+Y' : '+X'})</option>
+              <option value="negative">− 쪽 ({p.plane === 'XY' ? '아래' : p.plane === 'XZ' ? '−Y' : '−X'})</option>
+            </select>
+          </label>
+          <button
+            onClick={() => splitOtherSide(object)}
+            title="같은 원본을 복제해 반대쪽을 남긴 객체를 하나 더 만듭니다 (두 조각 — 실행 취소 1번)"
+            data-testid="split-both"
+          >
+            반대쪽도 별도 객체로 (두 조각)
+          </button>
         </>
       ) : p.type === 'sketch' ? (
         <>

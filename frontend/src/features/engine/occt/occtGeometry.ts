@@ -24,7 +24,7 @@ import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { triangulate } from '../../../cad/polymesh';
 import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { toMatrix } from '../../../cad/transformMath';
-import { isSuppressed, patternMatrices } from '../../../cad/features';
+import { isSuppressed, patternMatrices, splitCutBox } from '../../../cad/features';
 import { DISPLAY_TOLERANCE, EXPORT_TOLERANCE, GeometryError, type PlainMesh } from '../browser/geometry';
 import type { TopoEdge, TopoFace, Topology } from '../types';
 
@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 36, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 37, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -865,6 +865,11 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       return draft(c, placed(c, obj.draft.source), obj.draft.angle, obj.name);
     case 'pattern': {
       const src = placed(c, obj.pattern.source);
+      if (obj.pattern.type === 'split') {
+        const kept = cut(c, src, box(c, ...splitCutBox(obj.pattern)));
+        if (!isValid(c, kept) || Math.abs(volumeOf(c.oc, kept)) < 1e-9) throw new GeometryError(`'${obj.name}': 자른 결과가 비어 있습니다 (평면 위치·남길 쪽을 확인하세요)`);
+        return kept;
+      }
       const mats = patternMatrices(obj.pattern, c.sketches);
       let result = transformed(c, src, mats[0]!, obj.name);
       for (const m of mats.slice(1)) result = fuse(c, result, transformed(c, src, m, obj.name));

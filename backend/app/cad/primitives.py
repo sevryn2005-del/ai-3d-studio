@@ -72,7 +72,7 @@ from app.cad.commands import (
     sketch_feature_ref,
 )
 from app.cad.curves import corner_segments, sweep_error
-from app.cad.features import is_suppressed, pattern_matrices
+from app.cad.features import is_suppressed, pattern_matrices, split_cut_box
 from app.cad.frames import extrude_local_matrix, sketch_local_matrix
 from app.cad.mesh_import import mesh_solid, polymesh_solid
 from app.cad.precise import draft, edge_feature, read_step
@@ -485,6 +485,15 @@ def pattern_solid(obj: PatternObject, src: cq.Shape, sketches: dict[str, Sketch]
         if not result.isValid():
             raise GeometryError(f"'{obj.name}': 크기 조정 결과 형상이 올바르지 않습니다")
         return result
+    if p.type == "split":
+        x0, y0, z0, w, d, h = split_cut_box(p)
+        cutter = cq.Solid.makeBox(w, d, h, cq.Vector(x0, y0, z0))
+        kept = src.cut(cutter)
+        if not kept.Solids() or kept.Volume() < 1e-9:
+            raise GeometryError(f"'{obj.name}': 자른 결과가 비어 있습니다 (평면 위치·남길 쪽을 확인하세요)")
+        if not kept.isValid():
+            raise GeometryError(f"'{obj.name}': 자른 결과 형상이 올바르지 않습니다")
+        return kept
     if p.type == "mirror":
         normal = {"XY": (0, 0, 1), "XZ": (0, 1, 0), "YZ": (1, 0, 0)}[p.plane]
         copies = [src.mirror(p.plane, cq.Vector(*normal) * p.offset)]

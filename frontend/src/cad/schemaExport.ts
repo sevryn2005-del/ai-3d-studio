@@ -775,6 +775,18 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'pattern', id: 'sp', pattern: { type: 'sketch', source: 'b', sketch: 'ps' } },
     ],
   },
+  // 형식 v37: 평면 자르기 — 원통 r10 h20 을 z = 5 에서 잘라 위쪽 (높이 15), 상자 20 을 YZ x = 4 에서 잘라 −X 쪽 (폭 14)
+  'pattern-split': {
+    volume: Math.PI * 100 * 15 + 14 * 20 * 20,
+    roots: 2,
+    commands: [
+      { type: 'create_cylinder', id: 'c', radius: 10, height: 20 },
+      { type: 'pattern', id: 's1', pattern: { type: 'split', source: 'c', plane: 'XY', offset: 5, keep: 'positive' } },
+      box('b', 20, 20, 20, [60, 0, 0]),
+      { type: 'pattern', id: 's2', pattern: { type: 'split', source: 'b', plane: 'YZ', offset: 64, keep: 'negative' } },
+    ],
+    bbox: [[-10, -10, 0], [64, 10, 20]],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

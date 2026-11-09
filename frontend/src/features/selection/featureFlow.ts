@@ -3,8 +3,8 @@
  * 모든 변경은 명령(submitNow)으로만 — 미리보기·취소는 편집기 상태(editorStore)만 바꾼다.
  */
 import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
-import type { CadCommand, StandardPlane } from '../../cad/commandTypes';
-import { nextId } from '../../cad/commandExecutor';
+import type { CadCommand, CadObject, StandardPlane } from '../../cad/commandTypes';
+import { executeBatch, nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
 import { resolveProfile, revolveProfileError } from '../../cad/sketch';
 import { facesOf, objectWorldMatrix } from '../../cad/sketchPlane';
@@ -219,6 +219,32 @@ export function quickSketchPattern() {
     return;
   }
   scene.submitNow({ type: 'pattern', pattern: { type: 'sketch', source: obj.id, sketch: first.id } });
+}
+
+/** 평면 자르기: 선택한 객체를 높이 가운데의 수평면(XY)으로 잘라 위쪽을 남긴다 (속성에서 평면·위치·남길 쪽) */
+export function quickSplit() {
+  const s = selectedRoot('평면 자르기');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const offset = Math.round((obj.transform.position[2] + Math.abs(localSize(obj, model)[2]) / 2) * 1000) / 1000;
+  scene.submitNow({ type: 'pattern', pattern: { type: 'split', source: obj.id, plane: 'XY', offset, keep: 'positive' } });
+}
+
+/** 두 조각: 자르기 객체를 제자리 복제 → 복제본은 반대쪽을 남긴다 (한 번에, 실행 취소 1번) */
+export function splitOtherSide(obj: CadObject) {
+  if (obj.kind !== 'pattern' || obj.pattern.type !== 'split') return;
+  const scene = useSceneStore.getState();
+  const model = selectModel(scene);
+  const copyId = nextId(model, 'pattern');
+  const dup = [
+    { type: 'duplicate_object', target: obj.id, newId: copyId, offset: [0, 0, 0] },
+    { type: 'rename_object', target: copyId, name: `${obj.name} (반대쪽)` },
+  ];
+  // 복제본의 원본 ID 는 새로 붙는다 → 시험 삼아 실행해 복제본 정의를 읽고, 남길 쪽만 바꾼 명령을 덧붙인다
+  const trial = executeBatch(model, dup);
+  const copy = trial.ok ? trial.model.objects.find((o) => o.id === copyId) : undefined;
+  if (!trial.ok || copy?.kind !== 'pattern' || copy.pattern.type !== 'split') return scene.reportError(trial.ok ? '두 조각으로 나누지 못했습니다' : trial.error);
+  scene.dispatchBatch([...dup, { type: 'set_pattern', target: copyId, pattern: { ...copy.pattern, keep: copy.pattern.keep === 'positive' ? 'negative' : 'positive' } }]);
 }
 
 /** 구멍: 첫 면(윗면) 중심에 지름 5mm, 객체 높이만큼 (관통) */

@@ -42,6 +42,8 @@ def pattern_copy_count(p) -> int:
         return 2
     if p.type in ("circular", "curve"):
         return p.count
+    if p.type == "split":
+        return 1
     if p.type == "sketch":
         return 0  # 원 개수는 스케치에 따라 (검사는 pattern_error 가 스케치로)
     return p.count * ((p.count2 or 1) if p.axis2 else 1)
@@ -136,8 +138,22 @@ def sketch_pattern_input(p, sketches: dict):
     return centers, plane_matrix(sk.plane)
 
 
+SPLIT_AXIS = {"XY": 2, "XZ": 1, "YZ": 0}
+
+
+def split_cut_box(p) -> tuple[float, float, float, float, float, float]:
+    """평면 자르기에서 버리는 쪽 큰 상자 (x0, y0, z0, w, d, h) — 프론트 splitCutBox 와 같은 값"""
+    L = Limits.MAX_COORDINATE * 4
+    lo = [-L / 2, -L / 2, -L / 2]
+    a = SPLIT_AXIS[p.plane]
+    lo[a] = p.offset - L if p.keep == "positive" else p.offset
+    return lo[0], lo[1], lo[2], L, L, L
+
+
 def pattern_matrices(p, sketches: dict | None = None) -> list[np.ndarray]:
     """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본). 크기 조정은 배율 행렬 하나."""
+    if p.type == "split":
+        return [np.eye(4)]  # 자르기는 사본이 아니다 (pattern_solid 가 원본을 자른다)
     if p.type == "sketch":
         inp = sketch_pattern_input(p, sketches or {})
         if isinstance(inp, str):
