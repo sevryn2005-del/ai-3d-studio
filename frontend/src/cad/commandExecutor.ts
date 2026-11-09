@@ -14,6 +14,7 @@
  * - 자식의 translate/set_transform 은 부모 좌표계 기준이다.
  * - 불리언을 삭제하면 하위 객체 전체가 삭제된다. 자식만 단독 삭제하는 것은 거부한다.
  */
+import { MAX_REFERENCES, nextReference, normalizeReference, referenceIdTaken } from './references';
 import {
   CadCommandSchema,
   PARAMS_SCHEMAS,
@@ -407,6 +408,32 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       }
       const solved = solveMates({ ...model, mates: mates.map((x) => (x.id === m.id ? next : x)) });
       return solved.ok ? done(model, solved.model, cmd, null) : fail(solved.error);
+    }
+
+    case 'add_reference': {
+      const refs = model.references ?? [];
+      if (refs.length >= MAX_REFERENCES) return fail(`참조 형상은 최대 ${MAX_REFERENCES}개까지 가능합니다`);
+      const auto = nextReference(model, cmd.reference.type);
+      const id = cmd.reference.id ?? auto.id;
+      if (referenceIdTaken(model, id)) return fail(`이미 있는 ID입니다: ${id}`);
+      const r = normalizeReference({ ...cmd.reference, id, name: cmd.reference.name ?? auto.name });
+      if (typeof r === 'string') return fail(r);
+      return done(model, { ...model, references: [...refs, r] }, cmd, null);
+    }
+
+    case 'delete_reference': {
+      const refs = model.references ?? [];
+      if (!refs.some((r) => r.id === cmd.target)) return fail(`존재하지 않는 참조 형상입니다: ${cmd.target}`);
+      const rest = refs.filter((r) => r.id !== cmd.target);
+      const { references: _r, ...base } = model;
+      void _r;
+      return done(model, rest.length ? { ...base, references: rest } : base, cmd, null);
+    }
+
+    case 'rename_reference': {
+      const refs = model.references ?? [];
+      if (!refs.some((r) => r.id === cmd.target)) return fail(`존재하지 않는 참조 형상입니다: ${cmd.target}`);
+      return done(model, { ...model, references: refs.map((r) => (r.id === cmd.target ? { ...r, name: cmd.name } : r)) }, cmd, null);
     }
 
     case 'delete_mate': {
@@ -823,7 +850,7 @@ function buildObject(
 
 /** 객체·스케치 ID 는 한 이름 공간을 쓴다 (AI·사용자가 ID 하나로 무엇을 가리키는지 분명하도록) */
 export function idTaken(model: ModelDefinition, id: ObjectId): boolean {
-  return model.objects.some((o) => o.id === id) || model.sketches.some((s) => s.id === id);
+  return model.objects.some((o) => o.id === id) || model.sketches.some((s) => s.id === id) || (model.references ?? []).some((r) => r.id === id);
 }
 
 export function findObject(model: ModelDefinition, id: ObjectId): CadObject | undefined {

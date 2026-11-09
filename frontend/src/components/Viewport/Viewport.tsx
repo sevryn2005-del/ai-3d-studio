@@ -26,6 +26,7 @@ import { DrawingPanel } from '../Drawing/DrawingPanel';
 import { PickBar, PickOverlay } from './PickOverlay';
 import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
+import { ReferenceGeometry, ReferencePanel } from './ReferenceGeometry';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel, DraftPanel, ThicknessPanel } from './ViewTools';
 import { startSketch } from '../../features/selection/featureFlow';
 
@@ -91,6 +92,7 @@ export function Viewport() {
         <PendingPreview />
         <SectionClip />
         <MeasureOverlay />
+        <ReferenceGeometry />
         <PickOverlay />
         <ScreenshotTaker />
         {!drawTool && <SelectionGizmo activeRef={gizmoActiveRef} />}
@@ -110,6 +112,7 @@ export function Viewport() {
       <ConfirmationCorner />
       <SectionPanel />
       <DraftPanel />
+      <ReferencePanel />
       <ThicknessPanel />
       <MeasureReadout />
       <MassPanel />

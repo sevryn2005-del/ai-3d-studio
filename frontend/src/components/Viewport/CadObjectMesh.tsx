@@ -16,6 +16,7 @@ import { geometryKey } from '../../features/backend/renderMesh';
 import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
 import { boxUvGeometry } from '../../cad/textureMap';
+import { REF_POINTS } from '../../cad/references';
 import { draftGeometry, localPull, useDraftStats } from '../../cad/draftAnalysis';
 import { thicknessGeometry, useThicknessStats } from '../../cad/thicknessAnalysis';
 import { useImageTexture } from './useImageTexture';
@@ -34,7 +35,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 33, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 34, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -254,6 +255,11 @@ function ObjectMesh({
         e.stopPropagation();
         if (ed.measuring) {
           ed.addMeasurePoint(e.point.toArray() as [number, number, number]);
+          return;
+        }
+        if (ed.refPick) {
+          // 참조 형상 만들기: 모델 위 점 (소수 3자리)
+          ed.addRefPoint(e.point.toArray().map((v) => Math.round(v * 1000) / 1000 + 0) as [number, number, number], REF_POINTS[ed.refPick.type]);
           return;
         }
         select(selectId);

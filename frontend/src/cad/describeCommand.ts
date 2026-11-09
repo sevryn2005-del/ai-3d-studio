@@ -1,4 +1,5 @@
 /** 명령을 사람이 읽을 수 있는 한국어 한 줄로 (AI 가 무엇을 바꿨는지 채팅에 표시) */
+import { REF_LABEL } from './references';
 import { CONSTRAINT_LABEL } from './solver';
 import type { CadCommand, ModelDefinition } from './commandTypes';
 import { OPERATION_INFO } from './objectKinds';
@@ -132,6 +133,12 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 변경${cmd.value !== undefined ? ` → ${formatMm(cmd.value)}` : ''}${cmd.flip !== undefined ? ' (방향 뒤집기)' : ''}`;
     case 'delete_mate':
       return `메이트 ${cmd.mate} 삭제`;
+    case 'add_reference':
+      return `${REF_LABEL[cmd.reference.type]} 추가${cmd.reference.name ? ` (${cmd.reference.name})` : ''}`;
+    case 'delete_reference':
+      return `참조 형상 ${cmd.target} 삭제`;
+    case 'rename_reference':
+      return `참조 형상 ${cmd.target} 이름 → ${cmd.name}`;
     case 'add_ellipse':
       return `${sketchName(cmd.sketch)}에 타원 ${formatMm(cmd.width)}×${formatMm(cmd.height)}mm`;
     case 'set_spline':

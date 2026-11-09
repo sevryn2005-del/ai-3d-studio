@@ -161,8 +161,22 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
         errors.append(f"commands[{i}].{role}: object '{oid}' does not exist (existing: {', '.join(sorted(kinds)) or 'none'})")
         return False
 
+    ref_ids = {r.id for r in (model.references or [])}
     for i, c in enumerate(commands):
         t = c["type"]
+        if t == "add_reference":
+            rid = c["reference"].get("id")
+            if rid is not None:
+                if rid in ref_ids or id_used(rid):
+                    errors.append(f"commands[{i}].reference.id: id '{rid}' is already used")
+                ref_ids.add(rid)
+            continue
+        if t in ("delete_reference", "rename_reference"):
+            if c["target"] not in ref_ids:
+                errors.append(f"commands[{i}].target: no reference '{c['target']}' (existing: {', '.join(sorted(ref_ids)) or 'none'})")
+            elif t == "delete_reference":
+                ref_ids.discard(c["target"])
+            continue
         if t in _CREATE_KIND:
             oid = c.get("id")
             if oid is None:

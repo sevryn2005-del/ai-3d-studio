@@ -16,7 +16,7 @@ from app.main import create_app
 from .fake_llm import ScriptedClient, response, tool
 
 KEY = "sk-ant-api03-TESTKEY-abcdef1234"
-MODEL = {"schemaVersion": 33, "units": "mm", "sketches": [], "objects": [
+MODEL = {"schemaVersion": 34, "units": "mm", "sketches": [], "objects": [
     {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
      "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}}]}
 SET_HEIGHT = {"message": "높이를 50mm로 바꿨습니다.", "commands": [{"type": "set_params", "target": "box_1", "params": {"height": 50}}]}
@@ -147,3 +147,16 @@ def test_other_websites_cannot_spend_the_users_key(env):
     assert c.post("/api/ai/chat", json=body, headers={"origin": "https://evil.example"}).status_code == 403
     assert c.post("/api/ai/chat", content=json.dumps(body), headers={"content-type": "text/plain"}).status_code == 415
     assert calls["keys"] == []
+
+
+def test_reference_geometry_schema_and_validator(default_model):
+    """형식 v34: 참조 형상이 있는 모델·명령을 서버도 받아들이고, AI 검증은 없는 참조를 막는다"""
+    from app.ai.validator import validate_commands
+    from app.cad.commands import ModelDefinition
+
+    default_model["references"] = [{"id": "ref_plane_1", "name": "기준 평면 1", "type": "plane", "origin": [0, 0, 10], "normal": [0, 0, 1], "xDir": [1, 0, 0]}]
+    model = ModelDefinition.model_validate(default_model)
+    cmds, errors = validate_commands([{"type": "add_reference", "reference": {"type": "axis", "origin": [0, 0, 0], "direction": [0, 0, 1]}}, {"type": "rename_reference", "target": "ref_plane_1", "name": "윗판"}], model)
+    assert errors == [] and len(cmds) == 2
+    _, errors = validate_commands([{"type": "delete_reference", "target": "ref_axis_9"}], model)
+    assert any("no reference 'ref_axis_9'" in e for e in errors)

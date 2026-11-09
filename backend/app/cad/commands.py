@@ -1076,8 +1076,47 @@ class DrawingSettings(Strict):
     aux: Annotated[list[DrawingAux] | None, Field(max_length=MAX_DRAWING_AUX, exclude_if=lambda v: v is None)] = None
 
 
+class PlaneRef(Strict):
+    """형식 v34 참조 형상: 기준 평면 (원점·법선·x 방향)"""
+
+    id: ObjectId
+    name: Name
+    type: Literal["plane"]
+    origin: Vec3
+    normal: Vec3
+    xDir: Vec3
+
+
+class AxisRef(Strict):
+    id: ObjectId
+    name: Name
+    type: Literal["axis"]
+    origin: Vec3
+    direction: Vec3
+
+
+class PointRef(Strict):
+    id: ObjectId
+    name: Name
+    type: Literal["point"]
+    position: Vec3
+
+
+class CsysRef(Strict):
+    id: ObjectId
+    name: Name
+    type: Literal["csys"]
+    origin: Vec3
+    xDir: Vec3
+    zDir: Vec3
+
+
+Reference = Annotated[Union[PlaneRef, AxisRef, PointRef, CsysRef], Field(discriminator="type")]
+MAX_REFERENCES = 100
+
+
 class ModelDefinition(Strict):
-    schemaVersion: Literal[33]
+    schemaVersion: Literal[34]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1086,6 +1125,8 @@ class ModelDefinition(Strict):
     drawingSheets: Annotated[list[DrawingSettings] | None, Field(max_length=9, exclude_if=lambda v: v is None)] = None
     # 작업 모드 (형식 v19): design = 설계(스케치 → 피처), modeling = 3D 모델링(메시 편집). 없으면 예전 통합 화면
     workspace: Annotated[Literal["design", "modeling"] | None, Field(exclude_if=lambda v: v is None)] = None
+    # 참조 형상 (형식 v34): 형상을 만들지 않는 기준 — 엔진은 쓰지 않는다
+    references: Annotated[list[Reference] | None, Field(max_length=MAX_REFERENCES, exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------
@@ -1274,6 +1315,54 @@ class SetMate(Strict):
 class DeleteMate(Strict):
     type: Literal["delete_mate"]
     mate: ObjectId
+
+
+class _RefBody(Strict):
+    id: ObjectId | None = None
+    name: Name | None = None
+
+
+class PlaneRefBody(_RefBody):
+    type: Literal["plane"]
+    origin: Vec3
+    normal: Vec3
+    xDir: Vec3
+
+
+class AxisRefBody(_RefBody):
+    type: Literal["axis"]
+    origin: Vec3
+    direction: Vec3
+
+
+class PointRefBody(_RefBody):
+    type: Literal["point"]
+    position: Vec3
+
+
+class CsysRefBody(_RefBody):
+    type: Literal["csys"]
+    origin: Vec3
+    xDir: Vec3
+    zDir: Vec3
+
+
+class AddReference(Strict):
+    """형식 v34: 참조 형상 추가"""
+
+    type: Literal["add_reference"]
+    reference: Annotated[Union[PlaneRefBody, AxisRefBody, PointRefBody, CsysRefBody], Field(discriminator="type")]
+
+
+class DeleteReference(Strict):
+    type: Literal["delete_reference"]
+    target: ObjectId
+
+
+class RenameReference(Strict):
+    type: Literal["rename_reference"]
+    target: ObjectId
+    name: Name
 
 
 MAX_EXTRA_SHEETS = 9
@@ -1823,6 +1912,9 @@ CadCommand = Annotated[
         AddMate,
         SetMate,
         DeleteMate,
+        AddReference,
+        DeleteReference,
+        RenameReference,
         SetDrawing,
         DeleteDrawingSheet,
         AddMesh,
@@ -1901,6 +1993,9 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddMate,
     SetMate,
     DeleteMate,
+    AddReference,
+    DeleteReference,
+    RenameReference,
     SetDrawing,
     DeleteDrawingSheet,
     AddMesh,

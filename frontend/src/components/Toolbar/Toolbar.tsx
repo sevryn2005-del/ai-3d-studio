@@ -51,6 +51,7 @@ export function Toolbar() {
   const section = useEditorStore((s) => s.section);
   const draft = useEditorStore((s) => s.draft);
   const thickness = useEditorStore((s) => s.thickness);
+  const refPick = useEditorStore((s) => s.refPick);
   const measuring = useEditorStore((s) => s.measuring);
   const massOpen = useEditorStore((s) => s.massOpen);
   const projection = useEditorStore((s) => s.projection);
@@ -136,6 +137,7 @@ export function Toolbar() {
             <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />
             <Cmd icon="scale" label="크기 조정" title="선택한 객체를 원점 기준으로 늘리거나 줄임 (축별 배율)" onClick={quickScale} testId="cmd-scale" />
             <Cmd icon="mirror" label="대칭 복사" title="선택한 객체를 YZ 평면에 대칭 복사" onClick={() => quickPattern('mirror')} testId="cmd-mirror" />
+            <Cmd icon="reference" label="참조 형상" title="기준 평면(세 점)·기준 축·기준 점·좌표계 — 모델 위를 클릭하거나 좌표 입력" pressed={!!refPick} onClick={() => editor.setRefPick(refPick ? null : { type: 'plane', points: [] })} testId="cmd-reference" />
             {/* 설계 모드는 솔리드웍스처럼 스케치에서 시작한다 — 기본 도형 바로 넣기는 예전 통합 화면에만 */}
             {workspace !== 'design' && (
               <>

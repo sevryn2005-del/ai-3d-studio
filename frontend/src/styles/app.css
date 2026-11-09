@@ -582,3 +582,14 @@ label.check.small { font-size: 12px; }
 }
 .material-fields .slider input { width: 100%; accent-color: var(--accent); }
 .material-fields .slider span { text-align: right; color: var(--text); }
+
+/* 참조 형상 (형식 v34) */
+.ref-list .ref-row { display: flex; align-items: center; gap: 4px; }
+.ref-list .ref-row > button:first-child { flex: 1; min-width: 0; }
+.ref-list .ref-row > button.small { padding: 2px 6px; font-size: 12px; }
+.tree-icon.ref { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #d08a2c; margin-right: 4px; }
+.ref-panel { top: 54px; left: auto; right: 10px; max-width: min(560px, calc(100% - 20px)); }
+.ref-panel .ref-points { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.ref-panel .ref-point { display: grid; grid-template-columns: 1fr repeat(3, 70px); gap: 4px; align-items: center; }
+.ref-panel .ref-point input { width: 100%; }
+.ref-panel .error { width: 100%; margin: 0; }

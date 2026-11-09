@@ -44,9 +44,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 31: + 모디파이어 매끈하게·면 줄이기. v30 내용은 그대로 유효
  * - 32: + 모디파이어 표면 변형. v31 내용은 그대로 유효
  * - 33: + 모디파이어 베벨. v32 내용은 그대로 유효
- * 읽기는 1~33 모두, 쓰기는 항상 최신(33). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 34: + 참조 형상(평면·축·점·좌표계). v33 내용은 그대로 유효
+ * 읽기는 1~34 모두, 쓰기는 항상 최신(34). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 33;
+export const PROJECT_FORMAT_VERSION = 34;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -303,8 +304,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 33) {
     // v32 → v33: 모디파이어 베벨(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 32 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 32 ? { ...model, schemaVersion: 33 } : model;
     file = { ...file, formatVersion: 33, model: migrated };
+  }
+  if ((file.formatVersion as number) < 34) {
+    // v33 → v34: 참조 형상(평면·축·점·좌표계)(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 33 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 34, model: migrated };
   }
   return file;
 }

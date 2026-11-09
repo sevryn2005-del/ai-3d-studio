@@ -63,6 +63,14 @@ interface EditorState {
   /** 구배 분석 (화면만): 빼는 방향 축·뒤집기, 한계 각(°) */
   draft: DraftView | null;
   setDraft: (d: DraftView | null) => void;
+  /** 참조 형상 만들기 (형식 v34): 종류와 모델에서 고른 점 (월드 mm) */
+  refPick: { type: 'plane' | 'axis' | 'point' | 'csys'; points: Point3[] } | null;
+  setRefPick: (r: { type: 'plane' | 'axis' | 'point' | 'csys'; points: Point3[] } | null) => void;
+  /** 피처 트리에서 고른 참조 형상 (화면에서 파랗게) */
+  activeReference: string | null;
+  setActiveReference: (id: string | null) => void;
+  /** 고른 점 추가 — 다 찼으면 마지막 점을 바꾼다 */
+  addRefPoint: (p: Point3, max: number) => void;
   /** 두께 분석 (화면만): 이보다 얇은 벽(mm)을 빨강으로 */
   thickness: { limit: number } | null;
   setThickness: (t: { limit: number } | null) => void;
@@ -133,6 +141,12 @@ export const useEditorStore = create<EditorState>((set) => ({
   draft: null,
   // 두 분석은 같은 색 자리를 쓰므로 하나만 켠다
   setDraft: (draft) => set(draft ? { draft, thickness: null } : { draft }),
+  refPick: null,
+  activeReference: null,
+  setActiveReference: (activeReference) => set({ activeReference }),
+  setRefPick: (refPick) => set({ refPick }),
+  addRefPoint: (p, max) =>
+    set((s) => (s.refPick ? { refPick: { ...s.refPick, points: s.refPick.points.length >= max ? [...s.refPick.points.slice(0, max - 1), p] : [...s.refPick.points, p] } } : {})),
   thickness: null,
   setThickness: (thickness) => set(thickness ? { thickness, draft: null } : { thickness }),
   measuring: false,

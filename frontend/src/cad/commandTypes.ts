@@ -759,7 +759,20 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 33;
+export const MODEL_SCHEMA_VERSION = 34;
+
+/**
+ * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
+ * 평면 = 원점·법선·x 방향 (세 점에서 만든다), 축 = 지나는 점·방향, 좌표계 = 원점·x·z 방향. 방향은 단위가 아니어도 된다 (쓸 때 맞춘다)
+ */
+export const ReferenceSchema = z.discriminatedUnion('type', [
+  z.strictObject({ id: ObjectIdSchema, name: NameSchema, type: z.literal('plane'), origin: Vec3Schema, normal: Vec3Schema, xDir: Vec3Schema }),
+  z.strictObject({ id: ObjectIdSchema, name: NameSchema, type: z.literal('axis'), origin: Vec3Schema, direction: Vec3Schema }),
+  z.strictObject({ id: ObjectIdSchema, name: NameSchema, type: z.literal('point'), position: Vec3Schema }),
+  z.strictObject({ id: ObjectIdSchema, name: NameSchema, type: z.literal('csys'), origin: Vec3Schema, xDir: Vec3Schema, zDir: Vec3Schema }),
+]);
+export type Reference = z.infer<typeof ReferenceSchema>;
+export const MAX_REFERENCES = 100;
 
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
@@ -771,6 +784,8 @@ export const ModelDefinitionSchema = z.strictObject({
   /** 도면 2장째부터 (형식 v27): 시트마다 용지·척도·보기·치수·단면을 따로. 1장째는 drawing */
   drawingSheets: z.array(DrawingSettingsSchema).max(MAX_EXTRA_SHEETS).optional(),
   workspace: WorkspaceSchema.optional(),
+  /** 참조 형상 (형식 v34) */
+  references: z.array(ReferenceSchema).max(MAX_REFERENCES).optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 
@@ -791,6 +806,20 @@ export const SetMateCommandSchema = z.strictObject({
   flip: z.boolean().optional(),
 });
 export const DeleteMateCommandSchema = z.strictObject({ type: z.literal('delete_mate'), mate: ObjectIdSchema });
+
+/** 참조 형상 추가 (형식 v34). id·name 을 비우면 자동 (plane1, 기준 평면 1 …) */
+const refBody = <T extends z.ZodRawShape>(shape: T) => z.strictObject({ id: ObjectIdSchema.optional(), name: NameSchema.optional(), ...shape });
+export const AddReferenceCommandSchema = z.strictObject({
+  type: z.literal('add_reference'),
+  reference: z.discriminatedUnion('type', [
+    refBody({ type: z.literal('plane'), origin: Vec3Schema, normal: Vec3Schema, xDir: Vec3Schema }),
+    refBody({ type: z.literal('axis'), origin: Vec3Schema, direction: Vec3Schema }),
+    refBody({ type: z.literal('point'), position: Vec3Schema }),
+    refBody({ type: z.literal('csys'), origin: Vec3Schema, xDir: Vec3Schema, zDir: Vec3Schema }),
+  ]),
+});
+export const DeleteReferenceCommandSchema = z.strictObject({ type: z.literal('delete_reference'), target: ObjectIdSchema });
+export const RenameReferenceCommandSchema = z.strictObject({ type: z.literal('rename_reference'), target: ObjectIdSchema, name: NameSchema });
 
 /** 도면 설정 바꾸기 (형식 v14): 설정 전체를 바꾼다. 형상은 바뀌지 않는다 */
 /** sheet: 0(생략) = 1장째(model.drawing), k = k+1 장째 (drawingSheets[k − 1]), 시트 수와 같은 번호 = 새 시트 추가 (형식 v27) */
@@ -1426,6 +1455,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddMateCommandSchema,
   SetMateCommandSchema,
   DeleteMateCommandSchema,
+  AddReferenceCommandSchema,
+  DeleteReferenceCommandSchema,
+  RenameReferenceCommandSchema,
   SetDrawingCommandSchema,
   DeleteDrawingSheetCommandSchema,
   AddMeshCommandSchema,

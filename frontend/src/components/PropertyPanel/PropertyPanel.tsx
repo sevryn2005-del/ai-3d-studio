@@ -14,6 +14,8 @@ import { AppearanceFields, HoleActions, LoftOrMeshInfo, PreciseFields, PatternAc
 import { isSuppressed } from '../../cad/features';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { startSketchOnPlane } from '../../features/selection/featureFlow';
+import { REF_LABEL, planeOfReference } from '../../cad/references';
+import { nextId } from '../../cad/commandExecutor';
 
 /** 원점 기준 평면 (Z-up: 윗면 = XY, 정면 = XZ, 우측면 = YZ) */
 const ORIGIN_PLANES = [
@@ -60,6 +62,7 @@ export function PropertyPanel() {
           </li>
         ))}
       </ul>
+      <ReferenceList />
       <header className="panel-header sub">객체</header>
       <ul className="object-list" aria-label="객체 목록">
         {roots.length === 0 && <li className="empty">객체가 없습니다</li>}
@@ -361,5 +364,44 @@ function EdgeFeatureFields({ object }: { object: Extract<CadObject, { kind: 'box
         </>
       )}
     </fieldset>
+  );
+}
+
+/** 참조 형상 목록 (형식 v34): 고르면 화면에서 파랗게, 기준 평면은 "스케치", 삭제 */
+function ReferenceList() {
+  const refs = useSceneStore((s) => selectModel(s).references);
+  const active = useEditorStore((s) => s.activeReference);
+  if (!refs?.length) return null;
+  const submit = useSceneStore.getState().submitNow;
+  return (
+    <ul className="origin-list ref-list" aria-label="참조 형상">
+      {refs.map((r) => (
+        <li key={r.id} className="ref-row">
+          <button className={active === r.id ? 'active' : ''} onClick={() => useEditorStore.getState().setActiveReference(active === r.id ? null : r.id)} data-reference={r.id}>
+            <span>
+              <span className={`tree-icon ${r.type === 'plane' ? 'plane' : 'ref'}`} aria-hidden="true" /> {r.name}
+            </span>
+            <span className="muted">{REF_LABEL[r.type]}</span>
+          </button>
+          {r.type === 'plane' && (
+            <button
+              className="small"
+              title="이 기준 평면에 스케치 (만들 때 평면을 복사 — 나중에 참조 형상을 지워도 스케치는 그대로)"
+              onClick={() => {
+                const scene = useSceneStore.getState();
+                const res = scene.submitNow({ type: 'create_sketch', id: nextId(selectModel(scene), 'sketch'), plane: planeOfReference(r) });
+                if (res.status === 'applied') useEditorStore.getState().requestView('normal');
+              }}
+              data-testid={`ref-sketch-${r.id}`}
+            >
+              스케치
+            </button>
+          )}
+          <button className="small" title="삭제" onClick={() => submit({ type: 'delete_reference', target: r.id })} data-testid={`ref-delete-${r.id}`}>
+            ✕
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
