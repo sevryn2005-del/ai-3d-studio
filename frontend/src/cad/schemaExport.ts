@@ -762,6 +762,19 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
     ],
     bbox: [[-5, -5, 0], [45, 45, 10]],
   },
+  // 형식 v36: 스케치 위치 패턴 — 정면(XZ) 스케치 원 중심 (0,0)(30,0)(0,20) → 사본 셋, 큐브 10 (겹치지 않음)
+  'pattern-sketch': {
+    volume: 3 * 1000,
+    roots: 1,
+    commands: [
+      box('b', 10, 10, 10),
+      { type: 'create_sketch', id: 'ps', plane: { type: 'XZ', offset: 0 } },
+      { type: 'add_circle', sketch: 'ps', id: 'c1', center: [0, 0], diameter: 2 },
+      { type: 'add_circle', sketch: 'ps', id: 'c2', center: [30, 0], diameter: 2 },
+      { type: 'add_circle', sketch: 'ps', id: 'c3', center: [0, 20], diameter: 2 },
+      { type: 'pattern', id: 'sp', pattern: { type: 'sketch', source: 'b', sketch: 'ps' } },
+    ],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

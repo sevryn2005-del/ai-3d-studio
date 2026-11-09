@@ -46,9 +46,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 33: + 모디파이어 베벨. v32 내용은 그대로 유효
  * - 34: + 참조 형상(평면·축·점·좌표계). v33 내용은 그대로 유효
  * - 35: + 곡선 따라 패턴. v34 내용은 그대로 유효
- * 읽기는 1~35 모두, 쓰기는 항상 최신(35). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 36: + 스케치 위치 패턴. v35 내용은 그대로 유효
+ * 읽기는 1~36 모두, 쓰기는 항상 최신(36). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 35;
+export const PROJECT_FORMAT_VERSION = 36;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -317,8 +318,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 35) {
     // v34 → v35: 곡선 따라 패턴(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 34 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 34 ? { ...model, schemaVersion: 35 } : model;
     file = { ...file, formatVersion: 35, model: migrated };
+  }
+  if ((file.formatVersion as number) < 36) {
+    // v35 → v36: 스케치 위치 패턴(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 35 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 36, model: migrated };
   }
   return file;
 }

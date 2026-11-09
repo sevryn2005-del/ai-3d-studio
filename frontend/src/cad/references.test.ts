@@ -100,3 +100,26 @@ describe('곡선 따라 패턴 행렬 (서버 features.py curve_matrices 와 같
     expect(aligned.map((m) => at(m, 1, 0))).toEqual([[1, 0, 0], [41, 0, 0], [40, 41, 0]]);
   });
 });
+
+describe('스케치 위치 패턴 (형식 v36)', () => {
+  it('원 중심마다 첫 원 기준으로 옮김, 원이 하나면 거부, 패턴이 쓰는 원은 지울 수 없음', async () => {
+    const { patternMatrices, patternError } = await import('./features');
+    const { sketchIndex } = await import('./modelGraph');
+    const r = executeCommands(createDefaultModel(), [
+      { type: 'create_sketch', id: 'ps', plane: { type: 'XY', offset: 5 } },
+      { type: 'add_circle', sketch: 'ps', id: 'c1', center: [0, 0], diameter: 2 },
+    ]) as { ok: true; model: ModelDefinition };
+    const p = { type: 'sketch', source: 'box_1', sketch: 'ps' } as const;
+    expect(patternError(p, sketchIndex(r.model))).toContain('원이 2개 이상');
+    const r2 = executeCommands(r.model, [
+      { type: 'add_circle', sketch: 'ps', id: 'c2', center: [30, 0], diameter: 2 },
+      { type: 'add_circle', sketch: 'ps', id: 'c3', center: [0, -20], diameter: 2 },
+      { type: 'pattern', id: 'sp', pattern: p },
+    ]) as { ok: true; model: ModelDefinition };
+    expect(r2.ok).toBe(true);
+    const moves = patternMatrices(p, sketchIndex(r2.model)).map((m) => new Vector3().setFromMatrixPosition(m).toArray());
+    expect(moves).toEqual([[0, 0, 0], [30, 0, 0], [0, -20, 0]]);
+    const del = executeCommands(r2.model, [{ type: 'delete_sketch_entity', sketch: 'ps', entity: 'c2' }]);
+    expect(del.ok).toBe(false);
+  });
+});

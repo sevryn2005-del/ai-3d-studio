@@ -57,6 +57,7 @@ export function patternCopyCount(p: PatternDef): number {
   if (p.type === 'scale') return 1;
   if (p.type === 'mirror') return 2;
   if (p.type === 'circular' || p.type === 'curve') return p.count;
+  if (p.type === 'sketch') return 0; // 원 개수는 스케치에 따라 (검사는 patternError 가 스케치로)
   return p.count * (p.axis2 ? (p.count2 ?? 1) : 1);
 }
 
@@ -106,7 +107,28 @@ export function curvePatternInput(p: Extract<PatternDef, { type: 'curve' }>, ske
   return { points: pts, plane: planeMatrix(sk.plane) };
 }
 
+/** 스케치 위치 패턴의 원 중심(요소 순서)과 평면 (못 쓰면 오류 글) — 서버 sketch_pattern_input 과 같은 규칙 */
+export function sketchPatternInput(p: Extract<PatternDef, { type: 'sketch' }>, sketches: Map<ObjectId, Sketch>): { centers: Point2[]; plane: Matrix4 } | string {
+  const sk = sketches.get(p.sketch);
+  if (!sk) return `존재하지 않는 스케치입니다: ${p.sketch}`;
+  if (sk.plane.type === 'face') return '스케치 위치 패턴은 기준 평면·각도 평면·고정 평면 스케치에만 쓸 수 있습니다 (면 위 스케치는 아직)';
+  const centers = sk.entities.flatMap((e) => (e.type === 'circle' ? [e.center as Point2] : []));
+  if (centers.length < 2) return `'${sk.name}'에 원이 2개 이상 있어야 합니다 (원 중심마다 놓습니다)`;
+  if (centers.length > LIMITS.maxPatternTotal) return `패턴 사본은 최대 ${LIMITS.maxPatternTotal}개까지 가능합니다`;
+  return { centers, plane: planeMatrix(sk.plane) };
+}
+
 export function patternMatrices(p: PatternDef, sketches: Map<ObjectId, Sketch> = new Map()): Matrix4[] {
+  if (p.type === 'sketch') {
+    const input = sketchPatternInput(p, sketches);
+    if (typeof input === 'string') return [new Matrix4()];
+    const world = (q: Point2) => new Vector3(q[0], q[1], 0).applyMatrix4(input.plane);
+    const p0 = world(input.centers[0]!);
+    return input.centers.map((c) => {
+      const d = world(c).sub(p0);
+      return new Matrix4().makeTranslation(d.x, d.y, d.z);
+    });
+  }
   if (p.type === 'curve') {
     const input = curvePatternInput(p, sketches);
     return typeof input === 'string' ? [new Matrix4()] : curveMatrices(input.points, input.plane, p.count, p.align);
@@ -144,6 +166,11 @@ export function patternMatrices(p: PatternDef, sketches: Map<ObjectId, Sketch> =
 
 /** 패턴 정의 검사 (실행기·파일 검증). 문제 없으면 null */
 export function patternError(p: PatternDef, sketches?: Map<ObjectId, Sketch>): string | null {
+  if (p.type === 'sketch') {
+    if (!sketches) return null;
+    const input = sketchPatternInput(p, sketches);
+    return typeof input === 'string' ? input : null;
+  }
   if (p.type === 'curve') {
     if (p.count < 2) return '곡선 패턴은 개수가 2 이상이어야 합니다';
     if (sketches) {
@@ -220,3 +247,10 @@ export function curvePathOptions(model: ModelDefinition): { sketch: string; path
     .flatMap((sk) => sk.entities.filter((e) => e.type === 'line' || e.type === 'path').map((e) => ({ sketch: sk.id, path: e.id, label: `${sk.name} · ${e.id}` })));
 }
 
+
+/** 스케치 위치 패턴에 쓸 수 있는 스케치 (원 2개 이상, 면 위 스케치 제외) */
+export function sketchPatternOptions(model: ModelDefinition): { id: string; label: string }[] {
+  return model.sketches
+    .filter((sk) => sk.plane.type !== 'face' && sk.entities.filter((e) => e.type === 'circle').length >= 2)
+    .map((sk) => ({ id: sk.id, label: `${sk.name} (원 ${sk.entities.filter((e) => e.type === 'circle').length}개)` }));
+}

@@ -75,7 +75,7 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
 
 export const EDGE_RULE_LABEL = { all: '모든 모서리', vertical: '세로 모서리', top: '윗면 모서리', bottom: '아랫면 모서리' } as const;
 
-export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', curve: '곡선 패턴', mirror: '대칭 복사', scale: '크기 조정' } as const;
+export const PATTERN_LABEL = { linear: '선형 패턴', circular: '원형 패턴', curve: '곡선 패턴', sketch: '스케치 위치 패턴', mirror: '대칭 복사', scale: '크기 조정' } as const;
 
 export const OPERATION_INFO: Record<BooleanOperation, { label: string; symbol: string; verb: string }> = {
   union: { label: '합치기', symbol: '∪', verb: '합치기' },
@@ -230,6 +230,7 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       if (p.type === 'scale') return p.x === p.y && p.y === p.z ? `×${formatMm(p.x)}` : `×(${[p.x, p.y, p.z].map(formatMm).join(', ')})`;
       if (p.type === 'circular') return `${p.axis.toUpperCase()}축 ${p.count}개 ${formatMm(p.angle)}°`;
       if (p.type === 'curve') return `${p.path} 따라 ${p.count}개`;
+      if (p.type === 'sketch') return `${p.sketch} 원 중심마다`;
       return p.axis2 ? `${p.count}×${p.count2 ?? 1}개` : `${p.axis.toUpperCase()} ${p.count}개 간격 ${formatMm(p.spacing)}`;
     }
   }

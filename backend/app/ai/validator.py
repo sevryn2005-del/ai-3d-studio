@@ -456,7 +456,7 @@ def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, 
                 errors.append(f"commands[{i}].target: shell only works on box, cylinder or extrude; '{c['target']}' is a {kinds[c['target']]}")
         elif t in ("pattern", "set_pattern"):
             src = c["pattern"]["source"]
-            if c["pattern"]["type"] == "curve":
+            if c["pattern"]["type"] in ("curve", "sketch"):
                 sketch_exists(i, c["pattern"]["sketch"])
             if t == "set_pattern" and exists(i, c["target"], "target") and kinds[c["target"]] != "pattern":
                 errors.append(f"commands[{i}].target: '{c['target']}' is not a pattern")

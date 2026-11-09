@@ -875,7 +875,15 @@ class CurvePattern(Strict):
     align: bool
 
 
-PatternDef = Annotated[Union[LinearPattern, CircularPattern, CurvePattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
+class SketchPattern(Strict):
+    """스케치 위치 (형식 v36): 스케치의 원 중심마다 (원본 = 첫 원 중심 기준)"""
+
+    type: Literal["sketch"]
+    source: ObjectId
+    sketch: ObjectId
+
+
+PatternDef = Annotated[Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
 
 
 class PatternObject(_ObjectBase):
@@ -1129,7 +1137,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[35]
+    schemaVersion: Literal[36]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

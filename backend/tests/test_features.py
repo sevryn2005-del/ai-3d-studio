@@ -127,3 +127,17 @@ def test_curve_matrices_match_frontend():
 
     assert [at(m, 1, 0) for m in curve_matrices(pts, np.eye(4), 3, False)] == [[1, 0, 0], [41, 0, 0], [41, 40, 0]]
     assert [at(m, 1, 0) for m in curve_matrices(pts, np.eye(4), 3, True)] == [[1, 0, 0], [41, 0, 0], [40, 41, 0]]
+
+
+def test_sketch_pattern_cache_key_follows_circles():
+    """형식 v36: 스케치 위치 패턴의 원이 바뀌면 서버 메시 캐시 키도 바뀐다"""
+    import copy
+
+    from app.cad.commands import ModelDefinition
+    from app.cad.mesh_cache import cache_key
+
+    model = copy.deepcopy(CASES["pattern-sketch"]["model"])
+    a = cache_key(ModelDefinition.model_validate(model), "sp")
+    circle = next(e for e in model["sketches"][0]["entities"] if e["id"] == "c2")
+    circle["center"] = [50, 0]
+    assert cache_key(ModelDefinition.model_validate(model), "sp") != a

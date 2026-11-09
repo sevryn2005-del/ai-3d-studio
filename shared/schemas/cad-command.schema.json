@@ -6463,6 +6463,29 @@
                             "properties": {
                               "type": {
                                 "type": "string",
+                                "const": "sketch"
+                              },
+                              "source": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                              },
+                              "sketch": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "source",
+                              "sketch"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
                                 "const": "mirror"
                               },
                               "source": {
@@ -9279,6 +9302,29 @@
               "properties": {
                 "type": {
                   "type": "string",
+                  "const": "sketch"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "sketch": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "sketch"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
                   "const": "mirror"
                 },
                 "source": {
@@ -9496,6 +9542,29 @@
                 "path",
                 "count",
                 "align"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "sketch"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "sketch": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                }
+              },
+              "required": [
+                "type",
+                "source",
+                "sketch"
               ],
               "additionalProperties": false
             },

@@ -59,7 +59,7 @@ test('참조 형상: 세 점 기준 평면 → 스케치, 좌표로 기준 축, 
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(35);
+  expect(saved.formatVersion).toBe(36);
   expect(saved.model.references.map((r: { id: string; type: string }) => [r.id, r.type])).toEqual([
     ['ref_plane_1', 'plane'],
     ['ref_axis_1', 'axis'],
@@ -120,4 +120,29 @@ test('곡선 패턴 (형식 v35): 경로 그리기 → 곡선 패턴 → 개수�
   // 패턴이 쓰는 경로는 지울 수 없다
   const r = await page.evaluate(() => window.__AI3D_DEV__!.dispatch({ type: 'delete_sketch_entity', sketch: 'pc', entity: 'pa' }) as { ok: boolean });
   expect(r.ok).toBe(false);
+});
+
+test('스케치 위치 패턴 (형식 v36): 원 셋 → 원 중심마다 큐브, 원 하나 더 → 다시 계산', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  const src = async () => await page.evaluate(() => window.__AI3D_DEV__!.meshSources());
+  await expect.poll(async () => (await src()).box_1?.source, { timeout: 20_000 }).toBe('server');
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-sketch-pattern').click();
+  await expect(page.getByRole('alert')).toContainText('원을 2개 이상');
+  await page.evaluate(() => {
+    const d = window.__AI3D_DEV__!.dispatch;
+    d({ type: 'create_sketch', id: 'ps', name: '볼트 자리', plane: { type: 'XY', offset: 0 } });
+    d({ type: 'add_circle', sketch: 'ps', id: 'c1', center: [0, 0], diameter: 3 });
+    d({ type: 'add_circle', sketch: 'ps', id: 'c2', center: [40, 0], diameter: 3 });
+    d({ type: 'add_circle', sketch: 'ps', id: 'c3', center: [40, 40], diameter: 3 });
+  });
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-sketch-pattern').click();
+  await expect(page.getByTestId('pattern-sketch')).toHaveValue('ps');
+  // 큐브 20, 중심 (0,0)(40,0)(40,40) → x −10..50, y −10..50
+  await expect.poll(async () => (await src()).pattern_1?.max, { timeout: 20_000 }).toEqual([50, 50, 20]);
+  expect((await src()).pattern_1!.min).toEqual([-10, -10, 0]);
+  await page.evaluate(() => window.__AI3D_DEV__!.dispatch({ type: 'add_circle', sketch: 'ps', id: 'c4', center: [-40, 0], diameter: 3 }));
+  await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-50, -10, 0]);
 });

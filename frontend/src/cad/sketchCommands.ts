@@ -92,6 +92,11 @@ function nextEntityId(sketch: Sketch, prefix: string): ObjectId {
 function extrudeUsers(model: ModelDefinition, sketchId: ObjectId, entityId?: ObjectId): string[] {
   return model.objects
     .filter((o) => {
+      // 스케치 위치 패턴은 스케치 전체(원 중심들)를 쓴다 — 스케치 삭제·원 삭제를 막는다
+      if (o.kind === 'pattern' && o.pattern.type === 'sketch' && o.pattern.sketch === sketchId) {
+        const sk = model.sketches.find((x) => x.id === sketchId);
+        return entityId === undefined || sk?.entities.find((e) => e.id === entityId)?.type === 'circle';
+      }
       return sketchRefs(o).some((ref) => ref.sketch === sketchId && (entityId === undefined || ref.profile === entityId));
     })
     .map((o) => o.name);

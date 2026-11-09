@@ -4,7 +4,7 @@ import { MaterialFields } from './MaterialFields';
  * 모든 변경은 CAD 명령(submitNow)으로만 — AI 와 같은 경로.
  */
 import { alignPatternToAxisCommands } from '../../cad/references';
-import { curvePathOptions } from '../../cad/features';
+import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
 import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
@@ -158,6 +158,20 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
+        </>
+      ) : p.type === 'sketch' ? (
+        <>
+          <label className="drawing-field">
+            <span>원 중심 스케치</span>
+            <select value={p.sketch} onChange={(e) => set({ sketch: e.target.value })} data-testid="pattern-sketch">
+              {sketchPatternOptions(model).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted small">스케치의 첫 원 중심에 있던 원본을 다른 원 중심마다 옮겨 놓습니다 (원은 구성선이어도 됩니다).</p>
         </>
       ) : p.type === 'curve' ? (
         <>

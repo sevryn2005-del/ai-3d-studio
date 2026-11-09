@@ -43,7 +43,12 @@ export function geometryKey(
             const pts = sk ? openLinePoints(sk, obj.pattern.path) : null;
             return `|curve:${pts ? pts.map((q) => q.join(',')).join(';') : 'missing'}|plane:${sk ? JSON.stringify(sk.plane) : ''}`;
           })()
-        : '';
+        : obj.kind === 'pattern' && obj.pattern.type === 'sketch'
+          ? (() => {
+              const sk = sketches.get(obj.pattern.sketch);
+              return `|sketch:${sk ? JSON.stringify([sk.plane, sk.entities.filter((e) => e.type === 'circle').map((e) => (e as { center: number[] }).center)]) : 'missing'}`;
+            })()
+          : '';
     return `${obj.kind}:${JSON.stringify(def)}(${src})${curve}${sup}`;
   }
   if (obj.kind === 'step') return `step:${obj.step.data.length}:${hash(obj.step.data)}${sup}`;
@@ -146,7 +151,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 35, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 36, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

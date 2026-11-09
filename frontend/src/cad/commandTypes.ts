@@ -450,6 +450,8 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     count: patternCount,
     align: z.boolean(),
   }),
+  /** 스케치 위치 (형식 v36): 스케치의 원 중심마다 (원본 = 첫 원 중심 기준, 요소 순서). 솔리드웍스 Sketch Driven Pattern */
+  z.strictObject({ type: z.literal('sketch'), source: ObjectIdSchema, sketch: ObjectIdSchema }),
   z.strictObject({
     type: z.literal('mirror'),
     source: ObjectIdSchema,
@@ -768,7 +770,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 35;
+export const MODEL_SCHEMA_VERSION = 36;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

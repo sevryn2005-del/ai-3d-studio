@@ -2,7 +2,7 @@
  * 솔리드웍스식 피처 흐름의 동작 (툴바·속성 관리자·뷰포트·단축키 공용).
  * 모든 변경은 명령(submitNow)으로만 — 미리보기·취소는 편집기 상태(editorStore)만 바꾼다.
  */
-import { curvePathOptions } from '../../cad/features';
+import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
 import type { CadCommand, StandardPlane } from '../../cad/commandTypes';
 import { nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
@@ -206,6 +206,19 @@ export function quickCurvePattern() {
     return;
   }
   scene.submitNow({ type: 'pattern', pattern: { type: 'curve', source: obj.id, sketch: first.sketch, path: first.path, count: 4, align: false } });
+}
+
+/** 스케치 위치 패턴: 선택한 객체를 원이 2개 이상인 첫 스케치의 원 중심마다 */
+export function quickSketchPattern() {
+  const s = selectedRoot('스케치 위치 패턴');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const first = sketchPatternOptions(model)[0];
+  if (!first) {
+    scene.reportError('스케치 위치 패턴: 먼저 기준 평면 스케치에 놓을 자리마다 원을 2개 이상 그리세요');
+    return;
+  }
+  scene.submitNow({ type: 'pattern', pattern: { type: 'sketch', source: obj.id, sketch: first.id } });
 }
 
 /** 구멍: 첫 면(윗면) 중심에 지름 5mm, 객체 높이만큼 (관통) */

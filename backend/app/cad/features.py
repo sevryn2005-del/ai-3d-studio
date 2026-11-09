@@ -42,6 +42,8 @@ def pattern_copy_count(p) -> int:
         return 2
     if p.type in ("circular", "curve"):
         return p.count
+    if p.type == "sketch":
+        return 0  # 원 개수는 스케치에 따라 (검사는 pattern_error 가 스케치로)
     return p.count * ((p.count2 or 1) if p.axis2 else 1)
 
 
@@ -117,8 +119,41 @@ def curve_pattern_input(p, sketches: dict):
     return pts, plane_matrix(sk.plane)
 
 
+def sketch_pattern_input(p, sketches: dict):
+    """스케치 위치 패턴의 원 중심(요소 순서)과 평면 행렬, 못 쓰면 오류 글 (프론트 sketchPatternInput)"""
+    from app.cad.frames import plane_matrix
+
+    sk = sketches.get(p.sketch)
+    if sk is None:
+        return f"존재하지 않는 스케치입니다: {p.sketch}"
+    if sk.plane.type == "face":
+        return "스케치 위치 패턴은 기준 평면·각도 평면·고정 평면 스케치에만 쓸 수 있습니다 (면 위 스케치는 아직)"
+    centers = [e.center for e in sk.entities if e.type == "circle"]
+    if len(centers) < 2:
+        return f"'{sk.name}'에 원이 2개 이상 있어야 합니다 (원 중심마다 놓습니다)"
+    if len(centers) > Limits.MAX_PATTERN_TOTAL:
+        return f"패턴 사본은 최대 {Limits.MAX_PATTERN_TOTAL}개까지 가능합니다"
+    return centers, plane_matrix(sk.plane)
+
+
 def pattern_matrices(p, sketches: dict | None = None) -> list[np.ndarray]:
     """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본). 크기 조정은 배율 행렬 하나."""
+    if p.type == "sketch":
+        inp = sketch_pattern_input(p, sketches or {})
+        if isinstance(inp, str):
+            return [np.eye(4)]
+        centers, plane = inp
+
+        def world(q) -> np.ndarray:
+            return (plane @ np.array([q[0], q[1], 0.0, 1.0]))[:3]
+
+        p0 = world(centers[0])
+        out = []
+        for c in centers:
+            m = np.eye(4)
+            m[:3, 3] = world(c) - p0
+            out.append(m)
+        return out
     if p.type == "curve":
         inp = curve_pattern_input(p, sketches or {})
         return [np.eye(4)] if isinstance(inp, str) else curve_matrices(inp[0], inp[1], p.count, p.align)
@@ -146,6 +181,11 @@ def pattern_matrices(p, sketches: dict | None = None) -> list[np.ndarray]:
 
 
 def pattern_error(p, sketches: dict | None = None) -> str | None:
+    if p.type == "sketch":
+        if sketches is None:
+            return None
+        inp = sketch_pattern_input(p, sketches)
+        return inp if isinstance(inp, str) else None
     if p.type == "curve":
         if p.count < 2:
             return "곡선 패턴은 개수가 2 이상이어야 합니다"

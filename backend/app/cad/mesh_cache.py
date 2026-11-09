@@ -27,6 +27,8 @@ def cache_key(model: ModelDefinition, oid: str) -> str:
             ids.append(cur)
             stack.extend(index[cur].child_ids)
     refs = {r.sketch for i in ids for r in sketch_refs(index[i])}
+    # 스케치 위치 패턴은 스케치 전체(원 중심)를 쓴다
+    refs |= {index[i].pattern.sketch for i in ids if index[i].kind == "pattern" and index[i].pattern.type == "sketch"}
     sketches = [s for s in model.sketches if s.id in refs]
     parts: list[Any] = [index[i].model_dump(mode="json") for i in ids] + [s.model_dump(mode="json") for s in sketches]
     if parts and isinstance(parts[0], dict):

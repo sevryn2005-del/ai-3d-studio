@@ -9,7 +9,7 @@ import { useEditorStore } from '../../features/selection/editorStore';
 import { startMeasurePick, startSketchOnFace } from '../Viewport/PickFlows';
 import { useDrawingStore } from '../Drawing/DrawingPanel';
 import {
-  importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickCurvePattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
+  importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickCurvePattern, quickSketchPattern, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
 } from '../../features/selection/featureFlow';
 import { rectangleSketchCommands } from '../../cad/sketchActions';
 import { newProject, openProject, saveProject } from '../../features/projects/projectActions';
@@ -136,6 +136,7 @@ export function Toolbar() {
             <Cmd icon="linear" label="선형 패턴" title="선택한 객체를 X 방향으로 반복" onClick={() => quickPattern('linear')} testId="cmd-linear" />
             <Cmd icon="circular" label="원형 패턴" title="선택한 객체를 Z 축 둘레로 반복" onClick={() => quickPattern('circular')} testId="cmd-circular" />
             <Cmd icon="curvePattern" label="곡선 패턴" title="선택한 객체를 스케치의 선·경로를 따라 같은 간격으로 반복" onClick={quickCurvePattern} testId="cmd-curve-pattern" />
+            <Cmd icon="sketchPattern" label="스케치 위치 패턴" title="선택한 객체를 스케치에 그린 원 중심마다 복사 (첫 원 = 원본 자리)" onClick={quickSketchPattern} testId="cmd-sketch-pattern" />
             <Cmd icon="scale" label="크기 조정" title="선택한 객체를 원점 기준으로 늘리거나 줄임 (축별 배율)" onClick={quickScale} testId="cmd-scale" />
             <Cmd icon="mirror" label="대칭 복사" title="선택한 객체를 YZ 평면에 대칭 복사" onClick={() => quickPattern('mirror')} testId="cmd-mirror" />
             <Cmd icon="reference" label="참조 형상" title="기준 평면(세 점)·기준 축·기준 점·좌표계 — 모델 위를 클릭하거나 좌표 입력" pressed={!!refPick} onClick={() => editor.setRefPick(refPick ? null : { type: 'plane', points: [] })} testId="cmd-reference" />
