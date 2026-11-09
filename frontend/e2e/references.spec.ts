@@ -66,3 +66,29 @@ test('참조 형상: 세 점 기준 평면 → 스케치, 좌표로 기준 축, 
   ]);
   expect(saved.model.references[1]).toMatchObject({ origin: [0, 0, 0], direction: [0, 0, 1] });
 });
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`원형 패턴을 기준 축 둘레로 (${engine === 'server' ? 'CadQuery 서버' : '브라우저'} 엔진): 축 (10,0)+Z, 4개 → 반지름 20 원`, async ({ page }) => {
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    const src = async () => await page.evaluate(() => window.__AI3D_DEV__!.meshSources());
+    await expect.poll(async () => (await src()).box_1?.source, { timeout: 20_000 }).toBe(engine);
+    await page.evaluate(() => {
+      window.__AI3D_DEV__!.dispatch({ type: 'set_transform', target: 'box_1', position: [30, 0, 0] });
+      window.__AI3D_DEV__!.dispatch({ type: 'add_reference', reference: { type: 'axis', origin: [10, 0, 0], direction: [0, 0, 1], name: '중심 축' } });
+    });
+    await page.locator('[data-object-id="box_1"]').click();
+    await page.getByTestId('cmd-circular').click();
+    await expect.poll(async () => (await src()).pattern_1?.source, { timeout: 20_000 }).toBe(engine);
+    await page.getByTestId('pattern-count').fill('4');
+    await page.getByTestId('pattern-count').press('Enter');
+    await page.getByTestId('pattern-ref-axis').selectOption({ label: '중심 축' });
+    // 사본 중심 (30,0) (10,20) (−10,0) (10,−20), 큐브 20 → x −20..40, y −30..30
+    await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-20, -30, 0]);
+    expect((await src()).pattern_1!.max).toEqual([40, 30, 20]);
+    const before = (await page.evaluate(() => window.__AI3D_DEV__!.scene())).past;
+    await page.keyboard.press('Control+z'); // 정렬은 실행 취소 1번
+    await expect.poll(async () => (await page.evaluate(() => window.__AI3D_DEV__!.scene())).past).toBe(before - 1);
+  });
+}

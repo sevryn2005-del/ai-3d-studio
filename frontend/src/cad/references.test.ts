@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { executeBatch as executeCommands } from './commandExecutor';
 import { createDefaultModel } from './defaultModel';
-import { normalizeReference, planeOfReference, referenceFromPoints } from './references';
+import { alignPatternToAxisCommands, normalizeReference, planeOfReference, referenceFromPoints } from './references';
+import { patternMatrices } from './features';
+import { toMatrix } from './transformMath';
+import { Vector3 } from 'three';
 import type { ModelDefinition, Reference } from './commandTypes';
 
 describe('참조 형상 (형식 v34)', () => {
@@ -40,5 +43,47 @@ describe('참조 형상 (형식 v34)', () => {
     expect('references' in (r3 as { model: ModelDefinition }).model).toBe(false);
     expect(executeCommands(m1, [{ type: 'add_reference', reference: { type: 'point', id: 'box_1', position: [0, 0, 0] } }]).ok).toBe(false);
     expect(executeCommands(m1, [{ type: 'delete_reference', target: 'nope' }]).ok).toBe(false);
+  });
+});
+
+describe('기준 축 둘레 원형 패턴', () => {
+  const copies = (m: ModelDefinition) => {
+    const pat = m.objects.find((o) => o.kind === 'pattern') as Extract<ModelDefinition['objects'][number], { kind: 'pattern' }>;
+    const src = m.objects.find((o) => o.id === pat.pattern.source)!;
+    return patternMatrices(pat.pattern).map((r) => {
+      const w = toMatrix(pat.transform).multiply(r).multiply(toMatrix(src.transform));
+      return new Vector3().setFromMatrixPosition(w).toArray().map((v) => Math.round(v * 1e4) / 1e4 + 0);
+    });
+  };
+  it('축 (10,0,0)+Z 둘레로 4개: 원본은 그대로, 사본은 반지름 20 원 위', () => {
+    const r = executeCommands(createDefaultModel(), [
+      { type: 'set_transform', target: 'box_1', position: [30, 0, 0] },
+      { type: 'pattern', pattern: { type: 'circular', source: 'box_1', axis: 'x', count: 4, angle: 360 } },
+      { type: 'add_reference', reference: { type: 'axis', origin: [10, 0, 0], direction: [0, 0, 1] } },
+    ]) as { ok: true; model: ModelDefinition };
+    expect(r.ok).toBe(true);
+    const pat = r.model.objects.find((o) => o.kind === 'pattern')!;
+    const cmds = alignPatternToAxisCommands(pat as never, r.model.objects.find((o) => o.id === 'box_1')!, r.model.references![0] as never);
+    const r2 = executeCommands(r.model, cmds) as { ok: true; model: ModelDefinition };
+    expect(r2.ok).toBe(true);
+    expect(copies(r2.model)).toEqual([
+      [30, 0, 0],
+      [10, 20, 0],
+      [-10, 0, 0],
+      [10, -20, 0],
+    ]);
+  });
+  it('기울어진 축 (원점 지남, +X 방향) 둘레로 2개: 반대편으로', () => {
+    const r = executeCommands(createDefaultModel(), [
+      { type: 'set_transform', target: 'box_1', position: [5, 0, 15] },
+      { type: 'pattern', pattern: { type: 'circular', source: 'box_1', axis: 'z', count: 2, angle: 360 } },
+      { type: 'add_reference', reference: { type: 'axis', origin: [0, 0, 0], direction: [3, 0, 0] } },
+    ]) as { ok: true; model: ModelDefinition };
+    const pat = r.model.objects.find((o) => o.kind === 'pattern')!;
+    const r2 = executeCommands(r.model, alignPatternToAxisCommands(pat as never, r.model.objects.find((o) => o.id === 'box_1')!, r.model.references![0] as never)) as { ok: true; model: ModelDefinition };
+    expect(copies(r2.model)).toEqual([
+      [5, 0, 15],
+      [5, 0, -15],
+    ]);
   });
 });

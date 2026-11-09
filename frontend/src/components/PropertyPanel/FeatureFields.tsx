@@ -3,6 +3,8 @@ import { MaterialFields } from './MaterialFields';
  * 형식 v6 피처의 속성 편집: 외관(색·숨기기)·억제, 쉘, 패턴·대칭, 패턴 만들기, 구멍 가공.
  * 모든 변경은 CAD 명령(submitNow)으로만 — AI 와 같은 경로.
  */
+import { alignPatternToAxisCommands } from '../../cad/references';
+import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
 import { useSceneStore } from '../../cad/sceneStore';
@@ -108,6 +110,7 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
   const set = (patch: Partial<PatternDef>) => submit({ type: 'set_pattern', target: object.id, pattern: { ...p, ...patch } as PatternDef });
   const model = useSceneStore((s) => s.history.present.model);
   const src = model.objects.find((o) => o.id === p.source);
+  const axes = (model.references ?? []).filter((r): r is Extract<Reference, { type: 'axis' }> => r.type === 'axis');
   return (
     <fieldset>
       <legend>{PATTERN_LABEL[p.type]}</legend>
@@ -131,7 +134,27 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
         </>
       ) : p.type === 'circular' ? (
         <>
-          <AxisSelect label="회전축 (원점 지남)" value={p.axis} options={AXES} onChange={(v) => set({ axis: v as Axis })} />
+          <AxisSelect label="회전축 (패턴 원점 지남)" value={p.axis} options={AXES} onChange={(v) => set({ axis: v as Axis })} />
+          {axes.length > 0 && src && (
+            <label className="drawing-field" title="패턴 좌표계를 기준 축에 맞춥니다 (원본 위치는 그대로) — 실행 취소 1번">
+              <span>기준 축 둘레로</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  const ax = axes.find((a) => a.id === e.target.value);
+                  if (ax) useSceneStore.getState().dispatchBatch(alignPatternToAxisCommands(object, src, ax));
+                }}
+                data-testid="pattern-ref-axis"
+              >
+                <option value="">기준 축 고르기…</option>
+                {axes.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
         </>

@@ -4,6 +4,8 @@
  */
 import type { FramePlane, ModelDefinition, Reference, Vec3 } from './commandTypes';
 import { MAX_REFERENCES } from './commandTypes';
+import { Matrix4, Quaternion, Vector3 } from 'three';
+import { fromMatrix, toMatrix } from './transformMath';
 
 export type RefType = Reference['type'];
 export const REF_LABEL: Record<RefType, string> = { plane: '기준 평면', axis: '기준 축', point: '기준 점', csys: '좌표계' };
@@ -98,4 +100,27 @@ export { MAX_REFERENCES };
 /** 기준 평면 → 스케치 평면 (고정 위치 frame, 만들 때 복사) */
 export function planeOfReference(r: Reference & { type: 'plane' }): FramePlane {
   return { type: 'frame', origin: r.origin, normal: r.normal, xDir: r.xDir, offset: 0 };
+}
+
+/**
+ * 원형 패턴을 기준 축 둘레로 (형식 그대로): 패턴 좌표계를 축에 맞추고(원점 = 축 위 점, 로컬 Z = 축 방향, axis = 'z'),
+ * 원본은 월드 위치가 그대로이도록 새 패턴 좌표계 기준 변환으로 바꾼다 — 명령 셋 (한 번에 실행, 실행 취소 1번).
+ */
+export function alignPatternToAxisCommands(
+  pattern: { id: string; transform: { position: Vec3; rotation: Vec3 }; pattern: { type: string } & Record<string, unknown> },
+  source: { id: string; transform: { position: Vec3; rotation: Vec3 } },
+  axis: Reference & { type: 'axis' },
+): unknown[] {
+  const z = new Vector3(...axis.direction).normalize();
+  const q = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), z);
+  const frame = new Matrix4().compose(new Vector3(...axis.origin), q, new Vector3(1, 1, 1));
+  const parent = fromMatrix(frame);
+  // 원본 월드 = 지금 패턴 변환 ∘ 원본 변환 → 새 패턴 기준
+  const world = toMatrix(pattern.transform).multiply(toMatrix(source.transform));
+  const child = fromMatrix(toMatrix(parent).invert().multiply(world));
+  return [
+    { type: 'set_transform', target: pattern.id, position: parent.position, rotation: parent.rotation },
+    { type: 'set_transform', target: source.id, position: child.position, rotation: child.rotation },
+    { type: 'set_pattern', target: pattern.id, pattern: { ...pattern.pattern, axis: 'z' } },
+  ];
 }
