@@ -2,6 +2,7 @@
  * 솔리드웍스식 피처 흐름의 동작 (툴바·속성 관리자·뷰포트·단축키 공용).
  * 모든 변경은 명령(submitNow)으로만 — 미리보기·취소는 편집기 상태(editorStore)만 바꾼다.
  */
+import { curvePathOptions } from '../../cad/features';
 import type { CadCommand, StandardPlane } from '../../cad/commandTypes';
 import { nextId } from '../../cad/commandExecutor';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
@@ -192,6 +193,19 @@ export function quickPattern(type: 'linear' | 'circular' | 'mirror') {
         ? ({ type, source: obj.id, axis: 'z', count: 6, angle: 360 } as const)
         : ({ type, source: obj.id, plane: 'YZ', offset: 0 } as const);
   scene.submitNow({ type: 'pattern', pattern });
+}
+
+/** 곡선 패턴: 선택한 객체를 첫 번째 열린 선(선·경로)을 따라 4개 (속성에서 선·개수·방향 맞춤) */
+export function quickCurvePattern() {
+  const s = selectedRoot('곡선 패턴');
+  if (!s) return;
+  const { scene, obj, model } = s;
+  const first = curvePathOptions(model)[0];
+  if (!first) {
+    scene.reportError('곡선 패턴: 먼저 기준 평면 스케치에 선이나 경로를 그리세요 (구성선도 됩니다)');
+    return;
+  }
+  scene.submitNow({ type: 'pattern', pattern: { type: 'curve', source: obj.id, sketch: first.sketch, path: first.path, count: 4, align: false } });
 }
 
 /** 구멍: 첫 면(윗면) 중심에 지름 5mm, 객체 높이만큼 (관통) */

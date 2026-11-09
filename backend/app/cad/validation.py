@@ -120,7 +120,7 @@ def check_model(model: ModelDefinition) -> list[Issue]:
                                     message=f"{obj.id}: 모서리 크기 {obj.edgeFeature.size:g}mm 가 너무 큽니다 ({limit:g}mm 보다 작아야 합니다)"))
         if getattr(obj, "shell", None) is not None and (err := shell_error(obj, obj.shell, model)):
             issues.append(Issue(path=f"objects.{i}.shell", message=f"{obj.id}: {err}"))
-        if isinstance(obj, PatternObject) and (err := pattern_error(obj.pattern)):
+        if isinstance(obj, PatternObject) and (err := pattern_error(obj.pattern, {sk.id: sk for sk in model.sketches})):
             issues.append(Issue(path=f"objects.{i}.pattern", message=f"{obj.id}: {err}"))
 
     object_ids = {o.id for o in model.objects}

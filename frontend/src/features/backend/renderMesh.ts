@@ -35,7 +35,16 @@ export function geometryKey(
     const def = obj.kind === 'pattern' ? obj.pattern : obj.kind === 'fillet' ? obj.fillet : obj.draft;
     const child = index.get(def.source);
     const src = child ? `${geometryKey(child, index, sketches)}@${transformKey(child.transform)}` : `missing:${def.source}`;
-    return `${obj.kind}:${JSON.stringify(def)}(${src})${sup}`;
+    // 곡선 패턴: 선 점과 스케치 평면도 결과를 바꾼다
+    const curve =
+      obj.kind === 'pattern' && obj.pattern.type === 'curve'
+        ? (() => {
+            const sk = sketches.get(obj.pattern.sketch);
+            const pts = sk ? openLinePoints(sk, obj.pattern.path) : null;
+            return `|curve:${pts ? pts.map((q) => q.join(',')).join(';') : 'missing'}|plane:${sk ? JSON.stringify(sk.plane) : ''}`;
+          })()
+        : '';
+    return `${obj.kind}:${JSON.stringify(def)}(${src})${curve}${sup}`;
   }
   if (obj.kind === 'step') return `step:${obj.step.data.length}:${hash(obj.step.data)}${sup}`;
   const shell = 'shell' in obj && obj.shell ? `|shell:${obj.shell.thickness}:${obj.shell.open.join(',')}` : '';
@@ -137,7 +146,7 @@ export function decodeRenderMesh(mesh: RenderMesh): BufferGeometry {
 
 /** XY 는 기존 키와 같게 (캐시·테스트 호환), 다른 평면만 표시 */
 function frameKey(objectId: ObjectId, sketchId: ObjectId, index: Map<ObjectId, CadObject>, sketches: Map<ObjectId, Sketch>): string {
-  const m = sketchLocalMatrix({ schemaVersion: 34, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
+  const m = sketchLocalMatrix({ schemaVersion: 35, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, objectId, sketchId);
   return m ? m.elements.map((v) => Math.round(v * 1e6) / 1e6 + 0).join(',') : 'missing';
 }
 

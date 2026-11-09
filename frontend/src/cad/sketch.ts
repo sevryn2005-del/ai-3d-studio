@@ -270,6 +270,7 @@ export interface FeatureRef {
 /** 객체가 참조하는 모든 스케치 요소 (로프트는 단면 여러 개, 스윕은 단면 + 경로). 삭제 막기·의존 순환·검증용 */
 export function sketchRefs(obj: CadObject): FeatureRef[] {
   if (obj.kind === 'loft') return obj.loft.sections;
+  if (obj.kind === 'pattern' && obj.pattern.type === 'curve') return [{ sketch: obj.pattern.sketch, profile: obj.pattern.path, open: true }];
   if (obj.kind === 'sweep')
     return [
       { sketch: obj.sweep.sketch, profile: obj.sweep.profile },

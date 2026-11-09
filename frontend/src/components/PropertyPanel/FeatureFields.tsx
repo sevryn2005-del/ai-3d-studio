@@ -4,6 +4,7 @@ import { MaterialFields } from './MaterialFields';
  * 모든 변경은 CAD 명령(submitNow)으로만 — AI 와 같은 경로.
  */
 import { alignPatternToAxisCommands } from '../../cad/references';
+import { curvePathOptions } from '../../cad/features';
 import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
@@ -157,6 +158,16 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
+        </>
+      ) : p.type === 'curve' ? (
+        <>
+          <CurvePathSelect value={{ sketch: p.sketch, path: p.path }} onChange={(v) => set(v)} />
+          <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
+          <label className="check">
+            <input type="checkbox" checked={p.align} onChange={(e) => set({ align: e.target.checked })} data-testid="pattern-align" />
+            선의 방향을 따라 돌리기
+          </label>
+          <p className="muted small">선 시작점에 있던 원본을 선 길이로 같은 간격씩 옮깁니다.</p>
         </>
       ) : (
         <>
@@ -380,5 +391,31 @@ export function PreciseFields({ object }: { object: Extract<CadObject, { kind: '
       )}
       <p className="muted small">정밀 엔진(OCCT)으로 계산합니다. 모서리를 고르는 기준: 월드 Z (위·아래·세로).</p>
     </fieldset>
+  );
+}
+
+function CurvePathSelect({ value, onChange }: { value: { sketch: string; path: string }; onChange: (v: { sketch: string; path: string }) => void }) {
+  const model = useSceneStore((s) => s.history.present.model);
+  const opts = curvePathOptions(model);
+  const key = `${value.sketch}/${value.path}`;
+  return (
+    <label className="drawing-field">
+      <span>따라갈 선</span>
+      <select
+        value={key}
+        onChange={(e) => {
+          const o = opts.find((x) => `${x.sketch}/${x.path}` === e.target.value);
+          if (o) onChange({ sketch: o.sketch, path: o.path });
+        }}
+        data-testid="pattern-curve-path"
+      >
+        {!opts.some((o) => `${o.sketch}/${o.path}` === key) && <option value={key}>{key} (없음)</option>}
+        {opts.map((o) => (
+          <option key={`${o.sketch}/${o.path}`} value={`${o.sketch}/${o.path}`}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

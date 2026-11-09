@@ -750,6 +750,18 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
       { type: 'set_modifiers', target: 'm', modifiers: [{ type: 'bevel', width: 2, segments: 3, angle: 30 }] },
     ],
   },
+  // 형식 v35: 곡선 따라 패턴 — ㄱ 자 경로 (0,0)→(40,0)→(40,40) 길이 80 을 4 등분: 사본 중심 (0,0)(20,0)(40,0)(40,20)(40,40), 큐브 10 (겹치지 않음)
+  'pattern-curve': {
+    volume: 5 * 1000,
+    roots: 1,
+    commands: [
+      box('b', 10, 10, 10),
+      { type: 'create_sketch', id: 'pc', plane: { type: 'XY', offset: 0 } },
+      { type: 'add_path', sketch: 'pc', id: 'pa', points: [[0, 0], [40, 0], [40, 40]] },
+      { type: 'pattern', id: 'cp', pattern: { type: 'curve', source: 'b', sketch: 'pc', path: 'pa', count: 5, align: true } },
+    ],
+    bbox: [[-5, -5, 0], [45, 45, 10]],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

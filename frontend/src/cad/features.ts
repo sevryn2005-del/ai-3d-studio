@@ -3,9 +3,10 @@
  * 억제 판정, 패턴·대칭 사본 행렬, 쉘 검사, 구멍 도구 치수.
  */
 import { Matrix4, Vector3 } from 'three';
-import type { Axis, CadObject, FaceName, ModelDefinition, ObjectId, PatternDef, Shell } from './commandTypes';
+import type { Axis, CadObject, FaceName, ModelDefinition, ObjectId, PatternDef, Point2, Shell, Sketch } from './commandTypes';
 import { LIMITS } from './commandTypes';
-import { findSketch, profileOf } from './sketch';
+import { findSketch, openLinePoints, profileOf } from './sketch';
+import { planeMatrix } from './sketchPlane';
 import { formatMm } from './units';
 
 /**
@@ -55,12 +56,61 @@ export function objectNeedsPrecise(obj: CadObject, index: Map<ObjectId, CadObjec
 export function patternCopyCount(p: PatternDef): number {
   if (p.type === 'scale') return 1;
   if (p.type === 'mirror') return 2;
-  if (p.type === 'circular') return p.count;
+  if (p.type === 'circular' || p.type === 'curve') return p.count;
   return p.count * (p.axis2 ? (p.count2 ?? 1) : 1);
 }
 
 /** 패턴 좌표계에서 원본(자식 변환 적용 후)에 곱할 사본 행렬들. 첫 번째 = 단위 행렬 (원본) */
-export function patternMatrices(p: PatternDef): Matrix4[] {
+/**
+ * 곡선 따라 패턴 사본 행렬 (서버 features.py curve_matrices 와 같은 규칙): 열린 선을 길이로 count−1 등분한 점마다
+ * 선 시작점에서 그 점으로 옮긴다. align 이면 시작 접선 → 그 점 접선만큼 평면 법선 둘레로 돌린다. 스케치 평면 좌표 → 월드(= 패턴 좌표계)
+ */
+export function curveMatrices(points: Point2[], plane: Matrix4, count: number, align: boolean): Matrix4[] {
+  const seg: number[] = [];
+  let total = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const l = Math.hypot(points[i + 1]![0] - points[i]![0], points[i + 1]![1] - points[i]![1]);
+    seg.push(l);
+    total += l;
+  }
+  const at = (s: number): { p: Point2; ang: number } => {
+    let i = 0;
+    while (i < seg.length - 1 && s > seg[i]!) {
+      s -= seg[i]!;
+      i++;
+    }
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const t = seg[i]! > 0 ? Math.min(1, s / seg[i]!) : 0;
+    return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  };
+  const first = at(0);
+  const normal = new Vector3().setFromMatrixColumn(plane, 2).normalize();
+  const world = (q: Point2) => new Vector3(q[0], q[1], 0).applyMatrix4(plane);
+  const p0 = world(first.p);
+  return Array.from({ length: count }, (_, k) => {
+    const c = at(count > 1 ? (total * k) / (count - 1) : 0);
+    const pk = world(c.p);
+    const rot = align ? new Matrix4().makeRotationAxis(normal, c.ang - first.ang) : new Matrix4();
+    return new Matrix4().makeTranslation(pk.x, pk.y, pk.z).multiply(rot).multiply(new Matrix4().makeTranslation(-p0.x, -p0.y, -p0.z));
+  });
+}
+
+/** 곡선 패턴의 선 점과 평면 (못 쓰면 오류 글) */
+export function curvePatternInput(p: Extract<PatternDef, { type: 'curve' }>, sketches: Map<ObjectId, Sketch>): { points: Point2[]; plane: Matrix4 } | string {
+  const sk = sketches.get(p.sketch);
+  if (!sk) return `존재하지 않는 스케치입니다: ${p.sketch}`;
+  if (sk.plane.type === 'face') return '곡선 패턴의 선은 기준 평면·각도 평면·고정 평면 스케치에 있어야 합니다 (면 위 스케치는 아직)';
+  const pts = openLinePoints(sk, p.path);
+  if (!pts || pts.length < 2) return `'${sk.name}'에 열린 선(선·경로) '${p.path}'이(가) 없습니다`;
+  return { points: pts, plane: planeMatrix(sk.plane) };
+}
+
+export function patternMatrices(p: PatternDef, sketches: Map<ObjectId, Sketch> = new Map()): Matrix4[] {
+  if (p.type === 'curve') {
+    const input = curvePatternInput(p, sketches);
+    return typeof input === 'string' ? [new Matrix4()] : curveMatrices(input.points, input.plane, p.count, p.align);
+  }
   if (p.type === 'scale') return [new Matrix4().makeScale(p.x, p.y, p.z)]; // 원본 대신 배율 적용본 하나
   if (p.type === 'mirror') {
     const n = new Vector3(...{ XY: AXIS.z, XZ: AXIS.y, YZ: AXIS.x }[p.plane]);
@@ -93,7 +143,14 @@ export function patternMatrices(p: PatternDef): Matrix4[] {
 }
 
 /** 패턴 정의 검사 (실행기·파일 검증). 문제 없으면 null */
-export function patternError(p: PatternDef): string | null {
+export function patternError(p: PatternDef, sketches?: Map<ObjectId, Sketch>): string | null {
+  if (p.type === 'curve') {
+    if (p.count < 2) return '곡선 패턴은 개수가 2 이상이어야 합니다';
+    if (sketches) {
+      const input = curvePatternInput(p, sketches);
+      if (typeof input === 'string') return input;
+    }
+  }
   if (p.type === 'linear') {
     if (p.count < 2 && !(p.axis2 && (p.count2 ?? 1) >= 2)) return '선형 패턴은 개수가 2 이상이어야 합니다';
     if (Math.abs(p.spacing) < LIMITS.minDimension) return `간격은 ${LIMITS.minDimension}mm 이상이어야 합니다`;
@@ -155,3 +212,11 @@ function polygonInradiusBound(points: [number, number][]): number {
   }
   return Math.abs(area) / perimeter; // 볼록 다각형의 내접원 반지름 이상, 대부분 형상에서 충분히 보수적
 }
+
+/** 곡선 패턴에 쓸 수 있는 열린 선 (기준·각도·고정 평면 스케치의 선·경로) */
+export function curvePathOptions(model: ModelDefinition): { sketch: string; path: string; label: string }[] {
+  return model.sketches
+    .filter((sk) => sk.plane.type !== 'face')
+    .flatMap((sk) => sk.entities.filter((e) => e.type === 'line' || e.type === 'path').map((e) => ({ sketch: sk.id, path: e.id, label: `${sk.name} · ${e.id}` })));
+}
+

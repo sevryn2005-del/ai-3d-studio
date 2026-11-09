@@ -112,3 +112,18 @@ def test_mesh_cache_claims_dedupe_concurrent_work():
     c.release(["a", "b"])
     assert waits2[0].is_set()
     assert c.claim(["a"]) == ([], [])
+
+
+def test_curve_matrices_match_frontend():
+    """형식 v35: 곡선 따라 패턴 행렬 — 프론트 references.test.ts 와 같은 값"""
+    import numpy as np
+
+    from app.cad.features import curve_matrices
+
+    pts = [(0, 0), (40, 0), (40, 40)]
+
+    def at(m, x, y):
+        return [round(float(v), 9) + 0.0 for v in (m @ np.array([x, y, 0, 1.0]))[:3]]
+
+    assert [at(m, 1, 0) for m in curve_matrices(pts, np.eye(4), 3, False)] == [[1, 0, 0], [41, 0, 0], [41, 40, 0]]
+    assert [at(m, 1, 0) for m in curve_matrices(pts, np.eye(4), 3, True)] == [[1, 0, 0], [41, 0, 0], [40, 41, 0]]

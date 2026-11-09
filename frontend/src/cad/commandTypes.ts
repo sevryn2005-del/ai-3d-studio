@@ -441,6 +441,15 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     count: patternCount,
     angle: z.number().min(1).max(360),
   }),
+  /** 곡선 따라 (형식 v35): 스케치의 열린 선(선·경로)을 따라 같은 간격 count 개 (원본 = 선 시작점 기준). align = 접선 방향으로 돌림 */
+  z.strictObject({
+    type: z.literal('curve'),
+    source: ObjectIdSchema,
+    sketch: ObjectIdSchema,
+    path: ObjectIdSchema,
+    count: patternCount,
+    align: z.boolean(),
+  }),
   z.strictObject({
     type: z.literal('mirror'),
     source: ObjectIdSchema,
@@ -759,7 +768,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 34;
+export const MODEL_SCHEMA_VERSION = 35;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 34, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 35, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -865,7 +865,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       return draft(c, placed(c, obj.draft.source), obj.draft.angle, obj.name);
     case 'pattern': {
       const src = placed(c, obj.pattern.source);
-      const mats = patternMatrices(obj.pattern);
+      const mats = patternMatrices(obj.pattern, c.sketches);
       let result = transformed(c, src, mats[0]!, obj.name);
       for (const m of mats.slice(1)) result = fuse(c, result, transformed(c, src, m, obj.name));
       if (mats.length > 1) result = clean(c, result);

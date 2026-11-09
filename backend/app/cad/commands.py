@@ -794,6 +794,8 @@ def sketch_refs(obj) -> list:
         return list(obj.loft.sections)
     if isinstance(obj, SweepObject):
         return [FeatureRef(obj.sweep.sketch, obj.sweep.profile), FeatureRef(obj.sweep.pathSketch, obj.sweep.path, open=True)]
+    if getattr(obj, "kind", None) == "pattern" and obj.pattern.type == "curve":
+        return [FeatureRef(obj.pattern.sketch, obj.pattern.path, open=True)]
     r = sketch_feature_ref(obj)
     return [r] if r else []
 
@@ -862,7 +864,18 @@ class MirrorPattern(Strict):
     offset: Coordinate
 
 
-PatternDef = Annotated[Union[LinearPattern, CircularPattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
+class CurvePattern(Strict):
+    """곡선 따라 (형식 v35): 스케치의 열린 선(선·경로)을 따라 같은 간격 count 개, align = 접선 방향으로 돌림"""
+
+    type: Literal["curve"]
+    source: ObjectId
+    sketch: ObjectId
+    path: ObjectId
+    count: PatternCount
+    align: bool
+
+
+PatternDef = Annotated[Union[LinearPattern, CircularPattern, CurvePattern, MirrorPattern, ScalePattern], Field(discriminator="type")]
 
 
 class PatternObject(_ObjectBase):
@@ -1116,7 +1129,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[34]
+    schemaVersion: Literal[35]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

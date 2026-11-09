@@ -439,7 +439,7 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
         return apply_transform(build_solid(child, index, sketches), child.transform)
 
     if isinstance(obj, PatternObject):
-        return pattern_solid(obj, placed(obj.pattern.source))
+        return pattern_solid(obj, placed(obj.pattern.source), sketches)
     if isinstance(obj, StepObject):
         return read_step(obj.step.data, obj.name)
     if isinstance(obj, FilletObject):
@@ -472,7 +472,7 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
     return result
 
 
-def pattern_solid(obj: PatternObject, src: cq.Shape) -> cq.Shape:
+def pattern_solid(obj: PatternObject, src: cq.Shape, sketches: dict[str, Sketch] | None = None) -> cq.Shape:
     """패턴·대칭: 원본 ∪ 사본. 대칭은 반사(행렬식 −1)라 강체 변환 대신 mirror 로 만든다."""
     p = obj.pattern
     if p.type == "scale":
@@ -490,7 +490,7 @@ def pattern_solid(obj: PatternObject, src: cq.Shape) -> cq.Shape:
         copies = [src.mirror(p.plane, cq.Vector(*normal) * p.offset)]
     else:
         copies = []
-        for m in pattern_matrices(p)[1:]:
+        for m in pattern_matrices(p, sketches)[1:]:
             trsf = gp_Trsf()
             trsf.SetValues(*m[:3, :4].ravel().tolist())
             copies.append(cq.Shape.cast(BRepBuilderAPI_Transform(src.wrapped, trsf, True).Shape()))

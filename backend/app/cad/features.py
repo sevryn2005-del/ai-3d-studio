@@ -16,6 +16,7 @@ from app.cad.commands import (
     Limits,
     ModelDefinition,
     PatternObject,
+    open_line_points,
     profile_of,
     sketch_feature_ref,
 )
@@ -39,7 +40,7 @@ def pattern_copy_count(p) -> int:
         return 1
     if p.type == "mirror":
         return 2
-    if p.type == "circular":
+    if p.type in ("circular", "curve"):
         return p.count
     return p.count * ((p.count2 or 1) if p.axis2 else 1)
 
@@ -57,8 +58,70 @@ def _rotation(axis: str, deg: float) -> np.ndarray:
     return m
 
 
-def pattern_matrices(p) -> list[np.ndarray]:
+def _axis_rotation(n, a: float) -> np.ndarray:
+    x, y, z = n
+    c, s, C = math.cos(a), math.sin(a), 1 - math.cos(a)
+    m = np.eye(4)
+    m[:3, :3] = [
+        [c + x * x * C, x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C, y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+    ]
+    return m
+
+
+def curve_matrices(points, plane: np.ndarray, count: int, align: bool) -> list[np.ndarray]:
+    """곡선 따라 패턴 (프론트 curveMatrices 와 같은 규칙): 선 길이를 count−1 등분한 점마다 시작점에서 옮기고, align 이면 접선만큼 법선 둘레로 돌림"""
+    seg = [math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1]) for i in range(len(points) - 1)]
+    total = sum(seg)
+
+    def at(s: float):
+        i = 0
+        while i < len(seg) - 1 and s > seg[i]:
+            s -= seg[i]
+            i += 1
+        a, b = points[i], points[i + 1]
+        t = min(1.0, s / seg[i]) if seg[i] > 0 else 0.0
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), math.atan2(b[1] - a[1], b[0] - a[0])
+
+    def world(q) -> np.ndarray:
+        return (plane @ np.array([q[0], q[1], 0.0, 1.0]))[:3]
+
+    normal = plane[:3, 2] / np.linalg.norm(plane[:3, 2])
+    first_p, first_ang = at(0.0)
+    p0 = world(first_p)
+    out = []
+    for k in range(count):
+        q, ang = at(total * k / (count - 1) if count > 1 else 0.0)
+        pk = world(q)
+        t1, t2 = np.eye(4), np.eye(4)
+        t1[:3, 3] = pk
+        t2[:3, 3] = -p0
+        rot = _axis_rotation(normal, ang - first_ang) if align else np.eye(4)
+        out.append(t1 @ rot @ t2)
+    return out
+
+
+def curve_pattern_input(p, sketches: dict):
+    """곡선 패턴의 선 점과 평면 행렬, 못 쓰면 오류 글 (프론트 curvePatternInput)"""
+    from app.cad.frames import plane_matrix
+
+    sk = sketches.get(p.sketch)
+    if sk is None:
+        return f"존재하지 않는 스케치입니다: {p.sketch}"
+    if sk.plane.type == "face":
+        return "곡선 패턴의 선은 기준 평면·각도 평면·고정 평면 스케치에 있어야 합니다 (면 위 스케치는 아직)"
+    pts = open_line_points(sk, p.path)
+    if not pts or len(pts) < 2:
+        return f"'{sk.name}'에 열린 선(선·경로) '{p.path}'이(가) 없습니다"
+    return pts, plane_matrix(sk.plane)
+
+
+def pattern_matrices(p, sketches: dict | None = None) -> list[np.ndarray]:
     """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본). 크기 조정은 배율 행렬 하나."""
+    if p.type == "curve":
+        inp = curve_pattern_input(p, sketches or {})
+        return [np.eye(4)] if isinstance(inp, str) else curve_matrices(inp[0], inp[1], p.count, p.align)
     if p.type == "scale":
         return [np.diag([p.x, p.y, p.z, 1.0])]
     if p.type == "mirror":
@@ -82,7 +145,12 @@ def pattern_matrices(p) -> list[np.ndarray]:
     return out
 
 
-def pattern_error(p) -> str | None:
+def pattern_error(p, sketches: dict | None = None) -> str | None:
+    if p.type == "curve":
+        if p.count < 2:
+            return "곡선 패턴은 개수가 2 이상이어야 합니다"
+        if sketches is not None and isinstance(inp := curve_pattern_input(p, sketches), str):
+            return inp
     if p.type == "linear":
         if p.count < 2 and not (p.axis2 and (p.count2 or 1) >= 2):
             return "선형 패턴은 개수가 2 이상이어야 합니다"

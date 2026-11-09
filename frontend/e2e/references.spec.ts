@@ -59,7 +59,7 @@ test('참조 형상: 세 점 기준 평면 → 스케치, 좌표로 기준 축, 
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(34);
+  expect(saved.formatVersion).toBe(35);
   expect(saved.model.references.map((r: { id: string; type: string }) => [r.id, r.type])).toEqual([
     ['ref_plane_1', 'plane'],
     ['ref_axis_1', 'axis'],
@@ -92,3 +92,32 @@ for (const engine of ['server', 'browser'] as const) {
     await expect.poll(async () => (await page.evaluate(() => window.__AI3D_DEV__!.scene())).past).toBe(before - 1);
   });
 }
+
+test('곡선 패턴 (형식 v35): 경로 그리기 → 곡선 패턴 → 개수·방향 따라 돌리기 → 경로 삭제 막힘', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  const src = async () => await page.evaluate(() => window.__AI3D_DEV__!.meshSources());
+  await expect.poll(async () => (await src()).box_1?.source, { timeout: 20_000 }).toBe('server');
+  // 선이 없으면 알려 준다
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-curve-pattern').click();
+  await expect(page.getByRole('alert')).toContainText('선이나 경로를 그리세요');
+  await page.evaluate(() => {
+    window.__AI3D_DEV__!.dispatch({ type: 'create_sketch', id: 'pc', plane: { type: 'XY', offset: 0 } });
+    window.__AI3D_DEV__!.dispatch({ type: 'add_path', sketch: 'pc', id: 'pa', points: [[0, 0], [60, 0], [60, 60]] });
+  });
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-curve-pattern').click();
+  await expect.poll(async () => (await src()).pattern_1?.source, { timeout: 20_000 }).toBe('server');
+  // 기본 4개: 길이 120 을 3 등분 → (0,0)(40,0)(60,20)(60,60), 큐브 20
+  await expect.poll(async () => (await src()).pattern_1?.max, { timeout: 20_000 }).toEqual([70, 70, 20]);
+  await expect(page.getByTestId('pattern-curve-path')).toHaveValue('pc/pa');
+  await page.getByTestId('pattern-count').fill('3');
+  await page.getByTestId('pattern-count').press('Enter');
+  await page.getByTestId('pattern-align').check();
+  await expect.poll(async () => (await src()).pattern_1?.min, { timeout: 20_000 }).toEqual([-10, -10, 0]);
+  expect((await src()).pattern_1!.max).toEqual([70, 70, 20]);
+  // 패턴이 쓰는 경로는 지울 수 없다
+  const r = await page.evaluate(() => window.__AI3D_DEV__!.dispatch({ type: 'delete_sketch_entity', sketch: 'pc', entity: 'pa' }) as { ok: boolean });
+  expect(r.ok).toBe(false);
+});

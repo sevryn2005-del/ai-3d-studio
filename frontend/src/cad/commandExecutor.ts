@@ -38,7 +38,7 @@ import {
   type MeshEdit,
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
-import { byId, depthOf, parentMap, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
+import { byId, depthOf, parentMap, sketchIndex, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
 import { mateError, pruneMates, refObject, solveMates } from './mates';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
@@ -333,7 +333,7 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (!target) return missing(cmd.target);
       if (target.kind !== 'pattern') return fail(`'${target.name}'은(는) 패턴이 아닙니다`);
       if (cmd.pattern.source !== target.pattern.source) return fail('패턴의 원본은 바꿀 수 없습니다');
-      const err = patternError(cmd.pattern);
+      const err = patternError(cmd.pattern, sketchIndex(model));
       if (err) return fail(err);
       return done(model, replaceObject(model, { ...target, pattern: cmd.pattern }), cmd, target.id);
     }
@@ -683,7 +683,7 @@ function createPattern(model: ModelDefinition, cmd: PatternCommand): ExecuteResu
   const source = findObject(model, cmd.pattern.source);
   if (!source) return missing(cmd.pattern.source);
   if (parentMap(model).has(source.id)) return fail(`'${source.name}'은(는) 이미 다른 불리언·패턴에 포함되어 있습니다`);
-  const err = patternError(cmd.pattern);
+  const err = patternError(cmd.pattern, sketchIndex(model));
   if (err) return fail(err);
   if (model.objects.length >= LIMITS.maxObjects) return fail(`객체는 최대 ${LIMITS.maxObjects}개까지 가능합니다`);
   const id = cmd.id ?? nextId(model, 'pattern');

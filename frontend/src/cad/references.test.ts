@@ -87,3 +87,16 @@ describe('기준 축 둘레 원형 패턴', () => {
     ]);
   });
 });
+
+describe('곡선 따라 패턴 행렬 (서버 features.py curve_matrices 와 같은 값)', () => {
+  it('ㄱ 자 선 3개: 시작 → 꺾인 점 → 끝, align 이면 끝에서 90° 돌림', async () => {
+    const { curveMatrices } = await import('./features');
+    const { Matrix4: M } = await import('three');
+    const pts: [number, number][] = [[0, 0], [40, 0], [40, 40]];
+    const at = (m: InstanceType<typeof M>, x: number, y: number) => new Vector3(x, y, 0).applyMatrix4(m).toArray().map((v) => Math.round(v * 1e9) / 1e9 + 0);
+    const plain = curveMatrices(pts, new M(), 3, false);
+    expect(plain.map((m) => at(m, 1, 0))).toEqual([[1, 0, 0], [41, 0, 0], [41, 40, 0]]);
+    const aligned = curveMatrices(pts, new M(), 3, true);
+    expect(aligned.map((m) => at(m, 1, 0))).toEqual([[1, 0, 0], [41, 0, 0], [40, 41, 0]]);
+  });
+});
