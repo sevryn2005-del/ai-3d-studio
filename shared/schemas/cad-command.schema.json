@@ -7804,6 +7804,11 @@
                             "minimum": 0.05,
                             "maximum": 500
                           },
+                          "size2": {
+                            "type": "number",
+                            "minimum": 0.05,
+                            "maximum": 500
+                          },
                           "edges": {
                             "anyOf": [
                               {
@@ -8304,6 +8309,11 @@
           "minimum": 0.05,
           "maximum": 500
         },
+        "size2": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 500
+        },
         "edges": {
           "anyOf": [
             {
@@ -8385,6 +8395,11 @@
         "size": {
           "type": "number",
           "minimum": 0.05,
+          "maximum": 500
+        },
+        "size2": {
+          "type": "number",
+          "minimum": 0,
           "maximum": 500
         },
         "edges": {

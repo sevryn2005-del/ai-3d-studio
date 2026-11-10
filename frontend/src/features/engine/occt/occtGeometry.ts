@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 37, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 38, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -628,7 +628,7 @@ export function draftFaces(oc: OC, gc: Gc, s: TopoDS_Shape): TopoDS_Face[] {
   });
 }
 
-function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: number, rule: FeatureEdges, name: string): TopoDS_Shape {
+function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: number, rule: FeatureEdges, name: string, size2?: number): TopoDS_Shape {
   const edges = selectEdges(c.oc, c.gc, s, rule);
   if (edges.length === 0) throw new GeometryError(`'${name}': 규칙에 맞는 모서리가 없습니다`);
   const what = type === 'fillet' ? '모서리를 둥글게' : '모따기를';
@@ -636,7 +636,8 @@ function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: 
     let result: TopoDS_Shape;
     if (type === 'fillet') {
       const mk = c.gc.k(new c.oc.BRepFilletAPI_MakeFillet(s, 'ChFi3d_Rational' as never));
-      for (const e of edges) mk.Add(size, e);
+      // 가변 반경 (형식 v38): 모서리 시작 → 끝으로 size → size2 (서버 precise.py 와 같은 OCCT 호출)
+      for (const e of edges) size2 !== undefined ? mk.Add(size, size2, e) : mk.Add(size, e);
       mk.Build(progress(c));
       if (!mk.IsDone()) throw new Error('fillet');
       result = c.gc.k(mk.Shape());
@@ -859,7 +860,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       return readStep(c.oc, obj.step.data, obj.name);
     case 'fillet': {
       const f = obj.fillet;
-      return edgeFeature(c, placed(c, f.source), f.type, f.size, f.edges, obj.name);
+      return edgeFeature(c, placed(c, f.source), f.type, f.size, f.edges, obj.name, f.type === 'fillet' ? f.size2 : undefined);
     }
     case 'draft':
       return draft(c, placed(c, obj.draft.source), obj.draft.angle, obj.name);

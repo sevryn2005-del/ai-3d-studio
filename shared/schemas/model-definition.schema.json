@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 37
+      "const": 38
     },
     "units": {
       "type": "string",
@@ -3853,6 +3853,11 @@
                     ]
                   },
                   "size": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 500
+                  },
+                  "size2": {
                     "type": "number",
                     "minimum": 0.05,
                     "maximum": 500

@@ -835,6 +835,13 @@ export function preciseCases(samples: FixtureSamples): typeof FEATURE_CASES {
     'fillet-box-all': { volume: roundedBox(20, 20, 20, 2), roots: 1, bbox: [[-10, -10, 0], [10, 10, 20]], commands: [box('b', 20, 20, 20), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 2, edges: 'all' }] },
     'chamfer-box-top': { volume: 20 * 20 * 8 + frustum(400, 256, 2), roots: 1, commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'chamfer', size: 2, edges: 'top' }] },
     'fillet-box-vertical': { volume: 4000 - 4 * (9 - (PI * 9) / 4) * 10, roots: 1, commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 3, edges: 'vertical' }] },
+    // 형식 v38 가변 반경: 세로 모서리 넷, 반지름 2 → 4 (높이 10). 단면마다 사분원 손실 (1 − π/4)r², r 이 선형 → ∫r² = h(r1² + r1r2 + r2²)/3
+    'fillet-box-variable': {
+      volume: 4000 - 4 * (1 - PI / 4) * ((10 * (4 + 8 + 16)) / 3),
+      roots: 1,
+      bbox: [[-10, -10, 0], [10, 10, 10]],
+      commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 2, size2: 4, edges: 'vertical' }],
+    },
     'fillet-cylinder-top': { volume: PI * 100 * 10 - cylinderTopFilletLoss(10, 2), roots: 1, commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 10 }, { type: 'edge_feature', id: 'f', target: 'c', feature: 'fillet', size: 2, edges: 'top' }] },
     'fillet-moved-boolean-bottom': {
       // 원본이 옮겨져 있어도 규칙은 피처 좌표계(월드)에서 고른다. 바닥 모서리 = 바깥 네 모서리 + 구멍 아래 원

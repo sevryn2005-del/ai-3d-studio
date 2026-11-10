@@ -418,6 +418,22 @@ export function PreciseFields({ object }: { object: Extract<CadObject, { kind: '
             onCommit={(v) => submit({ type: 'set_edge_feature', target: object.id, size: v })}
             testId="ef-size"
           />
+          {object.fillet.type === 'fillet' && (
+            <>
+              <label className="check" title="모서리 시작에서 끝으로 반지름이 고르게 바뀌는 필렛 (솔리드웍스 가변 반경 필렛)">
+                <input
+                  type="checkbox"
+                  checked={object.fillet.size2 !== undefined}
+                  onChange={(e) => submit({ type: 'set_edge_feature', target: object.id, size2: e.target.checked ? Math.round(object.fillet.size * 2 * 1000) / 1000 : 0 })}
+                  data-testid="ef-variable"
+                />
+                가변 반경 (시작 → 끝)
+              </label>
+              {object.fillet.size2 !== undefined && (
+                <NumberField label="끝 반지름" unit="mm" value={object.fillet.size2} onCommit={(v) => submit({ type: 'set_edge_feature', target: object.id, size2: v })} testId="ef-size2" />
+              )}
+            </>
+          )}
           <button onClick={() => startEdgePick(object)} data-testid="ef-pick" title="원본 형상의 모서리를 화면에서 클릭해 고릅니다 (다시 클릭하면 뺌, Enter 적용)">
             화면에서 모서리 고르기
           </button>

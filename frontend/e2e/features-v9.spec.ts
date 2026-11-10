@@ -58,3 +58,35 @@ for (const engine of ['server', 'browser'] as const) {
     expect(bytes.toString()).toContain('MANIFOLD_SOLID_BREP');
   });
 }
+
+test('가변 반경 필렛 (형식 v38): 세로 모서리 필렛 → 가변 켜기(끝 = 2배) → 끝 반지름 → 끄기, 저장', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__AI3D_DEV__);
+  const src = async () => await page.evaluate(() => window.__AI3D_DEV__!.meshSources());
+  await expect.poll(async () => (await src()).box_1?.source, { timeout: 20_000 }).toBe('server');
+  await page.locator('[data-object-id="box_1"]').click();
+  await page.getByTestId('cmd-fillet').click();
+  await expect.poll(async () => (await src()).fillet_1?.source, { timeout: 60_000 }).toBe('server');
+  await page.locator('[data-object-id="fillet_1"]').click();
+  await page.getByTestId('ef-edges').selectOption('vertical');
+  await page.getByTestId('ef-size').fill('2');
+  await page.getByTestId('ef-size').press('Enter');
+  await expect.poll(async () => (await src()).fillet_1?.source, { timeout: 60_000 }).toBe('server');
+  const even = (await src()).fillet_1!.vertices;
+  await page.getByTestId('ef-variable').check();
+  await expect(page.getByTestId('ef-size2')).toHaveValue('4');
+  await expect.poll(async () => (await src()).fillet_1?.vertices, { timeout: 60_000 }).not.toBe(even);
+  await page.getByTestId('ef-size2').fill('6');
+  await page.getByTestId('ef-size2').press('Enter');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
+  expect(saved.formatVersion).toBe(38);
+  expect(saved.model.objects.find((o: { id: string }) => o.id === 'fillet_1').fillet).toMatchObject({ type: 'fillet', size: 2, size2: 6, edges: 'vertical' });
+  await page.getByTestId('ef-variable').uncheck();
+  await expect(page.getByTestId('ef-size2')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

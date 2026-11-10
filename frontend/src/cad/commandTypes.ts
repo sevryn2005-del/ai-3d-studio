@@ -627,6 +627,8 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
       source: ObjectIdSchema,
       type: z.enum(['fillet', 'chamfer']),
       size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
+      /** 가변 반경 필렛 (형식 v38): 모서리 끝 반경 — size(시작)에서 size2(끝)로 고르게 바뀐다. 필렛만 */
+      size2: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2).optional(),
       edges: FeatureEdgesSchema,
     }),
   }),
@@ -781,7 +783,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 37;
+export const MODEL_SCHEMA_VERSION = 38;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
@@ -1270,6 +1272,8 @@ export const EdgeFeatureCommandSchema = z.strictObject({
   target: ObjectIdSchema,
   feature: z.enum(['fillet', 'chamfer']),
   size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2),
+  /** 가변 반경 필렛의 끝 반경 (형식 v38, 필렛만) */
+  size2: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2).optional(),
   edges: FeatureEdgesSchema,
 });
 
@@ -1279,6 +1283,8 @@ export const SetEdgeFeatureCommandSchema = z.strictObject({
   target: ObjectIdSchema,
   feature: z.enum(['fillet', 'chamfer']).optional(),
   size: z.number().min(LIMITS.minDimension / 2).max(LIMITS.maxDimension / 2).optional(),
+  /** 가변 반경 끝 반경 (형식 v38) — 0 = 가변 끄기 (한 반경) */
+  size2: z.number().min(0).max(LIMITS.maxDimension / 2).optional(),
   edges: FeatureEdgesSchema.optional(),
 });
 

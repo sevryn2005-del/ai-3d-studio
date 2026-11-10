@@ -444,7 +444,7 @@ def build_solid(obj: CadObject, index: dict[str, CadObject], sketches: dict[str,
         return read_step(obj.step.data, obj.name)
     if isinstance(obj, FilletObject):
         f = obj.fillet
-        return edge_feature(placed(f.source), f.type, f.size, f.edges, obj.name)
+        return edge_feature(placed(f.source), f.type, f.size, f.edges, obj.name, f.size2 if f.type == "fillet" else None)
     if isinstance(obj, DraftObject):
         return draft(placed(obj.draft.source), obj.draft.angle, obj.name)
     if not isinstance(obj, BooleanObject):

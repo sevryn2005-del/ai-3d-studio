@@ -928,6 +928,7 @@ class FilletDef(Strict):
     source: ObjectId
     type: FeatureType
     size: Radius
+    size2: Radius | None = _opt()  # 가변 반경 필렛의 끝 반경 (형식 v38, 필렛만)
     edges: FeatureEdges
 
 
@@ -1150,7 +1151,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[37]
+    schemaVersion: Literal[38]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1714,6 +1715,7 @@ class EdgeFeatureCommand(Strict):
     target: ObjectId
     feature: FeatureType
     size: Radius
+    size2: Radius | None = None
     edges: FeatureEdges
 
 
@@ -1722,6 +1724,7 @@ class SetEdgeFeature(Strict):
     target: ObjectId
     feature: FeatureType | None = None
     size: Radius | None = None
+    size2: RadiusOrZero | None = None
     edges: FeatureEdges | None = None
 
 

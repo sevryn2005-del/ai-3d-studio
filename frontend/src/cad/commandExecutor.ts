@@ -361,7 +361,7 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
               id,
               name: cmd.name ?? `${label} ${n}`,
               kind: 'fillet',
-              fillet: { source: source.id, type: cmd.feature, size: cmd.size, edges: cmd.edges },
+              fillet: { source: source.id, type: cmd.feature, size: cmd.size, ...(cmd.size2 !== undefined && cmd.feature === 'fillet' ? { size2: cmd.size2 } : {}), edges: cmd.edges },
               transform: IDENTITY,
             };
       return done(model, { ...model, objects: [...model.objects, obj] }, cmd, id);
@@ -371,7 +371,13 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       const target = findObject(model, cmd.target);
       if (!target) return missing(cmd.target);
       if (target.kind !== 'fillet') return fail(`'${target.name}'은(는) 모서리 처리가 아닙니다`);
-      const f = { ...target.fillet, ...(cmd.feature ? { type: cmd.feature } : {}), ...(cmd.size !== undefined ? { size: cmd.size } : {}), ...(cmd.edges ? { edges: cmd.edges } : {}) };
+      const f: typeof target.fillet = { ...target.fillet, ...(cmd.feature ? { type: cmd.feature } : {}), ...(cmd.size !== undefined ? { size: cmd.size } : {}), ...(cmd.edges ? { edges: cmd.edges } : {}) };
+      if (cmd.size2 !== undefined) {
+        if (cmd.size2 === 0) delete f.size2;
+        else if (cmd.size2 < LIMITS.minDimension / 2) return fail(`끝 반경은 ${LIMITS.minDimension / 2}mm 이상이어야 합니다 (0 = 가변 끄기)`);
+        else f.size2 = cmd.size2;
+      }
+      if (f.type === 'chamfer') delete f.size2; // 가변은 필렛만
       return done(model, replaceObject(model, { ...target, fillet: f }), cmd, target.id);
     }
 

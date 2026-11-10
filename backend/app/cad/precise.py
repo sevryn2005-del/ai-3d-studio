@@ -115,7 +115,7 @@ def _valid(s: TopoDS_Shape) -> bool:
     return BRepCheck_Analyzer(s, True, False).IsValid()
 
 
-def edge_feature(shape: cq.Shape, kind: str, size: float, rule: EdgeRule, name: str) -> cq.Shape:
+def edge_feature(shape: cq.Shape, kind: str, size: float, rule: EdgeRule, name: str, size2: float | None = None) -> cq.Shape:
     from app.cad.primitives import GeometryError
 
     s = shape.wrapped
@@ -126,7 +126,10 @@ def edge_feature(shape: cq.Shape, kind: str, size: float, rule: EdgeRule, name: 
     try:
         mk = BRepFilletAPI_MakeFillet(s) if kind == "fillet" else BRepFilletAPI_MakeChamfer(s)
         for e in edges:
-            mk.Add(size, e)
+            if kind == "fillet" and size2 is not None:
+                mk.Add(size, size2, e)  # 가변 반경 (형식 v38): 시작 → 끝 size → size2 (브라우저 OCCT 와 같은 호출)
+            else:
+                mk.Add(size, e)
         mk.Build()
         if not mk.IsDone():
             raise RuntimeError("fillet")
