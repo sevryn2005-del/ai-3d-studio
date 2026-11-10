@@ -19,14 +19,17 @@ from OCP.Bnd import Bnd_Box
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBndLib import BRepBndLib
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex, BRepBuilderAPI_Transform
 from OCP.BRepCheck import BRepCheck_Analyzer
 from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeChamfer, BRepFilletAPI_MakeFillet
-from OCP.BRepOffsetAPI import BRepOffsetAPI_DraftAngle
+from OCP.BRepOffsetAPI import BRepOffsetAPI_DraftAngle, BRepOffsetAPI_ThruSections
 from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
 from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
-from OCP.gp import gp_Dir, gp_Pln, gp_Pnt, gp_Vec
+from OCP.BRepGProp import BRepGProp
+from OCP.BRepTools import BRepTools
+from OCP.GProp import GProp_GProps
+from OCP.gp import gp_Dir, gp_Pln, gp_Pnt, gp_Trsf, gp_Vec
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.STEPControl import STEPControl_Reader
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
@@ -143,11 +146,10 @@ def edge_feature(shape: cq.Shape, kind: str, size: float, rule: EdgeRule, name: 
         raise GeometryError(f"'{name}': {what} 할 수 없습니다 (크기를 줄여 보세요)") from e
 
 
-def move_face(shape: cq.Shape, at, distance: float, name: str) -> cq.Shape:
-    """면 이동 (형식 v39) — 브라우저 occtGeometry.moveFace 와 같은 규칙: 점에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 밀기(+)·당기기(−)"""
+def _nearest_plane(s: TopoDS_Shape, at, name: str, what: str):
+    """점에서 가장 가까운 평면(1µm 안)과 바깥 법선 — 면 이동·돔 공통 (브라우저 occtGeometry.nearestPlane 과 같은 규칙)"""
     from app.cad.primitives import GeometryError
 
-    s = shape.wrapped
     v = BRepBuilderAPI_MakeVertex(gp_Pnt(*at)).Vertex()
     best, best_d, normal = None, math.inf, (0.0, 0.0, 1.0)
     for f in _explore(s, TopAbs_FACE):
@@ -163,7 +165,15 @@ def move_face(shape: cq.Shape, at, distance: float, name: str) -> cq.Shape:
         sign = -1.0 if face.Orientation() == TopAbs_REVERSED else 1.0
         normal = (n.X() * sign, n.Y() * sign, n.Z() * sign)
     if best is None or best_d > 1e-3:
-        raise GeometryError(f"'{name}': 고른 점에 평평한 면이 없습니다 (면 이동은 평면만)")
+        raise GeometryError(f"'{name}': 고른 점에 평평한 면이 없습니다 ({what}은 평면만)")
+    return best, normal
+
+
+def move_face(shape: cq.Shape, at, distance: float, name: str) -> cq.Shape:
+    """면 이동 (형식 v39) — 브라우저 occtGeometry.moveFace 와 같은 규칙: 점에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 밀기(+)·당기기(−)"""
+    from app.cad.primitives import GeometryError
+
+    best, normal = _nearest_plane(shape.wrapped, at, name, "면 이동")
     if abs(distance) < 1e-9:
         return shape
     try:
@@ -174,6 +184,50 @@ def move_face(shape: cq.Shape, at, distance: float, name: str) -> cq.Shape:
         return result
     except Exception as e:
         raise GeometryError(f"'{name}': 면을 {'밀' if distance > 0 else '당길'} 수 없습니다 (거리를 줄여 보세요)") from e
+
+
+DOME_SECTIONS = 8
+
+
+def dome(shape: cq.Shape, at, height: float, name: str) -> cq.Shape:
+    """돔 (형식 v40) — 브라우저 occtGeometry.dome 과 같은 규칙: 바깥 윤곽을 무게중심 쪽으로 cos θ 배, 법선으로 h·sin θ 올린 단면 8개 + 꼭대기 점을 매끈하게 이어 합치기(음수 = 파내기)"""
+    from app.cad.primitives import GeometryError
+
+    face, normal = _nearest_plane(shape.wrapped, at, name, "돔")
+    if abs(height) < 1e-9:
+        return shape
+    try:
+        props = GProp_GProps()
+        BRepGProp.SurfaceProperties_s(face, props, False, False)
+        cm = props.CentreOfMass()
+        outer = BRepTools.OuterWire_s(face)
+        ts = BRepOffsetAPI_ThruSections(True, False, 1e-6)
+        for k in range(DOME_SECTIONS):
+            th = (k / DOME_SECTIONS) * (math.pi / 2)
+            sc = gp_Trsf()
+            sc.SetScale(cm, math.cos(th))
+            up = gp_Trsf()
+            lift = height * math.sin(th)
+            up.SetTranslation(gp_Vec(normal[0] * lift, normal[1] * lift, normal[2] * lift))
+            w1 = BRepBuilderAPI_Transform(outer, sc, True).Shape()
+            w2 = BRepBuilderAPI_Transform(w1, up, True).Shape()
+            ts.AddWire(TopoDS.Wire_s(w2))
+        top = BRepBuilderAPI_MakeVertex(gp_Pnt(cm.X() + normal[0] * height, cm.Y() + normal[1] * height, cm.Z() + normal[2] * height)).Vertex()
+        ts.AddVertex(top)
+        ts.Build()
+        if not ts.IsDone():
+            raise RuntimeError("dome")
+        cap = cq.Shape.cast(ts.Shape())
+        if cap.Volume() < 0:
+            cap = cq.Shape.cast(ts.Shape().Reversed())
+        result = (shape.fuse(cap) if height > 0 else shape.cut(cap)).clean()
+        if not _valid(result.wrapped) or abs(result.Volume()) < 1e-9:
+            raise RuntimeError("invalid")
+        return result
+    except GeometryError:
+        raise
+    except Exception as e:
+        raise GeometryError(f"'{name}': 돔을 만들 수 없습니다 (높이를 줄여 보세요)") from e
 
 
 def draft(shape: cq.Shape, angle: float, name: str) -> cq.Shape:

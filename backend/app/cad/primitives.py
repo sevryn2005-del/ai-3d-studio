@@ -489,6 +489,10 @@ def pattern_solid(obj: PatternObject, src: cq.Shape, sketches: dict[str, Sketch]
         from app.cad.precise import move_face
 
         return move_face(src, p.at, p.distance, obj.name)
+    if p.type == "dome":
+        from app.cad.precise import dome
+
+        return dome(src, p.at, p.height, obj.name)
     if p.type == "split":
         x0, y0, z0, w, d, h = split_cut_box(p)
         cutter = cq.Solid.makeBox(w, d, h, cq.Vector(x0, y0, z0))

@@ -15,7 +15,7 @@ def model_with(*objs) -> ModelDefinition:
         {"id": "box_1", "name": "큐브", "kind": "box", "params": {"width": 20, "depth": 20, "height": 20},
          "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0]}},
     ]
-    return ModelDefinition.model_validate({"schemaVersion": 39, "units": "mm", "sketches": [], "objects": base + list(objs)})
+    return ModelDefinition.model_validate({"schemaVersion": 40, "units": "mm", "sketches": [], "objects": base + list(objs)})
 
 
 def chat(client, text_in="높이를 50mm로 바꿔줘", selected="box_1", history=(), model=None):

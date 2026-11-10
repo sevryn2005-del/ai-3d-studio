@@ -460,6 +460,13 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     at: Vec3Schema,
     distance: z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension),
   }),
+  /** 돔 (형식 v40, 정밀 엔진): 점 at 에 닿은 평면 위에 높이 height 의 둥근 지붕 (음수 = 오목하게 파냄). 솔리드웍스 Dome */
+  z.strictObject({
+    type: z.literal('dome'),
+    source: ObjectIdSchema,
+    at: Vec3Schema,
+    height: z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension),
+  }),
   /**
    * 평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면(XY·XZ·YZ, 법선 방향 offset)으로 자르고 keep 쪽만 남긴다.
    * 솔리드웍스 Split / 블렌더 Bisect. 두 조각 = 같은 원본을 복제해 반대쪽을 남긴 객체 둘
@@ -793,7 +800,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 39;
+export const MODEL_SCHEMA_VERSION = 40;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

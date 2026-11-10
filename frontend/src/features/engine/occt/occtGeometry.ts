@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 39, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 40, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -656,11 +656,8 @@ function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: 
   }
 }
 
-/**
- * 면 이동 (형식 v39, 서버 precise.py move_face 와 같은 규칙): 점 at 에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 distance 만큼 —
- * 양수 = 면을 돌출해 합치기(밀기), 음수 = 안쪽으로 돌출해 빼기(당기기). 스케치업 Push/Pull, 솔리드웍스 면 이동(평면)
- */
-function moveFace(c: Ctx, s: TopoDS_Shape, at: readonly number[], distance: number, name: string): TopoDS_Shape {
+/** 점 at 에서 가장 가까운 평면(1µm 안)과 바깥 법선 — 면 이동·돔 공통 (서버 precise.py _nearest_plane 과 같은 규칙) */
+function nearestPlane(c: Ctx, s: TopoDS_Shape, at: readonly number[], name: string, what: string): { face: TopoDS_Face; normal: [number, number, number] } {
   const v = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeVertex(pnt(c, at[0]!, at[1]!, at[2]!))).Vertex());
   let best: TopoDS_Face | null = null;
   let bestD = Infinity;
@@ -676,7 +673,16 @@ function moveFace(c: Ctx, s: TopoDS_Shape, at: readonly number[], distance: numb
     const sign = (f.Orientation() as unknown as string) === 'TopAbs_REVERSED' ? -1 : 1;
     normal = [n.X() * sign, n.Y() * sign, n.Z() * sign];
   }
-  if (!best || bestD > 1e-3) throw new GeometryError(`'${name}': 고른 점에 평평한 면이 없습니다 (면 이동은 평면만)`);
+  if (!best || bestD > 1e-3) throw new GeometryError(`'${name}': 고른 점에 평평한 면이 없습니다 (${what}은 평면만)`);
+  return { face: best, normal };
+}
+
+/**
+ * 면 이동 (형식 v39, 서버 precise.py move_face 와 같은 규칙): 점 at 에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 distance 만큼 —
+ * 양수 = 면을 돌출해 합치기(밀기), 음수 = 안쪽으로 돌출해 빼기(당기기). 스케치업 Push/Pull, 솔리드웍스 면 이동(평면)
+ */
+function moveFace(c: Ctx, s: TopoDS_Shape, at: readonly number[], distance: number, name: string): TopoDS_Shape {
+  const { face: best, normal } = nearestPlane(c, s, at, name, '면 이동');
   if (Math.abs(distance) < 1e-9) return s;
   try {
     const prism = c.gc.k(c.gc.k(new c.oc.BRepPrimAPI_MakePrism(best, c.gc.k(new c.oc.gp_Vec(normal[0] * distance, normal[1] * distance, normal[2] * distance)), false, true)).Shape());
@@ -685,6 +691,48 @@ function moveFace(c: Ctx, s: TopoDS_Shape, at: readonly number[], distance: numb
     return result;
   } catch {
     throw new GeometryError(`'${name}': 면을 ${distance > 0 ? '밀' : '당길'} 수 없습니다 (거리를 줄여 보세요)`);
+  }
+}
+
+/**
+ * 돔 (형식 v40, 서버 precise.py dome 과 같은 규칙): 고른 평면의 바깥 윤곽을 면 무게중심 쪽으로 cos θ 배 줄이며 법선으로 h·sin θ 올린
+ * 단면 8개 + 꼭대기 점을 매끈하게 이은 덮개를 합친다 (θ = 0 … 90°). 원 → 반타원체, 다각형 → 모서리에서 높이 0 인 둥근 지붕.
+ * height 가 음수면 안쪽으로 파낸다 (오목한 돔)
+ */
+export const DOME_SECTIONS = 8;
+function dome(c: Ctx, s: TopoDS_Shape, at: readonly number[], height: number, name: string): TopoDS_Shape {
+  const { face, normal } = nearestPlane(c, s, at, name, '돔');
+  if (Math.abs(height) < 1e-9) return s;
+  try {
+    const props = c.gc.k(new c.oc.GProp_GProps());
+    c.oc.BRepGProp.SurfaceProperties(face, props, false, false);
+    const cm = c.gc.k(props.CentreOfMass());
+    const center = pnt(c, cm.X(), cm.Y(), cm.Z());
+    const outer = c.gc.k(c.oc.BRepTools.OuterWire(face));
+    const ts = c.gc.k(new c.oc.BRepOffsetAPI_ThruSections(true, false, 1e-6));
+    for (let k = 0; k < DOME_SECTIONS; k++) {
+      const th = (k / DOME_SECTIONS) * (Math.PI / 2);
+      const sc = c.gc.k(new c.oc.gp_Trsf());
+      sc.SetScale(center, Math.cos(th));
+      const up = c.gc.k(new c.oc.gp_Trsf());
+      const lift = height * Math.sin(th);
+      up.SetTranslation(c.gc.k(new c.oc.gp_Vec(normal[0] * lift, normal[1] * lift, normal[2] * lift)));
+      const w1 = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_Transform(outer, sc, true)).Shape());
+      const w2 = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_Transform(w1, up, true)).Shape());
+      ts.AddWire(c.oc.TopoDS.Wire(w2));
+    }
+    const top = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeVertex(pnt(c, cm.X() + normal[0] * height, cm.Y() + normal[1] * height, cm.Z() + normal[2] * height))).Vertex());
+    ts.AddVertex(top);
+    ts.Build(progress(c));
+    if (!ts.IsDone()) throw new Error('dome');
+    let cap = c.gc.k(ts.Shape());
+    if (volumeOf(c.oc, cap) < 0) cap = c.gc.k(cap.Reversed());
+    const result = clean(c, height > 0 ? fuse(c, s, cap) : cut(c, s, cap));
+    if (!isValid(c, result) || Math.abs(volumeOf(c.oc, result)) < 1e-9) throw new Error('invalid');
+    return result;
+  } catch (e) {
+    if (e instanceof GeometryError) throw e;
+    throw new GeometryError(`'${name}': 돔을 만들 수 없습니다 (높이를 줄여 보세요)`);
   }
 }
 
@@ -899,6 +947,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
     case 'pattern': {
       const src = placed(c, obj.pattern.source);
       if (obj.pattern.type === 'face') return moveFace(c, src, obj.pattern.at, obj.pattern.distance, obj.name);
+      if (obj.pattern.type === 'dome') return dome(c, src, obj.pattern.at, obj.pattern.height, obj.name);
       if (obj.pattern.type === 'split') {
         const kept = cut(c, src, box(c, ...splitCutBox(obj.pattern)));
         if (!isValid(c, kept) || Math.abs(volumeOf(c.oc, kept)) < 1e-9) throw new GeometryError(`'${obj.name}': 자른 결과가 비어 있습니다 (평면 위치·남길 쪽을 확인하세요)`);

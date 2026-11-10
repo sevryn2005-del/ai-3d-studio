@@ -42,7 +42,7 @@ def pattern_copy_count(p) -> int:
         return 2
     if p.type in ("circular", "curve"):
         return p.count
-    if p.type in ("split", "face"):
+    if p.type in ("split", "face", "dome"):
         return 1
     if p.type == "sketch":
         return 0  # 원 개수는 스케치에 따라 (검사는 pattern_error 가 스케치로)
@@ -152,7 +152,7 @@ def split_cut_box(p) -> tuple[float, float, float, float, float, float]:
 
 def pattern_matrices(p, sketches: dict | None = None) -> list[np.ndarray]:
     """패턴 좌표계에서 원본에 곱할 사본 행렬 (첫 번째 = 단위 = 원본). 크기 조정은 배율 행렬 하나."""
-    if p.type in ("split", "face"):
+    if p.type in ("split", "face", "dome"):
         return [np.eye(4)]  # 자르기·면 이동은 사본이 아니다 (pattern_solid 가 원본을 자른다)
     if p.type == "sketch":
         inp = sketch_pattern_input(p, sketches or {})

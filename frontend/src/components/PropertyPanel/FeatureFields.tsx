@@ -6,7 +6,7 @@ import { MaterialFields } from './MaterialFields';
 import { alignPatternToAxisCommands } from '../../cad/references';
 import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
 import { splitOtherSide } from '../../features/selection/featureFlow';
-import { startMoveFacePick } from '../Viewport/PickFlows';
+import { startDomePick, startMoveFacePick } from '../Viewport/PickFlows';
 import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
@@ -160,6 +160,14 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
+        </>
+      ) : p.type === 'dome' ? (
+        <>
+          <NumberField label="높이 (− = 오목)" unit="mm" value={p.height} onCommit={(v) => set({ height: v })} testId="dome-height" />
+          <button onClick={() => startDomePick(object.id)} data-testid="dome-repick" title="돔을 올릴 평면을 다시 고릅니다">
+            면 다시 고르기
+          </button>
+          <p className="muted small">고른 평면의 윤곽을 따라 둥근 지붕을 얹습니다 (원 → 반타원체). 정밀 엔진.</p>
         </>
       ) : p.type === 'face' ? (
         <>

@@ -892,6 +892,15 @@ class FacePattern(Strict):
     distance: Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
 
 
+class DomePattern(Strict):
+    """돔 (형식 v40, 정밀 엔진): 점 at 에 닿은 평면 위 둥근 지붕 (음수 = 오목)"""
+
+    type: Literal["dome"]
+    source: ObjectId
+    at: Vec3
+    height: Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
+
+
 class SplitPattern(Strict):
     """평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면으로 잘라 keep 쪽만 남김"""
 
@@ -903,7 +912,7 @@ class SplitPattern(Strict):
 
 
 PatternDef = Annotated[
-    Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, FacePattern, SplitPattern, MirrorPattern, ScalePattern],
+    Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, FacePattern, DomePattern, SplitPattern, MirrorPattern, ScalePattern],
     Field(discriminator="type"),
 ]
 
@@ -1160,7 +1169,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[39]
+    schemaVersion: Literal[40]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

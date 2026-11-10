@@ -98,3 +98,26 @@ for (const engine of ['server', 'browser'] as const) {
     expect((await sources(page)).pattern_1!.max).toEqual([10, 10, 20]);
   });
 }
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`돔 (형식 v40, ${engine === 'server' ? 'CadQuery 서버' : '브라우저 OCCT'}): 윗면 클릭 → 높이 5 → 8 → 오목 −4`, async ({ page }, info) => {
+    test.setTimeout(120_000);
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    await expect.poll(async () => (await sources(page)).box_1?.source, { timeout: 20_000 }).toBe(engine);
+    await page.getByTestId('cmd-dome').click();
+    await ready(page);
+    await clickAt(page, 3, -2, 20);
+    await expect.poll(async () => (await sources(page)).pattern_1?.max[2], { timeout: 60_000 }).toBeCloseTo(25, 3);
+    await page.locator('[data-object-id="pattern_1"]').click();
+    await page.getByTestId('dome-height').fill('8');
+    await page.getByTestId('dome-height').press('Enter');
+    await expect.poll(async () => (await sources(page)).pattern_1?.max[2], { timeout: 60_000 }).toBeCloseTo(28, 3);
+    if (engine === 'server') await page.screenshot({ path: info.outputPath('dome.png') });
+    await page.getByTestId('dome-height').fill('-4');
+    await page.getByTestId('dome-height').press('Enter');
+    await expect.poll(async () => (await sources(page)).pattern_1?.max[2], { timeout: 60_000 }).toBeCloseTo(20, 3);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+}

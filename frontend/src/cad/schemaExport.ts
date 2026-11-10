@@ -843,6 +843,18 @@ export function preciseCases(samples: FixtureSamples): typeof FEATURE_CASES {
       commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 2, size2: 4, edges: 'vertical' }],
     },
     // 형식 v39 면 이동: 윗면(가운데 점)을 5 밀기 → 높이 15, 옆면 +X 를 4 당기기 → 폭 16 (원통 옆 평면 없음 → 거부는 단위 시험)
+    // 형식 v40 돔: 단면 넓이가 cos²θ 배, 높이 h·sin θ → 부피 = 밑넓이 × h × ∫cos³θ = 밑넓이 × h × 2/3 (원 → 반타원체, 사각형도 같은 식)
+    'dome-cylinder': {
+      volume: PI * 100 * 10 + (2 / 3) * PI * 100 * 5,
+      roots: 1,
+      bbox: [[-10, -10, 0], [10, 10, 15]],
+      commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 10 }, { type: 'pattern', id: 'd', pattern: { type: 'dome', source: 'c', at: [1, 1, 10], height: 5 } }],
+    },
+    'dome-box-hollow': {
+      volume: 20 * 20 * 10 - (2 / 3) * 400 * 3,
+      roots: 1,
+      commands: [box('b', 20, 20, 10), { type: 'pattern', id: 'd', pattern: { type: 'dome', source: 'b', at: [2, -3, 10], height: -3 } }],
+    },
     'move-face-push': {
       volume: 20 * 20 * 15,
       roots: 1,

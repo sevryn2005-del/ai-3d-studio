@@ -103,6 +103,28 @@ export function startMoveFacePick(patternId?: string) {
   });
 }
 
+/** 돔 (형식 v40): 평면 클릭 → 그 최상위 객체에 높이 5 돔. patternId 가 있으면 그 돔의 면만 다시 고른다 */
+export function startDomePick(patternId?: string) {
+  const model = selectModel(useSceneStore.getState());
+  const existing = patternId ? model.objects.find((o) => o.id === patternId) : undefined;
+  const source = existing?.kind === 'pattern' ? existing.pattern.source : undefined;
+  usePickStore.getState().start({
+    purpose: 'moveFace',
+    accept: 'face',
+    objects: source ? [source] : visibleRoots(),
+    ...(existing ? { frame: existing.id } : {}),
+    max: 1,
+    hint: '돔을 올릴 평면을 클릭하세요',
+    filter: (p) => (p.face?.kind === 'plane' ? null : '평면만'),
+    onDone: ([p]) => {
+      const scene = useSceneStore.getState();
+      const at = pointOnFace(p!);
+      if (existing?.kind === 'pattern' && existing.pattern.type === 'dome') scene.submitNow({ type: 'set_pattern', target: existing.id, pattern: { ...existing.pattern, at } });
+      else scene.submitNow({ type: 'pattern', pattern: { type: 'dome', source: p!.objectId, at, height: 5 } });
+    },
+  });
+}
+
 interface MeasureState {
   lines: MeasureLine[] | null;
   set: (lines: MeasureLine[] | null) => void;

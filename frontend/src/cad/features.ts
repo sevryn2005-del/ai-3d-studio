@@ -35,7 +35,7 @@ export function needsPreciseEngine(model: ModelDefinition): boolean {
 }
 
 function isPreciseKind(o: CadObject): boolean {
-  return o.kind === 'fillet' || o.kind === 'draft' || o.kind === 'step' || (o.kind === 'pattern' && o.pattern.type === 'face');
+  return o.kind === 'fillet' || o.kind === 'draft' || o.kind === 'step' || (o.kind === 'pattern' && (o.pattern.type === 'face' || o.pattern.type === 'dome'));
 }
 
 /** 이 객체(하위 객체 포함)를 정밀 엔진으로 계산해야 하는가 — 브라우저 워커가 최상위 객체마다 엔진을 고른다 */
@@ -57,7 +57,7 @@ export function patternCopyCount(p: PatternDef): number {
   if (p.type === 'scale') return 1;
   if (p.type === 'mirror') return 2;
   if (p.type === 'circular' || p.type === 'curve') return p.count;
-  if (p.type === 'split' || p.type === 'face') return 1;
+  if (p.type === 'split' || p.type === 'face' || p.type === 'dome') return 1;
   if (p.type === 'sketch') return 0; // 원 개수는 스케치에 따라 (검사는 patternError 가 스케치로)
   return p.count * (p.axis2 ? (p.count2 ?? 1) : 1);
 }
@@ -132,7 +132,7 @@ export function splitCutBox(p: Extract<PatternDef, { type: 'split' }>): [number,
 }
 
 export function patternMatrices(p: PatternDef, sketches: Map<ObjectId, Sketch> = new Map()): Matrix4[] {
-  if (p.type === 'split' || p.type === 'face') return [new Matrix4()]; // 자르기·면 이동은 사본이 아니다 (엔진이 원본을 바꾼다)
+  if (p.type === 'split' || p.type === 'face' || p.type === 'dome') return [new Matrix4()]; // 자르기·면 이동은 사본이 아니다 (엔진이 원본을 바꾼다)
   if (p.type === 'sketch') {
     const input = sketchPatternInput(p, sketches);
     if (typeof input === 'string') return [new Matrix4()];
