@@ -593,3 +593,7 @@ label.check.small { font-size: 12px; }
 .ref-panel .ref-point { display: grid; grid-template-columns: 1fr repeat(3, 70px); gap: 4px; align-items: center; }
 .ref-panel .ref-point input { width: 100%; }
 .ref-panel .error { width: 100%; margin: 0; }
+
+/* 렌더 패널 */
+.render-panel { width: 300px; max-height: calc(100% - 70px); overflow: auto; }
+.render-preview { width: 100%; border: 1px solid var(--border); border-radius: 4px; background: repeating-conic-gradient(#888 0 25%, #bbb 0 50%) 50% / 16px 16px; }

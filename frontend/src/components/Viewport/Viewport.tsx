@@ -28,6 +28,7 @@ import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
 import { ReferenceGeometry, ReferencePanel } from './ReferenceGeometry';
 import { ExplodedPart } from './ExplodedPart';
+import { RenderPanel, RenderTaker } from './RenderPanel';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel, DraftPanel, ThicknessPanel } from './ViewTools';
 import { startSketch } from '../../features/selection/featureFlow';
 
@@ -96,6 +97,7 @@ export function Viewport() {
         <SectionClip />
         <MeasureOverlay />
         <ReferenceGeometry />
+        <RenderTaker />
         <PickOverlay />
         <ScreenshotTaker />
         {!drawTool && <SelectionGizmo activeRef={gizmoActiveRef} />}
@@ -116,6 +118,7 @@ export function Viewport() {
       <SectionPanel />
       <DraftPanel />
       <ReferencePanel />
+      <RenderPanel />
       <ThicknessPanel />
       <MeasureReadout />
       <MassPanel />
