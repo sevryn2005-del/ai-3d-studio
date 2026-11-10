@@ -49,9 +49,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 36: + 스케치 위치 패턴. v35 내용은 그대로 유효
  * - 37: + 평면 자르기·바디 분할. v36 내용은 그대로 유효
  * - 38: + 가변 반경 필렛. v37 내용은 그대로 유효
- * 읽기는 1~38 모두, 쓰기는 항상 최신(38). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 39: + 면 이동. v38 내용은 그대로 유효
+ * 읽기는 1~39 모두, 쓰기는 항상 최신(39). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 38;
+export const PROJECT_FORMAT_VERSION = 39;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -338,8 +339,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 38) {
     // v37 → v38: 가변 반경 필렛(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 37 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 37 ? { ...model, schemaVersion: 38 } : model;
     file = { ...file, formatVersion: 38, model: migrated };
+  }
+  if ((file.formatVersion as number) < 39) {
+    // v38 → v39: 면 이동(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 38 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 39, model: migrated };
   }
   return file;
 }

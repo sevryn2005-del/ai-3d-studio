@@ -842,6 +842,19 @@ export function preciseCases(samples: FixtureSamples): typeof FEATURE_CASES {
       bbox: [[-10, -10, 0], [10, 10, 10]],
       commands: [box('b', 20, 20, 10), { type: 'edge_feature', id: 'f', target: 'b', feature: 'fillet', size: 2, size2: 4, edges: 'vertical' }],
     },
+    // 형식 v39 면 이동: 윗면(가운데 점)을 5 밀기 → 높이 15, 옆면 +X 를 4 당기기 → 폭 16 (원통 옆 평면 없음 → 거부는 단위 시험)
+    'move-face-push': {
+      volume: 20 * 20 * 15,
+      roots: 1,
+      bbox: [[-10, -10, 0], [10, 10, 15]],
+      commands: [box('b', 20, 20, 10), { type: 'pattern', id: 'mf', pattern: { type: 'face', source: 'b', at: [3, 2, 10], distance: 5 } }],
+    },
+    'move-face-pull': {
+      volume: 16 * 20 * 10,
+      roots: 1,
+      bbox: [[-10, -10, 0], [6, 10, 10]],
+      commands: [box('b', 20, 20, 10), { type: 'pattern', id: 'mf', pattern: { type: 'face', source: 'b', at: [10, 1, 4], distance: -4 } }],
+    },
     'fillet-cylinder-top': { volume: PI * 100 * 10 - cylinderTopFilletLoss(10, 2), roots: 1, commands: [{ type: 'create_cylinder', id: 'c', radius: 10, height: 10 }, { type: 'edge_feature', id: 'f', target: 'c', feature: 'fillet', size: 2, edges: 'top' }] },
     'fillet-moved-boolean-bottom': {
       // 원본이 옮겨져 있어도 규칙은 피처 좌표계(월드)에서 고른다. 바닥 모서리 = 바깥 네 모서리 + 구멍 아래 원

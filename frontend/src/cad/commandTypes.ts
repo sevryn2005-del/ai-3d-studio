@@ -451,6 +451,16 @@ export const PatternDefSchema = z.discriminatedUnion('type', [
     align: z.boolean(),
   }),
   /**
+   * 면 이동 (형식 v39, 정밀 엔진): 점 at(패턴 좌표계)에 닿은 평면을 바깥 법선 방향으로 distance mm — 양수 밀기(늘림), 음수 당기기(줄임).
+   * 스케치업 Push/Pull · 솔리드웍스 면 이동(평면)
+   */
+  z.strictObject({
+    type: z.literal('face'),
+    source: ObjectIdSchema,
+    at: Vec3Schema,
+    distance: z.number().min(-LIMITS.maxDimension).max(LIMITS.maxDimension),
+  }),
+  /**
    * 평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면(XY·XZ·YZ, 법선 방향 offset)으로 자르고 keep 쪽만 남긴다.
    * 솔리드웍스 Split / 블렌더 Bisect. 두 조각 = 같은 원본을 복제해 반대쪽을 남긴 객체 둘
    */
@@ -783,7 +793,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 38;
+export const MODEL_SCHEMA_VERSION = 39;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

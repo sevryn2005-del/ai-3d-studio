@@ -25,10 +25,11 @@ from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.BRepFilletAPI import BRepFilletAPI_MakeChamfer, BRepFilletAPI_MakeFillet
 from OCP.BRepOffsetAPI import BRepOffsetAPI_DraftAngle
 from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
-from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
+from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+from OCP.gp import gp_Dir, gp_Pln, gp_Pnt, gp_Vec
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.STEPControl import STEPControl_Reader
-from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Face, TopoDS_Shape
 
@@ -140,6 +141,39 @@ def edge_feature(shape: cq.Shape, kind: str, size: float, rule: EdgeRule, name: 
         return out
     except Exception as e:
         raise GeometryError(f"'{name}': {what} 할 수 없습니다 (크기를 줄여 보세요)") from e
+
+
+def move_face(shape: cq.Shape, at, distance: float, name: str) -> cq.Shape:
+    """면 이동 (형식 v39) — 브라우저 occtGeometry.moveFace 와 같은 규칙: 점에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 밀기(+)·당기기(−)"""
+    from app.cad.primitives import GeometryError
+
+    s = shape.wrapped
+    v = BRepBuilderAPI_MakeVertex(gp_Pnt(*at)).Vertex()
+    best, best_d, normal = None, math.inf, (0.0, 0.0, 1.0)
+    for f in _explore(s, TopAbs_FACE):
+        face = TopoDS.Face_s(f)
+        a = BRepAdaptor_Surface(face, True)
+        if a.GetType() != GeomAbs_Plane:
+            continue
+        d = BRepExtrema_DistShapeShape(face, v)
+        if not d.IsDone() or d.Value() >= best_d:
+            continue
+        best_d, best = d.Value(), face
+        n = a.Plane().Axis().Direction()
+        sign = -1.0 if face.Orientation() == TopAbs_REVERSED else 1.0
+        normal = (n.X() * sign, n.Y() * sign, n.Z() * sign)
+    if best is None or best_d > 1e-3:
+        raise GeometryError(f"'{name}': 고른 점에 평평한 면이 없습니다 (면 이동은 평면만)")
+    if abs(distance) < 1e-9:
+        return shape
+    try:
+        prism = cq.Shape.cast(BRepPrimAPI_MakePrism(best, gp_Vec(*(c * distance for c in normal)), False, True).Shape())
+        result = (shape.fuse(prism) if distance > 0 else shape.cut(prism)).clean()
+        if not _valid(result.wrapped) or abs(result.Volume()) < 1e-9:
+            raise RuntimeError("invalid")
+        return result
+    except Exception as e:
+        raise GeometryError(f"'{name}': 면을 {'밀' if distance > 0 else '당길'} 수 없습니다 (거리를 줄여 보세요)") from e
 
 
 def draft(shape: cq.Shape, angle: float, name: str) -> cq.Shape:

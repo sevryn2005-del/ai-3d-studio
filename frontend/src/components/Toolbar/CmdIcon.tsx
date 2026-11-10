@@ -42,6 +42,7 @@ const PATHS: Record<string, string> = {
   xray: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10',
   section: 'M3 9l9-5 9 5-9 5zM3 9v6l9 5 9-5V9M2 13h20',
   draftAnalysis: 'M12 2v6M9 5l3-3 3 3M5 21l2-11h10l2 11zM9 14h6',
+  moveFace: 'M4 14h16v6H4zM12 3v8M8.5 6.5L12 3l3.5 3.5',
   split: 'M4 14l8-4 8 4-8 4zM4 9l8-4 8 4M2 11.5h20',
   sketchPattern: 'M4 4h16v16H4zM8 8a1.5 1.5 0 1 0 0 .1M16 8a1.5 1.5 0 1 0 0 .1M12 16a1.5 1.5 0 1 0 0 .1',
   curvePattern: 'M3 18c4-12 14-12 18 0M5 14h2v2H5zM11 8h2v2h-2zM17 14h2v2h-2z',

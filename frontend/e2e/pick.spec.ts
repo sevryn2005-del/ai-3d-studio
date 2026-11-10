@@ -73,3 +73,28 @@ for (const engine of ['server', 'browser'] as const) {
     await expect.poll(async () => (await scene(page)).sketches.at(-1)?.plane, { timeout: 10_000 }).toEqual({ type: 'face', object: 'cyl', face: 'top', offset: 0 });
   });
 }
+
+for (const engine of ['server', 'browser'] as const) {
+  test(`면 이동 (형식 v39, ${engine === 'server' ? 'CadQuery 서버' : '브라우저 OCCT'}): 윗면 클릭 → 5 밀기 → −4 당기기 → 옆면 다시 고르기`, async ({ page }) => {
+    test.setTimeout(120_000);
+    if (engine === 'browser') await page.route((url) => url.pathname.startsWith('/api/'), (r) => r.abort('connectionrefused'));
+    await page.goto('/');
+    await page.waitForFunction(() => !!window.__AI3D_DEV__);
+    await expect.poll(async () => (await sources(page)).box_1?.source, { timeout: 20_000 }).toBe(engine);
+    await page.getByTestId('cmd-move-face').click();
+    await ready(page);
+    await clickAt(page, 3, -2, 20); // 큐브 20 윗면
+    await expect(page.getByTestId('pick-bar')).toHaveCount(0);
+    await expect.poll(async () => (await sources(page)).pattern_1?.max, { timeout: 60_000 }).toEqual([10, 10, 25]);
+    await page.locator('[data-object-id="pattern_1"]').click();
+    await page.getByTestId('face-distance').fill('-4');
+    await page.getByTestId('face-distance').press('Enter');
+    await expect.poll(async () => (await sources(page)).pattern_1?.max, { timeout: 60_000 }).toEqual([10, 10, 16]);
+    // 앞면(−Y)으로 바꾸기 → 앞쪽이 4 줄어든다
+    await page.getByTestId('face-repick').click();
+    await ready(page);
+    await clickAt(page, 2, -10, 8);
+    await expect.poll(async () => (await sources(page)).pattern_1?.min, { timeout: 60_000 }).toEqual([-10, -6, 0]);
+    expect((await sources(page)).pattern_1!.max).toEqual([10, 10, 20]);
+  });
+}

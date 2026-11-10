@@ -25,7 +25,7 @@ export interface PickedEntity {
 }
 
 export interface PickRequest {
-  purpose: 'fillet' | 'mate' | 'sketch' | 'measure';
+  purpose: 'fillet' | 'mate' | 'sketch' | 'measure' | 'moveFace';
   accept: 'edge' | 'face' | 'any';
   /** 위상을 보여 줄 객체 */
   objects: ObjectId[];

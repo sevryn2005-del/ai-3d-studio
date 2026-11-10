@@ -485,6 +485,10 @@ def pattern_solid(obj: PatternObject, src: cq.Shape, sketches: dict[str, Sketch]
         if not result.isValid():
             raise GeometryError(f"'{obj.name}': 크기 조정 결과 형상이 올바르지 않습니다")
         return result
+    if p.type == "face":
+        from app.cad.precise import move_face
+
+        return move_face(src, p.at, p.distance, obj.name)
     if p.type == "split":
         x0, y0, z0, w, d, h = split_cut_box(p)
         cutter = cq.Solid.makeBox(w, d, h, cq.Vector(x0, y0, z0))

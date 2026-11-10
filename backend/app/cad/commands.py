@@ -883,6 +883,15 @@ class SketchPattern(Strict):
     sketch: ObjectId
 
 
+class FacePattern(Strict):
+    """면 이동 (형식 v39, 정밀 엔진): 점 at 에 닿은 평면을 바깥 법선으로 distance (양수 밀기, 음수 당기기)"""
+
+    type: Literal["face"]
+    source: ObjectId
+    at: Vec3
+    distance: Annotated[float, _num(-Limits.MAX_DIMENSION, Limits.MAX_DIMENSION)]
+
+
 class SplitPattern(Strict):
     """평면 자르기·바디 분할 (형식 v37): 패턴 좌표계 평면으로 잘라 keep 쪽만 남김"""
 
@@ -894,7 +903,7 @@ class SplitPattern(Strict):
 
 
 PatternDef = Annotated[
-    Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, SplitPattern, MirrorPattern, ScalePattern],
+    Union[LinearPattern, CircularPattern, CurvePattern, SketchPattern, FacePattern, SplitPattern, MirrorPattern, ScalePattern],
     Field(discriminator="type"),
 ]
 
@@ -1151,7 +1160,7 @@ MAX_REFERENCES = 100
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[38]
+    schemaVersion: Literal[39]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

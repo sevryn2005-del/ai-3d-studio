@@ -73,7 +73,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 38, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 39, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -656,6 +656,38 @@ function edgeFeature(c: Ctx, s: TopoDS_Shape, type: 'fillet' | 'chamfer', size: 
   }
 }
 
+/**
+ * 면 이동 (형식 v39, 서버 precise.py move_face 와 같은 규칙): 점 at 에서 가장 가까운 평면(1µm 안)을 바깥 법선으로 distance 만큼 —
+ * 양수 = 면을 돌출해 합치기(밀기), 음수 = 안쪽으로 돌출해 빼기(당기기). 스케치업 Push/Pull, 솔리드웍스 면 이동(평면)
+ */
+function moveFace(c: Ctx, s: TopoDS_Shape, at: readonly number[], distance: number, name: string): TopoDS_Shape {
+  const v = c.gc.k(c.gc.k(new c.oc.BRepBuilderAPI_MakeVertex(pnt(c, at[0]!, at[1]!, at[2]!))).Vertex());
+  let best: TopoDS_Face | null = null;
+  let bestD = Infinity;
+  let normal: [number, number, number] = [0, 0, 1];
+  for (const f of explore(c, s, 'TopAbs_FACE', (x) => c.oc.TopoDS.Face(x))) {
+    const a = c.gc.k(new c.oc.BRepAdaptor_Surface(f, true));
+    if ((a.GetType() as unknown as string) !== 'GeomAbs_Plane') continue;
+    const d = c.gc.k(new c.oc.BRepExtrema_DistShapeShape(f, v));
+    if (!d.IsDone() || d.Value() >= bestD) continue;
+    bestD = d.Value();
+    best = f;
+    const n = c.gc.k(c.gc.k(c.gc.k(a.Plane()).Axis()).Direction());
+    const sign = (f.Orientation() as unknown as string) === 'TopAbs_REVERSED' ? -1 : 1;
+    normal = [n.X() * sign, n.Y() * sign, n.Z() * sign];
+  }
+  if (!best || bestD > 1e-3) throw new GeometryError(`'${name}': 고른 점에 평평한 면이 없습니다 (면 이동은 평면만)`);
+  if (Math.abs(distance) < 1e-9) return s;
+  try {
+    const prism = c.gc.k(c.gc.k(new c.oc.BRepPrimAPI_MakePrism(best, c.gc.k(new c.oc.gp_Vec(normal[0] * distance, normal[1] * distance, normal[2] * distance)), false, true)).Shape());
+    const result = clean(c, distance > 0 ? fuse(c, s, prism) : cut(c, s, prism));
+    if (!isValid(c, result) || Math.abs(volumeOf(c.oc, result)) < 1e-9) throw new Error('invalid');
+    return result;
+  } catch {
+    throw new GeometryError(`'${name}': 면을 ${distance > 0 ? '밀' : '당길'} 수 없습니다 (거리를 줄여 보세요)`);
+  }
+}
+
 function draft(c: Ctx, s: TopoDS_Shape, angle: number, name: string): TopoDS_Shape {
   if (Math.abs(angle) < 1e-9) return s;
   const faces = draftFaces(c.oc, c.gc, s);
@@ -866,6 +898,7 @@ function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
       return draft(c, placed(c, obj.draft.source), obj.draft.angle, obj.name);
     case 'pattern': {
       const src = placed(c, obj.pattern.source);
+      if (obj.pattern.type === 'face') return moveFace(c, src, obj.pattern.at, obj.pattern.distance, obj.name);
       if (obj.pattern.type === 'split') {
         const kept = cut(c, src, box(c, ...splitCutBox(obj.pattern)));
         if (!isValid(c, kept) || Math.abs(volumeOf(c.oc, kept)) < 1e-9) throw new GeometryError(`'${obj.name}': 자른 결과가 비어 있습니다 (평면 위치·남길 쪽을 확인하세요)`);

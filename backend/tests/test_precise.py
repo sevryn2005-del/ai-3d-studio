@@ -14,7 +14,7 @@ from app.cad.primitives import GeometryError, build_solid
 
 
 def model(*objects) -> ModelDefinition:
-    return ModelDefinition.model_validate({"schemaVersion": 38, "units": "mm", "sketches": [], "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 39, "units": "mm", "sketches": [], "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
@@ -65,7 +65,7 @@ def test_ai_validator_knows_wrappers():
 
 def test_topology_api_and_picked_edges(client):
     t0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}
-    model = {"schemaVersion": 38, "units": "mm", "sketches": [], "objects": [
+    model = {"schemaVersion": 39, "units": "mm", "sketches": [], "objects": [
         {"id": "c", "name": "원통", "kind": "cylinder", "params": {"radius": 4, "height": 9}, "transform": t0}]}
     r = client.post("/api/model/topology", json={"model": model, "id": "c"}).json()
     assert r["ok"] is True
@@ -81,3 +81,20 @@ def test_topology_api_and_picked_edges(client):
     model["objects"][1]["fillet"]["edges"] = {"at": [[50, 50, 50]]}
     bad = client.post("/api/model/evaluate", json=model).json()
     assert bad["ok"] is False and "다시 고르세요" in bad["issues"][0]["message"]
+
+
+def test_move_face_rejects_curved_or_missing_face():
+    """형식 v39: 면 이동은 평면만 — 원통 옆면 위 점이나 면이 없는 점은 거부 (브라우저 OCCT 와 같은 메시지)"""
+    import cadquery as cq
+    import pytest
+
+    from app.cad.precise import move_face
+    from app.cad.primitives import GeometryError
+
+    cyl = cq.Solid.makeCylinder(10, 10)
+    with pytest.raises(GeometryError, match="평평한 면이 없습니다"):
+        move_face(cyl, (10, 0, 5), 3, "면 이동 1")
+    with pytest.raises(GeometryError, match="평평한 면이 없습니다"):
+        move_face(cyl, (50, 50, 50), 3, "면 이동 1")
+    top = move_face(cyl, (2, 1, 10), 4, "면 이동 1")
+    assert abs(top.Volume() - 3.141592653589793 * 100 * 14) < 1e-6

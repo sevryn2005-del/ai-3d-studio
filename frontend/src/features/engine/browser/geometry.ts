@@ -70,7 +70,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 38, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 39, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -185,7 +185,7 @@ export function localManifold(
         if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
       } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 38, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 39, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -310,6 +310,7 @@ export function localManifold(
       const placedSrc = scope.keep(
         localManifold(wasm, src, index, tol, scope, sketches).transform(toMatrix(src.transform).elements as unknown as Parameters<Manifold['transform']>[0]),
       );
+      if (obj.pattern.type === 'face') throw new GeometryError(`'${obj.name}': 면 이동은 정밀 엔진(OCCT)에서 계산합니다`);
       if (obj.pattern.type === 'split') {
         const n = [0, 0, 0] as [number, number, number];
         const a = SPLIT_AXIS[obj.pattern.plane];

@@ -11,7 +11,7 @@ import { isSuppressed } from '../../cad/features';
 import { objectWorldMatrix } from '../../cad/sketchPlane';
 import { formatMm } from '../../cad/units';
 import { useProjectStore } from '../../features/projects/projectStore';
-import { edgesAt, faceToMateRef, faceToSketchPlane, measureEntities, usePickStore, type MeasureLine } from '../../features/selection/pick';
+import { edgesAt, faceToMateRef, faceToSketchPlane, measureEntities, usePickStore, type MeasureLine, type PickedEntity } from '../../features/selection/pick';
 
 const visibleRoots = () => {
   const model = selectModel(useSceneStore.getState());
@@ -68,6 +68,37 @@ export function startSketchOnFace() {
       if (!plane) return;
       const r = scene.submitNow({ type: 'create_sketch', plane });
       if (r.status === 'applied' && plane.type === 'frame') useProjectStore.getState().set({ notice: '고른 면에 이름이 없어 고정 위치 평면으로 만들었습니다 (객체를 옮겨도 따라가지 않음)' });
+    },
+  });
+}
+
+/** 고른 면 위의 한 점 (첫 삼각형 무게중심 — 면 안쪽, 위상 좌표계 = 월드) */
+function pointOnFace(p: PickedEntity): [number, number, number] {
+  const f = p.face!;
+  const i = [f.indices[0]!, f.indices[1]!, f.indices[2]!];
+  return round([0, 1, 2].map((k) => (f.positions[i[0]! * 3 + k]! + f.positions[i[1]! * 3 + k]! + f.positions[i[2]! * 3 + k]!) / 3));
+}
+
+/**
+ * 면 이동 (형식 v39): 평면을 클릭 → 그 최상위 객체를 감싸는 면 이동(거리 5mm 밀기). patternId 가 있으면 그 면 이동의 면만 다시 고른다
+ */
+export function startMoveFacePick(patternId?: string) {
+  const model = selectModel(useSceneStore.getState());
+  const existing = patternId ? model.objects.find((o) => o.id === patternId) : undefined;
+  const source = existing?.kind === 'pattern' ? existing.pattern.source : undefined;
+  usePickStore.getState().start({
+    purpose: 'moveFace',
+    accept: 'face',
+    objects: source ? [source] : visibleRoots(),
+    ...(existing ? { frame: existing.id } : {}),
+    max: 1,
+    hint: '밀거나 당길 평면을 클릭하세요',
+    filter: (p) => (p.face?.kind === 'plane' ? null : '평면만'),
+    onDone: ([p]) => {
+      const scene = useSceneStore.getState();
+      const at = pointOnFace(p!);
+      if (existing?.kind === 'pattern' && existing.pattern.type === 'face') scene.submitNow({ type: 'set_pattern', target: existing.id, pattern: { ...existing.pattern, at } });
+      else scene.submitNow({ type: 'pattern', pattern: { type: 'face', source: p!.objectId, at, distance: 5 } });
     },
   });
 }

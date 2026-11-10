@@ -6,6 +6,7 @@ import { MaterialFields } from './MaterialFields';
 import { alignPatternToAxisCommands } from '../../cad/references';
 import { curvePathOptions, sketchPatternOptions } from '../../cad/features';
 import { splitOtherSide } from '../../features/selection/featureFlow';
+import { startMoveFacePick } from '../Viewport/PickFlows';
 import type { Reference } from '../../cad/commandTypes';
 import { useState } from 'react';
 import type { Axis, CadObject, FaceName, ModelDefinition, PatternDef } from '../../cad/commandTypes';
@@ -159,6 +160,14 @@ export function PatternFields({ object }: { object: Extract<CadObject, { kind: '
           )}
           <NumberField label="개수 (원본 포함)" unit="개" value={p.count} onCommit={(v) => set({ count: Math.round(v) })} testId="pattern-count" />
           <NumberField label="전체 각도 (360 = 균등)" unit="°" value={p.angle} onCommit={(v) => set({ angle: v })} testId="pattern-angle" />
+        </>
+      ) : p.type === 'face' ? (
+        <>
+          <NumberField label="거리 (+ 밀기, − 당기기)" unit="mm" value={p.distance} onCommit={(v) => set({ distance: v })} testId="face-distance" />
+          <button onClick={() => startMoveFacePick(object.id)} data-testid="face-repick" title="움직일 평면을 다시 고릅니다">
+            면 다시 고르기
+          </button>
+          <p className="muted small">고른 평면을 바깥 법선 방향으로 밀거나 당깁니다 (정밀 엔진).</p>
         </>
       ) : p.type === 'split' ? (
         <>
