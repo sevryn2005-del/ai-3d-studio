@@ -4,6 +4,8 @@ import { TransformControls } from '@react-three/drei';
 import type { Object3D } from 'three';
 import { findObject } from '../../cad/commandExecutor';
 import { selectModel, useSceneStore } from '../../cad/sceneStore';
+import { childIds } from '../../cad/modelGraph';
+import { poseAt, trackOf } from '../../cad/animation';
 import { transformFromObject3D, transformsEqual } from '../../cad/transformUtils';
 import { DEG2RAD } from '../../cad/units';
 import { newCommandId } from '../../cad/commandEnvelope';
@@ -48,19 +50,27 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
     const current = findObject(store.history.present.model, drag.objectId);
     if (!current) return; // 드래그 중 객체가 사라짐: 되돌릴 대상도 없음
     const next = transformFromObject3D(target.position, target.rotation, snap);
-    if (transformsEqual(next, current.transform)) {
-      applyTransform(target, current.transform); // 움직이지 않음(클릭만) 또는 반올림 잔여값 정리
+    // 타임라인이 열려 있으면 (블렌더 자동 키처럼) 설계 위치 대신 지금 프레임에 키를 넣는다 — 최상위 객체만
+    const tl = useEditorStore.getState().timeline;
+    const topLevel = !store.history.present.model.objects.some((o) => childIds(o).includes(drag.objectId));
+    const track = tl.open && topLevel ? trackOf(store.history.present.model, drag.objectId) : undefined;
+    const shown = track ? poseAt(track, tl.frame) : current.transform; // 지금 화면에 보이던 자세
+    if (transformsEqual(next, shown)) {
+      applyTransform(target, shown); // 움직이지 않음(클릭만) 또는 반올림 잔여값 정리
       return;
     }
     const result = store.submit({
       commandId: drag.commandId,
       baseRevision: drag.baseRevision,
-      command: { type: 'set_transform', target: drag.objectId, position: next.position, rotation: next.rotation },
+      command:
+        tl.open && topLevel
+          ? { type: 'insert_keyframe', target: drag.objectId, frame: Math.round(tl.frame), position: next.position, rotation: next.rotation }
+          : { type: 'set_transform', target: drag.objectId, position: next.position, rotation: next.rotation },
     });
     // 적용되면 반올림된 값으로, 아니면 최신 설계 원본 값으로 맞춘다
     // (React props 가 같으면 R3F 가 다시 적용하지 않으므로 직접 설정)
     const latest = findObject(useSceneStore.getState().history.present.model, drag.objectId);
-    applyTransform(target, result.status === 'applied' ? next : (latest ?? current).transform);
+    applyTransform(target, result.status === 'applied' ? next : track ? shown : (latest ?? current).transform);
   };
 
   return (

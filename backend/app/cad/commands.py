@@ -1177,6 +1177,25 @@ Reference = Annotated[Union[PlaneRef, AxisRef, PointRef, CsysRef], Field(discrim
 MAX_REFERENCES = 100
 
 
+class Keyframe(Strict):
+    """애니메이션 키 (형식 v43): 프레임의 위치·회전 — 화면 재생만, 엔진은 쓰지 않는다"""
+
+    frame: Annotated[int, Field(strict=True, ge=0, le=100_000)]
+    position: Vec3
+    rotation: Vec3
+
+
+class AnimationTrack(Strict):
+    id: ObjectId
+    keys: Annotated[list[Keyframe], Field(min_length=1, max_length=1000)]
+
+
+class Animation(Strict):
+    fps: Annotated[int, Field(strict=True, ge=1, le=120)]
+    end: Annotated[int, Field(strict=True, ge=1, le=100_000)]
+    tracks: Annotated[list[AnimationTrack], Field(max_length=Limits.MAX_OBJECTS)]
+
+
 class ExplodeOffset(Strict):
     """분해도 한 부품 (형식 v41): 화면에서만 더하는 월드 이동량 — 엔진은 쓰지 않는다"""
 
@@ -1185,7 +1204,7 @@ class ExplodeOffset(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[42]
+    schemaVersion: Literal[43]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1197,6 +1216,7 @@ class ModelDefinition(Strict):
     # 참조 형상 (형식 v34): 형상을 만들지 않는 기준 — 엔진은 쓰지 않는다
     references: Annotated[list[Reference] | None, Field(max_length=MAX_REFERENCES, exclude_if=lambda v: v is None)] = None
     explode: Annotated[list[ExplodeOffset] | None, Field(max_length=Limits.MAX_OBJECTS, exclude_if=lambda v: v is None)] = None
+    animation: Annotated[Animation | None, Field(exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------
@@ -1429,6 +1449,29 @@ class SetExplode(Strict):
 
     type: Literal["set_explode"]
     offsets: Annotated[list[ExplodeOffset], Field(max_length=Limits.MAX_OBJECTS)]
+
+
+class InsertKeyframe(Strict):
+    """형식 v43: 키 넣기 (위치·회전을 비우면 지금 설계 위치)"""
+
+    type: Literal["insert_keyframe"]
+    target: ObjectId
+    frame: Annotated[int, Field(strict=True, ge=0, le=100_000)]
+    position: Vec3 | None = None
+    rotation: Vec3 | None = None
+
+
+class DeleteKeyframe(Strict):
+    type: Literal["delete_keyframe"]
+    target: ObjectId
+    frame: Annotated[int, Field(strict=True, ge=0, le=100_000)]
+
+
+class SetAnimation(Strict):
+    type: Literal["set_animation"]
+    fps: Annotated[int, Field(strict=True, ge=1, le=120)] | None = None
+    end: Annotated[int, Field(strict=True, ge=1, le=100_000)] | None = None
+    clear: bool | None = None
 
 
 class DeleteReference(Strict):
@@ -1995,6 +2038,9 @@ CadCommand = Annotated[
         DeleteReference,
         RenameReference,
         SetExplode,
+        InsertKeyframe,
+        DeleteKeyframe,
+        SetAnimation,
         SetDrawing,
         DeleteDrawingSheet,
         AddMesh,
@@ -2077,6 +2123,9 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     DeleteReference,
     RenameReference,
     SetExplode,
+    InsertKeyframe,
+    DeleteKeyframe,
+    SetAnimation,
     SetDrawing,
     DeleteDrawingSheet,
     AddMesh,

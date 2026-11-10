@@ -71,6 +71,9 @@ interface EditorState {
   setActiveReference: (id: string | null) => void;
   /** 고른 점 추가 — 다 찼으면 마지막 점을 바꾼다 */
   addRefPoint: (p: Point3, max: number) => void;
+  /** 타임라인 (형식 v43): 열려 있으면 애니메이션 자세로 보이고, 기즈모로 옮기면 지금 프레임에 키가 들어간다 */
+  timeline: { open: boolean; frame: number; playing: boolean };
+  setTimeline: (t: Partial<{ open: boolean; frame: number; playing: boolean }>) => void;
   /** 분해 보기 (형식 v41): 켜면 최상위 부품을 model.explode 만큼 떨어뜨려 보인다 (화면만) */
   exploded: boolean;
   setExploded: (on: boolean) => void;
@@ -144,6 +147,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   draft: null,
   // 두 분석은 같은 색 자리를 쓰므로 하나만 켠다
   setDraft: (draft) => set(draft ? { draft, thickness: null } : { draft }),
+  timeline: { open: false, frame: 0, playing: false },
+  setTimeline: (t) => set((s) => ({ timeline: { ...s.timeline, ...t } })),
   exploded: false,
   setExploded: (exploded) => set({ exploded }),
   refPick: null,

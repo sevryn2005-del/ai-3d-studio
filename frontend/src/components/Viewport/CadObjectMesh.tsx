@@ -17,6 +17,7 @@ import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
 import { boxUvGeometry } from '../../cad/textureMap';
 import { REF_POINTS } from '../../cad/references';
+import { poseAt, trackOf } from '../../cad/animation';
 import { draftGeometry, localPull, useDraftStats } from '../../cad/draftAnalysis';
 import { thicknessGeometry, useThicknessStats } from '../../cad/thicknessAnalysis';
 import { useImageTexture } from './useImageTexture';
@@ -35,7 +36,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 42, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 43, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -44,7 +45,10 @@ export function CadNode({ object, index, mode }: { object: CadObject; index: Ind
   const serverGeometry = useBackendStore((s) =>
     mode === 'solid' ? s.geometries[geometryKey(object, index, sketches)] : undefined,
   );
-  const { position, rotation } = object.transform;
+  // 타임라인 (형식 v43): 키가 있는 최상위 객체는 지금 프레임 자세로 보인다 (설계 위치는 그대로)
+  const anim = useSceneStore((s) => (mode === 'solid' ? trackOf(s.history.present.model, object.id) : undefined));
+  const tl = useEditorStore((s) => (anim && s.timeline.open ? s.timeline.frame : null));
+  const { position, rotation } = anim && tl !== null ? poseAt(anim, tl) : object.transform;
 
   let body: ReactNode = null;
   const off = isSuppressed(object, index) || object.hidden;

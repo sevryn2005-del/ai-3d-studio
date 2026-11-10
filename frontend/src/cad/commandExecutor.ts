@@ -14,6 +14,7 @@
  * - 자식의 translate/set_transform 은 부모 좌표계 기준이다.
  * - 불리언을 삭제하면 하위 객체 전체가 삭제된다. 자식만 단독 삭제하는 것은 거부한다.
  */
+import { DEFAULT_ANIMATION, withKey, withoutKey } from './animation';
 import { MAX_REFERENCES, nextReference, normalizeReference, referenceIdTaken } from './references';
 import {
   CadCommandSchema,
@@ -425,6 +426,29 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       const r = normalizeReference({ ...cmd.reference, id, name: cmd.reference.name ?? auto.name });
       if (typeof r === 'string') return fail(r);
       return done(model, { ...model, references: [...refs, r] }, cmd, null);
+    }
+
+    case 'insert_keyframe': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (!topLevelObjects(model).some((o) => o.id === target.id)) return fail(`애니메이션은 최상위 객체만 움직일 수 있습니다: ${target.name}`);
+      const anim = model.animation ?? DEFAULT_ANIMATION;
+      if ((anim.tracks.find((t) => t.id === target.id)?.keys.length ?? 0) >= 1000) return fail('키는 객체마다 최대 1000개까지 가능합니다');
+      const key = { frame: cmd.frame, position: cmd.position ?? target.transform.position, rotation: cmd.rotation ?? target.transform.rotation };
+      return done(model, { ...model, animation: withKey(anim, target.id, key) }, cmd, target.id);
+    }
+
+    case 'delete_keyframe': {
+      const anim = model.animation;
+      const track = anim?.tracks.find((t) => t.id === cmd.target);
+      if (!anim || !track?.keys.some((k) => k.frame === cmd.frame)) return fail(`프레임 ${cmd.frame} 에 '${cmd.target}' 키가 없습니다`);
+      return done(model, { ...model, animation: withoutKey(anim, cmd.target, cmd.frame) }, cmd, null);
+    }
+
+    case 'set_animation': {
+      const anim = model.animation ?? DEFAULT_ANIMATION;
+      const next = { ...anim, ...(cmd.fps !== undefined ? { fps: cmd.fps } : {}), ...(cmd.end !== undefined ? { end: cmd.end } : {}), ...(cmd.clear ? { tracks: [] } : {}) };
+      return done(model, { ...model, animation: next }, cmd, null);
     }
 
     case 'set_explode': {

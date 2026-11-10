@@ -2526,6 +2526,126 @@
       "properties": {
         "type": {
           "type": "string",
+          "const": "insert_keyframe"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "position": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "rotation": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            },
+            {
+              "type": "number",
+              "minimum": -10000,
+              "maximum": 10000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "frame"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "delete_keyframe"
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "type",
+        "target",
+        "frame"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "set_animation"
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "clear": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
           "const": "set_drawing"
         },
         "drawing": {

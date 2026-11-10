@@ -140,6 +140,12 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 삭제`;
     case 'add_reference':
       return `${REF_LABEL[cmd.reference.type]} 추가${cmd.reference.name ? ` (${cmd.reference.name})` : ''}`;
+    case 'insert_keyframe':
+      return `${name(cmd.target)} 키 (프레임 ${cmd.frame})`;
+    case 'delete_keyframe':
+      return `${name(cmd.target)} 키 지우기 (프레임 ${cmd.frame})`;
+    case 'set_animation':
+      return cmd.clear ? '애니메이션 키 모두 지우기' : `애니메이션 설정${cmd.fps !== undefined ? ` ${cmd.fps}fps` : ''}${cmd.end !== undefined ? ` 끝 ${cmd.end}` : ''}`;
     case 'set_explode':
       return cmd.offsets.length ? `분해도 (${cmd.offsets.length}개 부품)` : '분해도 지우기';
     case 'delete_reference':

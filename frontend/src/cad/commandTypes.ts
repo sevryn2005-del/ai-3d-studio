@@ -807,7 +807,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 42;
+export const MODEL_SCHEMA_VERSION = 43;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
@@ -821,6 +821,20 @@ export const ReferenceSchema = z.discriminatedUnion('type', [
 ]);
 export type Reference = z.infer<typeof ReferenceSchema>;
 export const MAX_REFERENCES = 100;
+
+/**
+ * 애니메이션 (형식 v43, 블렌더 키프레임): 최상위 객체의 위치·회전 키 → 키 사이 직선 보간. 화면 재생만 (설계 위치·형상·내보내기 그대로)
+ */
+export const KeyframeSchema = z.strictObject({ frame: z.number().int().min(0).max(100_000), position: Vec3Schema, rotation: Vec3Schema });
+export const AnimationTrackSchema = z.strictObject({ id: ObjectIdSchema, keys: z.array(KeyframeSchema).min(1).max(1000) });
+export const AnimationSchema = z.strictObject({
+  fps: z.number().int().min(1).max(120),
+  end: z.number().int().min(1).max(100_000),
+  tracks: z.array(AnimationTrackSchema).max(LIMITS.maxObjects),
+});
+export type Keyframe = z.infer<typeof KeyframeSchema>;
+export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
+export type Animation = z.infer<typeof AnimationSchema>;
 
 /** 분해도 한 부품: 최상위 객체 ID 와 월드 이동량 (mm) */
 export const ExplodeOffsetSchema = z.strictObject({ id: ObjectIdSchema, offset: Vec3Schema });
@@ -840,6 +854,8 @@ export const ModelDefinitionSchema = z.strictObject({
   references: z.array(ReferenceSchema).max(MAX_REFERENCES).optional(),
   /** 분해도 (형식 v41): 최상위 부품마다 화면에서만 더하는 이동량 (형상·메이트·내보내기에는 쓰지 않음) */
   explode: z.array(ExplodeOffsetSchema).max(LIMITS.maxObjects).optional(),
+  /** 애니메이션 (형식 v43) */
+  animation: AnimationSchema.optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 
@@ -874,6 +890,22 @@ export const AddReferenceCommandSchema = z.strictObject({
 });
 /** 분해도 바꾸기 (형식 v41): 목록 전체를 바꾼다 (빈 목록 = 분해 지우기). 이동량 0 인 부품은 빠진다 */
 export const SetExplodeCommandSchema = z.strictObject({ type: z.literal('set_explode'), offsets: z.array(ExplodeOffsetSchema).max(LIMITS.maxObjects) });
+/** 키 넣기 (형식 v43, 블렌더 I): position·rotation 을 비우면 지금 설계 위치. 같은 프레임 키는 바꾼다 */
+export const InsertKeyframeCommandSchema = z.strictObject({
+  type: z.literal('insert_keyframe'),
+  target: ObjectIdSchema,
+  frame: z.number().int().min(0).max(100_000),
+  position: Vec3Schema.optional(),
+  rotation: Vec3Schema.optional(),
+});
+export const DeleteKeyframeCommandSchema = z.strictObject({ type: z.literal('delete_keyframe'), target: ObjectIdSchema, frame: z.number().int().min(0).max(100_000) });
+/** 애니메이션 설정 (초당 프레임·끝 프레임). clear = 모든 키 지우기 */
+export const SetAnimationCommandSchema = z.strictObject({
+  type: z.literal('set_animation'),
+  fps: z.number().int().min(1).max(120).optional(),
+  end: z.number().int().min(1).max(100_000).optional(),
+  clear: z.boolean().optional(),
+});
 export const DeleteReferenceCommandSchema = z.strictObject({ type: z.literal('delete_reference'), target: ObjectIdSchema });
 export const RenameReferenceCommandSchema = z.strictObject({ type: z.literal('rename_reference'), target: ObjectIdSchema, name: NameSchema });
 
@@ -1519,6 +1551,9 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   DeleteReferenceCommandSchema,
   RenameReferenceCommandSchema,
   SetExplodeCommandSchema,
+  InsertKeyframeCommandSchema,
+  DeleteKeyframeCommandSchema,
+  SetAnimationCommandSchema,
   SetDrawingCommandSchema,
   DeleteDrawingSheetCommandSchema,
   AddMeshCommandSchema,

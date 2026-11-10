@@ -29,6 +29,7 @@ import { MeasureEntityPanel } from './PickFlows';
 import { ReferenceGeometry, ReferencePanel } from './ReferenceGeometry';
 import { ExplodedPart } from './ExplodedPart';
 import { RenderPanel, RenderTaker } from './RenderPanel';
+import { Timeline } from './Timeline';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel, DraftPanel, ThicknessPanel } from './ViewTools';
 import { startSketch } from '../../features/selection/featureFlow';
 
@@ -119,6 +120,7 @@ export function Viewport() {
       <DraftPanel />
       <ReferencePanel />
       <RenderPanel />
+      <Timeline />
       <ThicknessPanel />
       <MeasureReadout />
       <MassPanel />

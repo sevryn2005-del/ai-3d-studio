@@ -597,3 +597,13 @@ label.check.small { font-size: 12px; }
 /* 렌더 패널 */
 .render-panel { width: 300px; max-height: calc(100% - 70px); overflow: auto; }
 .render-preview { width: 100%; border: 1px solid var(--border); border-radius: 4px; background: repeating-conic-gradient(#888 0 25%, #bbb 0 50%) 50% / 16px 16px; }
+
+/* 타임라인 (형식 v43) */
+.timeline { position: absolute; left: 10px; right: 10px; bottom: 8px; display: flex; align-items: center; gap: 6px; z-index: 6;
+  background: rgba(31, 35, 41, 0.94); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; flex-wrap: wrap; }
+.timeline button { padding: 3px 8px; }
+.timeline button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.tl-track { position: relative; flex: 1; min-width: 160px; }
+.tl-track input { width: 100%; }
+.tl-key { position: absolute; top: -6px; width: 8px; height: 8px; margin-left: -4px; background: #f2c14e; transform: rotate(45deg); pointer-events: none; }
+.tl-num { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }

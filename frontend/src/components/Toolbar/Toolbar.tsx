@@ -54,6 +54,7 @@ export function Toolbar() {
   const thickness = useEditorStore((s) => s.thickness);
   const refPick = useEditorStore((s) => s.refPick);
   const renderOpen = useRenderStore((s) => s.open);
+  const timelineOpen = useEditorStore((s) => s.timeline.open);
   const measuring = useEditorStore((s) => s.measuring);
   const massOpen = useEditorStore((s) => s.massOpen);
   const projection = useEditorStore((s) => s.projection);
@@ -219,6 +220,7 @@ export function Toolbar() {
             <Cmd icon="thicknessAnalysis" label="두께 분석" title="벽 두께를 색으로 — 한계보다 얇은 곳은 빨강 (3D 프린팅·사출)" pressed={!!thickness} onClick={() => editor.setThickness(thickness ? null : { limit: 1 })} testId="cmd-thickness-analysis" />
             <Cmd icon="measure" label="측정" title="모델 위 두 점 사이 거리" pressed={measuring} onClick={editor.toggleMeasure} testId="cmd-measure" />
             <Cmd icon="mass" label="질량 특성" title="부피·겉넓이·무게 중심·질량(재료별)" pressed={massOpen} onClick={editor.toggleMass} testId="cmd-mass" />
+            <Cmd icon="animation" label="애니메이션" title="타임라인: 키프레임으로 객체 움직이기 (I = 키, 스페이스 = 재생)" pressed={timelineOpen} onClick={() => editor.setTimeline({ open: !timelineOpen, playing: false })} testId="cmd-timeline" />
             <Cmd icon="render" label="렌더" title="그림자·구석 그늘·안티에일리어싱으로 고해상도 그림 (블렌더 F12)" pressed={renderOpen} onClick={() => useRenderStore.getState().setOpen(!renderOpen)} testId="cmd-render" />
             <Cmd icon="camera" label="이미지 저장" title="현재 화면을 PNG 로 저장" onClick={editor.requestScreenshot} testId="cmd-screenshot" />
             <span className="sep" />
