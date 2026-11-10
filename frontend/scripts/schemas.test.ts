@@ -64,6 +64,7 @@ describe('shared/schemas 동기화', () => {
       'add_reference',
       'delete_reference',
       'rename_reference',
+      'set_explode',
       'set_drawing',
       'delete_drawing_sheet',
       'add_mesh',

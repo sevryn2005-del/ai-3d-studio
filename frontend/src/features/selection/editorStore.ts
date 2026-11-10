@@ -71,6 +71,9 @@ interface EditorState {
   setActiveReference: (id: string | null) => void;
   /** 고른 점 추가 — 다 찼으면 마지막 점을 바꾼다 */
   addRefPoint: (p: Point3, max: number) => void;
+  /** 분해 보기 (형식 v41): 켜면 최상위 부품을 model.explode 만큼 떨어뜨려 보인다 (화면만) */
+  exploded: boolean;
+  setExploded: (on: boolean) => void;
   /** 두께 분석 (화면만): 이보다 얇은 벽(mm)을 빨강으로 */
   thickness: { limit: number } | null;
   setThickness: (t: { limit: number } | null) => void;
@@ -82,8 +85,8 @@ interface EditorState {
   loftOpen: boolean;
   sweepOpen: boolean;
   /** 조립품 탭 패널 (메이트·간섭 검사·부품표) */
-  assemblyPanel: 'mate' | 'interference' | 'bom' | null;
-  setAssemblyPanel: (p: 'mate' | 'interference' | 'bom' | null) => void;
+  assemblyPanel: 'mate' | 'interference' | 'bom' | 'explode' | null;
+  setAssemblyPanel: (p: 'mate' | 'interference' | 'bom' | 'explode' | null) => void;
   setSweepOpen: (open: boolean) => void;
   setLoftOpen: (on: boolean) => void;
   /** 원근(기본) / 직교 투영 */
@@ -141,6 +144,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   draft: null,
   // 두 분석은 같은 색 자리를 쓰므로 하나만 켠다
   setDraft: (draft) => set(draft ? { draft, thickness: null } : { draft }),
+  exploded: false,
+  setExploded: (exploded) => set({ exploded }),
   refPick: null,
   activeReference: null,
   setActiveReference: (activeReference) => set({ activeReference }),

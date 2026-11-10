@@ -140,6 +140,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `메이트 ${cmd.mate} 삭제`;
     case 'add_reference':
       return `${REF_LABEL[cmd.reference.type]} 추가${cmd.reference.name ? ` (${cmd.reference.name})` : ''}`;
+    case 'set_explode':
+      return cmd.offsets.length ? `분해도 (${cmd.offsets.length}개 부품)` : '분해도 지우기';
     case 'delete_reference':
       return `참조 형상 ${cmd.target} 삭제`;
     case 'rename_reference':

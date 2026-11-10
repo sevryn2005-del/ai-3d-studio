@@ -15,6 +15,8 @@ import { getActiveEngine, useActiveEngineId } from '../../features/engine/engine
 import type { InterferencePair } from '../../features/engine/types';
 import { downloadBlob } from '../../features/projects/projectStorage';
 import { useProjectStore } from '../../features/projects/projectStore';
+import { autoExplode, explodeOffset } from '../../cad/explode';
+import { NumberField } from '../PropertyPanel/NumberField';
 
 const TYPES = Object.keys(MATE_LABEL) as Mate['type'][];
 
@@ -23,6 +25,7 @@ export function AssemblyPanels() {
   if (panel === 'mate') return <MatePanel />;
   if (panel === 'interference') return <InterferencePanel />;
   if (panel === 'bom') return <BomPanel />;
+  if (panel === 'explode') return <ExplodePanel />;
   return null;
 }
 
@@ -225,6 +228,66 @@ function BomPanel() {
           ✕ 닫기
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 분해도 (형식 v41): 분해 보기 켜기·자동 분해·고른 부품의 이동량·지우기 — 설계 위치는 그대로, 화면만 */
+function ExplodePanel() {
+  const model = useSceneStore(selectModel);
+  const selectedId = useSceneStore((s) => s.selectedId);
+  const on = useEditorStore((s) => s.exploded);
+  const [factor, setFactor] = useState(1);
+  const roots = topLevelObjects(model);
+  const sel = roots.find((o) => o.id === selectedId);
+  const submit = useSceneStore.getState().submitNow;
+  const list = model.explode ?? [];
+  const setPart = (id: string, k: number, v: number) => {
+    const cur = explodeOffset(model, id);
+    const next = [...cur] as [number, number, number];
+    next[k] = v;
+    submit({ type: 'set_explode', offsets: [...list.filter((e) => e.id !== id), { id, offset: next }] });
+  };
+  return (
+    <div className="view-panel mass-panel" role="dialog" aria-label="분해도" data-testid="explode-panel">
+      <div className="pm-head">
+        <strong>분해도</strong>
+        <button onClick={close} title="닫기">
+          ✕
+        </button>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={on} onChange={(e) => useEditorStore.getState().setExploded(e.target.checked)} data-testid="explode-on" />
+        분해 보기 (화면만 — 위치·메이트·내보내기는 그대로)
+      </label>
+      <div className="field">
+        <label htmlFor="explode-factor">벌릴 배율</label>
+        <input id="explode-factor" type="number" min={0.1} max={10} step={0.1} value={factor} onChange={(e) => setFactor(Math.max(0.1, Math.min(10, Number(e.target.value) || 1)))} />
+      </div>
+      <button
+        onClick={() => {
+          const offsets = autoExplode(model, factor);
+          if (!offsets.length) return useSceneStore.getState().reportError('분해도: 부품이 둘 이상 있어야 자동으로 벌릴 수 있습니다');
+          if (submit({ type: 'set_explode', offsets }).status === 'applied') useEditorStore.getState().setExploded(true);
+        }}
+        data-testid="explode-auto"
+        title="조립품 가운데에서 각 부품 원점 쪽으로 벌립니다 (가운데에 겹친 부품은 위로)"
+      >
+        자동 분해
+      </button>
+      {sel ? (
+        <>
+          <p className="muted small">고른 부품: {sel.name}</p>
+          {(['X', 'Y', 'Z'] as const).map((a, k) => (
+            <NumberField key={a} label={`이동 ${a}`} unit="mm" value={explodeOffset(model, sel.id)[k]!} onCommit={(v) => setPart(sel.id, k, v)} testId={`explode-${a.toLowerCase()}`} />
+          ))}
+        </>
+      ) : (
+        <p className="muted small">부품을 고르면 그 부품의 분해 이동량을 바꿀 수 있습니다.</p>
+      )}
+      <button disabled={!list.length} onClick={() => submit({ type: 'set_explode', offsets: [] })} data-testid="explode-clear">
+        분해 지우기
+      </button>
     </div>
   );
 }

@@ -800,7 +800,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 40;
+export const MODEL_SCHEMA_VERSION = 41;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
@@ -815,6 +815,10 @@ export const ReferenceSchema = z.discriminatedUnion('type', [
 export type Reference = z.infer<typeof ReferenceSchema>;
 export const MAX_REFERENCES = 100;
 
+/** 분해도 한 부품: 최상위 객체 ID 와 월드 이동량 (mm) */
+export const ExplodeOffsetSchema = z.strictObject({ id: ObjectIdSchema, offset: Vec3Schema });
+export type ExplodeOffset = z.infer<typeof ExplodeOffsetSchema>;
+
 export const ModelDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_SCHEMA_VERSION),
   units: z.literal('mm'),
@@ -827,6 +831,8 @@ export const ModelDefinitionSchema = z.strictObject({
   workspace: WorkspaceSchema.optional(),
   /** 참조 형상 (형식 v34) */
   references: z.array(ReferenceSchema).max(MAX_REFERENCES).optional(),
+  /** 분해도 (형식 v41): 최상위 부품마다 화면에서만 더하는 이동량 (형상·메이트·내보내기에는 쓰지 않음) */
+  explode: z.array(ExplodeOffsetSchema).max(LIMITS.maxObjects).optional(),
 });
 export type ModelDefinition = z.infer<typeof ModelDefinitionSchema>;
 
@@ -859,6 +865,8 @@ export const AddReferenceCommandSchema = z.strictObject({
     refBody({ type: z.literal('csys'), origin: Vec3Schema, xDir: Vec3Schema, zDir: Vec3Schema }),
   ]),
 });
+/** 분해도 바꾸기 (형식 v41): 목록 전체를 바꾼다 (빈 목록 = 분해 지우기). 이동량 0 인 부품은 빠진다 */
+export const SetExplodeCommandSchema = z.strictObject({ type: z.literal('set_explode'), offsets: z.array(ExplodeOffsetSchema).max(LIMITS.maxObjects) });
 export const DeleteReferenceCommandSchema = z.strictObject({ type: z.literal('delete_reference'), target: ObjectIdSchema });
 export const RenameReferenceCommandSchema = z.strictObject({ type: z.literal('rename_reference'), target: ObjectIdSchema, name: NameSchema });
 
@@ -1503,6 +1511,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   AddReferenceCommandSchema,
   DeleteReferenceCommandSchema,
   RenameReferenceCommandSchema,
+  SetExplodeCommandSchema,
   SetDrawingCommandSchema,
   DeleteDrawingSheetCommandSchema,
   AddMeshCommandSchema,

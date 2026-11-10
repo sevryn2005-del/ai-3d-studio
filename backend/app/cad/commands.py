@@ -1168,8 +1168,15 @@ Reference = Annotated[Union[PlaneRef, AxisRef, PointRef, CsysRef], Field(discrim
 MAX_REFERENCES = 100
 
 
+class ExplodeOffset(Strict):
+    """분해도 한 부품 (형식 v41): 화면에서만 더하는 월드 이동량 — 엔진은 쓰지 않는다"""
+
+    id: ObjectId
+    offset: Vec3
+
+
 class ModelDefinition(Strict):
-    schemaVersion: Literal[40]
+    schemaVersion: Literal[41]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1180,6 +1187,7 @@ class ModelDefinition(Strict):
     workspace: Annotated[Literal["design", "modeling"] | None, Field(exclude_if=lambda v: v is None)] = None
     # 참조 형상 (형식 v34): 형상을 만들지 않는 기준 — 엔진은 쓰지 않는다
     references: Annotated[list[Reference] | None, Field(max_length=MAX_REFERENCES, exclude_if=lambda v: v is None)] = None
+    explode: Annotated[list[ExplodeOffset] | None, Field(max_length=Limits.MAX_OBJECTS, exclude_if=lambda v: v is None)] = None
 
 
 # ---- CAD 명령 ----------------------------------------------------------------
@@ -1405,6 +1413,13 @@ class AddReference(Strict):
 
     type: Literal["add_reference"]
     reference: Annotated[Union[PlaneRefBody, AxisRefBody, PointRefBody, CsysRefBody], Field(discriminator="type")]
+
+
+class SetExplode(Strict):
+    """형식 v41: 분해도 목록 전체 바꾸기"""
+
+    type: Literal["set_explode"]
+    offsets: Annotated[list[ExplodeOffset], Field(max_length=Limits.MAX_OBJECTS)]
 
 
 class DeleteReference(Strict):
@@ -1970,6 +1985,7 @@ CadCommand = Annotated[
         AddReference,
         DeleteReference,
         RenameReference,
+        SetExplode,
         SetDrawing,
         DeleteDrawingSheet,
         AddMesh,
@@ -2051,6 +2067,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     AddReference,
     DeleteReference,
     RenameReference,
+    SetExplode,
     SetDrawing,
     DeleteDrawingSheet,
     AddMesh,

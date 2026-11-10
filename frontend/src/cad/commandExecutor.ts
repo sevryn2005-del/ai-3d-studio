@@ -427,6 +427,17 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       return done(model, { ...model, references: [...refs, r] }, cmd, null);
     }
 
+    case 'set_explode': {
+      const roots = new Set(topLevelObjects(model).map((o) => o.id));
+      const bad = cmd.offsets.find((o) => !roots.has(o.id));
+      if (bad) return fail(`분해도는 최상위 부품만 움직일 수 있습니다: ${bad.id}`);
+      if (new Set(cmd.offsets.map((o) => o.id)).size !== cmd.offsets.length) return fail('분해도에 같은 부품이 두 번 있습니다');
+      const kept = cmd.offsets.filter((o) => o.offset.some((v) => Math.abs(v) > 1e-9));
+      const { explode: _e, ...base } = model;
+      void _e;
+      return done(model, kept.length ? { ...base, explode: kept } : base, cmd, null);
+    }
+
     case 'delete_reference': {
       const refs = model.references ?? [];
       if (!refs.some((r) => r.id === cmd.target)) return fail(`존재하지 않는 참조 형상입니다: ${cmd.target}`);

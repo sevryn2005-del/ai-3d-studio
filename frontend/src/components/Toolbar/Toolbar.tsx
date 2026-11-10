@@ -59,7 +59,7 @@ export function Toolbar() {
   const assemblyPanel = useEditorStore((s) => s.assemblyPanel);
   const workspace = useSceneStore((s) => s.history.present.model.workspace);
   const drawingOpen = useDrawingStore((s) => s.open);
-  const assembly = (p: 'mate' | 'interference' | 'bom') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
+  const assembly = (p: 'mate' | 'interference' | 'bom' | 'explode') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
   const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline' | 'trim' | 'extend') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
@@ -192,6 +192,7 @@ export function Toolbar() {
             <Cmd icon="mate" label="메이트" title="부품끼리 면 일치·거리·평행·동심·각도·고정 (둘째로 고른 부품이 움직임)" onClick={() => assembly('mate')} testId="cmd-mate" pressed={assemblyPanel === 'mate'} />
             <Cmd icon="interference" label="간섭 검사" title="부품끼리 서로 파고든 부피 계산" onClick={() => assembly('interference')} testId="cmd-interference" pressed={assemblyPanel === 'interference'} />
             <Cmd icon="bom" label="부품표" title="부품 목록·수량 (같은 형상은 묶어 셈), CSV 저장" onClick={() => assembly('bom')} testId="cmd-bom" pressed={assemblyPanel === 'bom'} />
+            <Cmd icon="explode" label="분해도" title="부품을 떨어뜨려 보기 (자동 분해·부품별 이동, 화면만)" onClick={() => assembly('explode')} testId="cmd-explode" pressed={assemblyPanel === 'explode'} />
           </>
         )}
         {tab === 'drawing' && (

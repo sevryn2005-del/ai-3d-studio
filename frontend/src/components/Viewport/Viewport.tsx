@@ -27,6 +27,7 @@ import { PickBar, PickOverlay } from './PickOverlay';
 import { pickBusy } from '../../features/selection/pick';
 import { MeasureEntityPanel } from './PickFlows';
 import { ReferenceGeometry, ReferencePanel } from './ReferenceGeometry';
+import { ExplodedPart } from './ExplodedPart';
 import { LoftPanel, SweepPanel, MassPanel, MeasureOverlay, MeasureReadout, ScreenshotTaker, SectionClip, SectionPanel, DraftPanel, ThicknessPanel } from './ViewTools';
 import { startSketch } from '../../features/selection/featureFlow';
 
@@ -80,7 +81,9 @@ export function Viewport() {
         />}
 
         {roots.map((o) => (
-          <CadNode key={o.id} object={o} index={index} mode="solid" />
+          <ExplodedPart key={o.id} id={o.id}>
+            <CadNode object={o} index={index} mode="solid" />
+          </ExplodedPart>
         ))}
 
         <SketchPaper />

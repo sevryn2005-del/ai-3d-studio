@@ -24,6 +24,7 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
   const selectedId = useSceneStore((s) => s.selectedId);
   const model = useSceneStore(selectModel);
   const mode = useEditorStore((s) => s.transformMode);
+  const exploded = useEditorStore((s) => s.exploded);
   const snap = useEditorStore(selectSnap);
   const [target, setTarget] = useState<Object3D | null>(null);
   /** 진행 중인 드래그의 명령 ID 와 기준 리비전 */
@@ -36,7 +37,8 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
   }, [scene, selectedId, model]);
 
   // 불리언 생성 등으로 객체 그룹이 다시 만들어진 직후에는 effect 가 새 대상을 찾기 전까지 이전 객체를 가리킨다
-  if (!target || !selectedId || !inScene(target, scene)) return null;
+  // 분해 보기 중에는 화면 위치가 설계 위치와 달라 기즈모를 숨긴다 (분해 이동량은 분해도 패널에서)
+  if (!target || !selectedId || !inScene(target, scene) || exploded) return null;
 
   const commit = () => {
     const drag = dragRef.current;
