@@ -752,8 +752,17 @@ class BevelModifier(Strict):
     angle: Annotated[float, _num(0, 180)]
 
 
+class DeformModifier(Strict):
+    """형식 v42: 변형 — 비틀기·휘기(°)·가늘게(배율 변화), 축"""
+
+    type: Literal["deform"]
+    mode: Literal["twist", "bend", "taper"]
+    amount: Annotated[float, _num(-3600, 3600)]
+    axis: Literal["x", "y", "z"]
+
+
 Modifier = Annotated[
-    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier, DisplaceModifier, BevelModifier],
+    Union[SubsurfModifier, MirrorModifier, ArrayModifier, SolidifyModifier, SmoothModifier, DecimateModifier, DisplaceModifier, BevelModifier, DeformModifier],
     Field(discriminator="type"),
 ]
 MAX_MODIFIERS = 16
@@ -1176,7 +1185,7 @@ class ExplodeOffset(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[41]
+    schemaVersion: Literal[42]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

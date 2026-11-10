@@ -11,6 +11,8 @@
  *   열린 가장자리·뒤집히는 면·꼬이는 연결(이웃 공유 ≠ 2)은 건너뛴다 → 닫힌 메시는 닫힌 채로
  * - displace (형식 v32): 표면 변형 — 점 법선 방향으로 (노이즈 − 0.5) × strength. 노이즈 = 정수 해시 값 노이즈 (size mm 격자, seed),
  *   같은 점 위치 → 같은 값이라 서버와 비트 단위로 같은 해시
+ * - deform (형식 v42): 블렌더 Simple Deform — 축 방향 위치 t(0 = 메시 아래 끝, 1 = 위 끝)에 따라
+ *   twist: 축 둘레로 amount° × t 돌림, bend: 축을 첫 가로축 쪽으로 amount° 원호로 휨, taper: 가로 크기 × (1 + amount × t)
  * - bevel (형식 v33): 두 면 사이 각이 angle° 보다 큰 선을 width 만큼 깎는다 (segments 단계 = 둥글게). 편집 모드 베벨(polymeshSelect.bevelEdges)과 같은 계산.
  *   열린 가장자리에 닿은 선은 건너뛴다
  */
@@ -25,7 +27,8 @@ export type Modifier =
   | { type: 'smooth'; factor: number; repeat: number }
   | { type: 'decimate'; ratio: number }
   | { type: 'displace'; strength: number; size: number; seed: number }
-  | { type: 'bevel'; width: number; segments: number; angle: number };
+  | { type: 'bevel'; width: number; segments: number; angle: number }
+  | { type: 'deform'; mode: 'twist' | 'bend' | 'taper'; amount: number; axis: 'x' | 'y' | 'z' };
 
 export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   subsurf: '세분 표면',
@@ -36,6 +39,7 @@ export const MODIFIER_LABEL: Record<Modifier['type'], string> = {
   decimate: '면 줄이기',
   displace: '표면 변형',
   bevel: '베벨',
+  deform: '변형 (비틀기·휘기·가늘게)',
 };
 
 /** 결과 메시가 이보다 크면 거부 (브라우저가 멈추지 않도록) */
@@ -365,6 +369,46 @@ export function bevelMesh(m: PolyMesh, width: number, segments: number, angle: n
   return typeof r === 'string' ? m : r.mesh;
 }
 
+/** 변형 축 → (가로1, 가로2, 축) 좌표 번호 — 서버 _DEFORM_AXES 와 같음 */
+const DEFORM_AXES = { x: [1, 2, 0], y: [2, 0, 1], z: [0, 1, 2] } as const;
+
+export function deformMesh(m: PolyMesh, mode: 'twist' | 'bend' | 'taper', amount: number, axis: 'x' | 'y' | 'z'): PolyMesh {
+  const [ia, ib, ic] = DEFORM_AXES[axis];
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of m.verts) {
+    lo = Math.min(lo, p[ic]);
+    hi = Math.max(hi, p[ic]);
+  }
+  const h = hi - lo;
+  if (!(h > 1e-9) || Math.abs(amount) < 1e-12) return m;
+  const rad = (amount * Math.PI) / 180;
+  const verts = m.verts.map((p) => {
+    const a = p[ia];
+    const b = p[ib];
+    const c = p[ic];
+    const t = (c - lo) / h;
+    const q: [number, number, number] = [p[0], p[1], p[2]];
+    if (mode === 'twist') {
+      const th = rad * t;
+      q[ia] = a * Math.cos(th) - b * Math.sin(th);
+      q[ib] = a * Math.sin(th) + b * Math.cos(th);
+    } else if (mode === 'taper') {
+      const k = 1 + amount * t;
+      q[ia] = a * k;
+      q[ib] = b * k;
+    } else {
+      // 휘기: 축 길이 h 를 반지름 R = h / θ 인 원호로 (가로1 쪽으로 굽음, 중심 = 가로1 R 위치)
+      const th = rad * t;
+      const R = h / rad;
+      q[ia] = R - (R - a) * Math.cos(th);
+      q[ic] = lo + (R - a) * Math.sin(th);
+    }
+    return rv(q);
+  });
+  return { verts, faces: m.faces };
+}
+
 export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
   switch (mod.type) {
     case 'subsurf': {
@@ -386,6 +430,8 @@ export function applyModifier(m: PolyMesh, mod: Modifier): PolyMesh {
       return displaceMesh(m, mod.strength, mod.size, mod.seed);
     case 'bevel':
       return bevelMesh(m, mod.width, mod.segments, mod.angle);
+    case 'deform':
+      return deformMesh(m, mod.mode, mod.amount, mod.axis);
   }
 }
 
@@ -409,7 +455,7 @@ export function estimateFaces(m: PolyMesh, mods: readonly Modifier[]): number {
       // 원래 면 + 선마다 띠 segments 개 + 점마다 모서리 메움 — 넉넉히 (선 수 = 모서리 합 / 2)
       faces = faces + (corners / 2) * mod.segments + corners;
       corners = faces * 4;
-    } else if (mod.type === 'smooth' || mod.type === 'displace') {
+    } else if (mod.type === 'smooth' || mod.type === 'displace' || mod.type === 'deform') {
       // 그대로
     } else if (mod.type === 'decimate') {
       faces = Math.max(4, Math.ceil((corners - 2 * faces) * mod.ratio));

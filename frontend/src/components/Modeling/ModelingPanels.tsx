@@ -240,6 +240,7 @@ const NEW_MODIFIER: Record<Mod['type'], Mod> = {
   decimate: { type: 'decimate', ratio: 0.5 },
   displace: { type: 'displace', strength: 2, size: 5, seed: 0 },
   bevel: { type: 'bevel', width: 1, segments: 3, angle: 30 },
+  deform: { type: 'deform', mode: 'twist', amount: 45, axis: 'z' },
 };
 
 /** 모디파이어 스택 (블렌더 속성 편집기의 렌치 탭): 위에서부터 적용. 추가·값·순서·삭제·적용, 부드러운 음영 */
@@ -332,6 +333,43 @@ export function ModifierStack({ obj }: { obj: CadObject & { kind: 'polymesh' } }
           )}
           {m.type === 'decimate' && (
             <NumberField label="남길 비율" value={m.ratio} unit="×" onCommit={(v) => patch(i, { ...m, ratio: Math.max(0.02, Math.min(1, v)) })} testId={`mod-${i}-ratio`} />
+          )}
+          {m.type === 'deform' && (
+            <>
+              <div className="field">
+                <label>방식</label>
+                <div className="seg-inline">
+                  {(
+                    [
+                      ['twist', '비틀기'],
+                      ['bend', '휘기'],
+                      ['taper', '가늘게'],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button key={k} aria-pressed={m.mode === k} onClick={() => patch(i, { ...m, mode: k, amount: k === 'taper' ? -0.5 : 45 })} data-testid={`mod-${i}-mode-${k}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <label>축</label>
+                <div className="seg-inline">
+                  {(['x', 'y', 'z'] as const).map((a) => (
+                    <button key={a} aria-pressed={m.axis === a} onClick={() => patch(i, { ...m, axis: a })}>
+                      {a.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <NumberField
+                label={m.mode === 'taper' ? '굵기 변화 (끝 = 1 + 값)' : '각도'}
+                unit={m.mode === 'taper' ? '×' : '°'}
+                value={m.amount}
+                onCommit={(v) => patch(i, { ...m, amount: Math.max(-3600, Math.min(3600, v)) })}
+                testId={`mod-${i}-amount`}
+              />
+            </>
           )}
           {m.type === 'bevel' && (
             <>

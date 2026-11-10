@@ -65,7 +65,7 @@ test('모델링 모드: 메시 추가 → 이동 → 편집 모드 돌출·인�
   await expect(page.getByTestId('mode-object')).toHaveAttribute('aria-pressed', 'true');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(41);
+  expect(saved.formatVersion).toBe(42);
   expect(saved.model.workspace).toBe('modeling');
   const obj = saved.model.objects[0];
   expect(obj.kind).toBe('polymesh');
@@ -118,7 +118,7 @@ test('모디파이어: Ctrl+2 세분 표면 → 미러 추가 → 부드러운 �
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(41);
+  expect(saved.formatVersion).toBe(42);
   expect(saved.model.objects[0]).toMatchObject({ smooth: true, modifiers: [{ type: 'subsurf', levels: 2 }, { type: 'mirror', axis: 'x', merge: true }] });
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
@@ -176,7 +176,7 @@ test('모디파이어 표면 변형 (형식 v32): 세분 3 → 표면 변형 →
   await page.locator('.modeling-viewport').screenshot({ path: info.outputPath('displace.png') });
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(41);
+  expect(saved.formatVersion).toBe(42);
   expect(saved.model.objects[0].modifiers).toEqual([{ type: 'subsurf', levels: 3 }, { type: 'displace', strength: 4, size: 5, seed: 7 }]);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
@@ -197,6 +197,34 @@ test('모디파이어 베벨 (형식 v33): 큐브 → 베벨 3단계 → 폭 →
   await expect(page.getByTestId('mesh-stats')).toContainText('닫힘');
   await page.keyboard.press('Control+z');
   await expect(page.getByTestId('mesh-stats')).toContainText('면6');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('모디파이어 변형 (형식 v42): 세분 → 비틀기 → 휘기 → 가늘게, 저장', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    for (const k of ['showSaveFilePicker', 'showOpenFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });
+  });
+  await page.goto('/');
+  await page.getByTestId('home-modeling').click();
+  await page.getByTestId('guide-add-cube').click();
+  const vp = page.locator('.modeling-viewport canvas');
+  const box = (await vp.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Control+2');
+  await page.getByTestId('modifier-add').selectOption('deform');
+  await expect(page.getByTestId('modifier-1')).toContainText('변형');
+  await expect(page.getByTestId('mod-1-amount')).toHaveValue('45');
+  await page.getByTestId('mod-1-amount').fill('90');
+  await page.getByTestId('mod-1-amount').press('Enter');
+  await page.locator('.modeling-viewport').screenshot({ path: info.outputPath('twist.png') });
+  await page.getByTestId('mod-1-mode-bend').click();
+  await page.getByTestId('mod-1-mode-taper').click();
+  await expect(page.getByTestId('mod-1-amount')).toHaveValue('-0.5');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
+  const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
+  expect(saved.formatVersion).toBe(42);
+  expect(saved.model.objects[0].modifiers[1]).toEqual({ type: 'deform', mode: 'taper', amount: -0.5, axis: 'z' });
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 

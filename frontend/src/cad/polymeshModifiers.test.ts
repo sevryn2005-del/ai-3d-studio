@@ -122,3 +122,22 @@ describe('베벨 모디파이어 (형식 v33, 서버 polymesh.py 와 같은 계�
     expect(bevelMesh(g, 1, 2, 0)).toBe(g);
   });
 });
+
+describe('변형 모디파이어 (형식 v42, 서버 polymesh.py 와 같은 식)', () => {
+  it('비틀기는 부피 그대로·위 끝이 돌아감, 가늘게는 위 끝 크기 × (1 + amount), 휘기는 축이 원호', async () => {
+    const { deformMesh } = await import('./polymeshModifiers');
+    const c = evaluateModifiers(primitiveMesh('cube', { size: 20 }), [{ type: 'subsurf', levels: 1 }]);
+    const tw = deformMesh(c, 'twist', 90, 'z');
+    expect(Math.abs(polyVolume(tw) - polyVolume(c)) / polyVolume(c)).toBeLessThan(0.05);
+    expect(deformMesh(c, 'twist', 0, 'z')).toBe(c);
+    // 날 큐브 (z −10..10): 위 꼭짓점 (10,10,10) → 비틀기 90° 면 (−10, 10, 10)
+    const raw = primitiveMesh('cube', { size: 20 });
+    const has = (m: { verts: number[][] }, q: number[]) => m.verts.some((p) => p.every((v, k) => Math.abs(v - q[k]!) < 1e-6));
+    expect(has(deformMesh(raw, 'twist', 90, 'z'), [-10, 10, 10])).toBe(true);
+    // 가늘게 −0.5: 위 끝 꼭짓점이 (5, 5, 10)
+    expect(has(deformMesh(raw, 'taper', -0.5, 'z'), [5, 5, 10])).toBe(true);
+    // 휘기 90°: 가로 −10 인 위 끝 → (R, ·, R), R = 20 / (π/2)
+    const R = 20 / (Math.PI / 2);
+    expect(deformMesh(raw, 'bend', 90, 'z').verts.some((p) => Math.abs(p[0]! - R) < 1e-5 && Math.abs(p[2]! - R) < 1e-5)).toBe(true);
+  });
+});

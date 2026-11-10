@@ -84,7 +84,7 @@ test('가변 반경 필렛 (형식 v38): 세로 모서리 필렛 → 가변 켜�
   await page.getByTestId('ef-size2').press('Enter');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(41);
+  expect(saved.formatVersion).toBe(42);
   expect(saved.model.objects.find((o: { id: string }) => o.id === 'fillet_1').fillet).toMatchObject({ type: 'fillet', size: 2, size2: 6, edges: 'vertical' });
   await page.getByTestId('ef-variable').uncheck();
   await expect(page.getByTestId('ef-size2')).toHaveCount(0);

@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 41
+      "const": 42
     },
     "units": {
       "type": "string",
@@ -3761,6 +3761,43 @@
                         "strength",
                         "size",
                         "seed"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "deform"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "twist",
+                            "bend",
+                            "taper"
+                          ]
+                        },
+                        "amount": {
+                          "type": "number",
+                          "minimum": -3600,
+                          "maximum": 3600
+                        },
+                        "axis": {
+                          "type": "string",
+                          "enum": [
+                            "x",
+                            "y",
+                            "z"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "mode",
+                        "amount",
+                        "axis"
                       ],
                       "additionalProperties": false
                     },

@@ -107,7 +107,7 @@ test.describe("모델링 모드", () => {
       page.getByRole("button", { name: "저장", exact: true }).click(),
     ]);
     const saved = JSON.parse(readFileSync((await dl.path())!, "utf8"));
-    expect(saved.formatVersion).toBe(41);
+    expect(saved.formatVersion).toBe(42);
     expect(saved.model.objects[0].texture).toEqual({
       image: `data:image/png;base64,${PNG_B64}`,
       tile: 50,

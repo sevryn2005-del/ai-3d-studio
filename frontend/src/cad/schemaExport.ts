@@ -787,6 +787,29 @@ export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: 
     ],
     bbox: [[-10, -10, 0], [64, 10, 20]],
   },
+  // 형식 v42: 변형 모디파이어 — 세분 2 큐브를 비틀기 60° 뒤 휘기 40° (프론트 식으로 낸 부피 = 서버가 같은 점을 만들어야 같은 값)
+  'polymesh-deform': {
+    volume: polyVolume(
+      evaluateModifiers(primitiveMesh('cube', { size: 20 }), [
+        { type: 'subsurf', levels: 2 },
+        { type: 'deform', mode: 'twist', amount: 60, axis: 'z' },
+        { type: 'deform', mode: 'bend', amount: 40, axis: 'x' },
+      ]),
+    ),
+    roots: 1,
+    commands: [
+      { type: 'add_mesh', id: 'm', primitive: 'cube', params: { size: 20 }, position: [0, 0, 10] },
+      {
+        type: 'set_modifiers',
+        target: 'm',
+        modifiers: [
+          { type: 'subsurf', levels: 2 },
+          { type: 'deform', mode: 'twist', amount: 60, axis: 'z' },
+          { type: 'deform', mode: 'bend', amount: 40, axis: 'x' },
+        ],
+      },
+    ],
+  },
   'polymesh-cut-box': {
     volume: 16000 - 500,
     roots: 1,

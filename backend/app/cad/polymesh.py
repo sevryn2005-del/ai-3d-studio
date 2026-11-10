@@ -524,6 +524,40 @@ def bevel(verts, faces, width: float, segments: int, angle: float):
     return r if r is not None else (list(verts), [list(f) for f in faces])
 
 
+_DEFORM_AXES = {"x": (1, 2, 0), "y": (2, 0, 1), "z": (0, 1, 2)}
+
+
+def deform(verts, faces, mode: str, amount: float, axis: str):
+    """변형 (형식 v42) — 프론트 deformMesh 와 같은 식: 축 위치 t 에 따라 비틀기·휘기·가늘게"""
+    ia, ib, ic = _DEFORM_AXES[axis]
+    lo = min((p[ic] for p in verts), default=0.0)
+    hi = max((p[ic] for p in verts), default=0.0)
+    h = hi - lo
+    if not h > 1e-9 or abs(amount) < 1e-12:
+        return [tuple(p) for p in verts], [list(f) for f in faces]
+    rad = amount * math.pi / 180
+    out = []
+    for p in verts:
+        a, b, c = p[ia], p[ib], p[ic]
+        t = (c - lo) / h
+        q = [p[0], p[1], p[2]]
+        if mode == "twist":
+            th = rad * t
+            q[ia] = a * math.cos(th) - b * math.sin(th)
+            q[ib] = a * math.sin(th) + b * math.cos(th)
+        elif mode == "taper":
+            k = 1 + amount * t
+            q[ia] = a * k
+            q[ib] = b * k
+        else:
+            th = rad * t
+            r = h / rad
+            q[ia] = r - (r - a) * math.cos(th)
+            q[ic] = lo + (r - a) * math.sin(th)
+        out.append(_rv(q))
+    return out, [list(f) for f in faces]
+
+
 def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
     """모디파이어 스택 결과 (위에서부터 차례로). modifiers: Pydantic 모델 또는 dict"""
     vs = [tuple(p) for p in verts]
@@ -548,4 +582,6 @@ def evaluate(verts, faces, modifiers) -> tuple[list[V3], list[list[int]]]:
             vs, fs = displace(vs, fs, d["strength"], d["size"], d["seed"])
         elif t == "bevel":
             vs, fs = bevel(vs, fs, d["width"], d["segments"], d["angle"])
+        elif t == "deform":
+            vs, fs = deform(vs, fs, d["mode"], d["amount"], d["axis"])
     return vs, fs

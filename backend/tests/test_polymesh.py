@@ -111,3 +111,13 @@ def test_bevel_modifier_matches_frontend():
     verts, faces = evaluate(pm["verts"], pm["faces"], obj["modifiers"])
     assert abs(_volume(verts, faces) - case["volume"]) < 1e-6
     assert abs(case["volume"] - 7732.960295) < 1e-5
+
+
+def test_deform_matches_frontend():
+    """형식 v42: 변형 모디파이어 — 공유 픽스처 부피가 프론트와 소수 6자리까지 같다"""
+    from app.cad.polymesh import evaluate
+
+    case = load_json("examples/feature-cases.json")["polymesh-deform"]
+    obj = case["model"]["objects"][0]
+    verts, faces = evaluate(obj["polymesh"]["verts"], obj["polymesh"]["faces"], obj["modifiers"])
+    assert abs(_volume(verts, faces) - case["volume"]) < 1e-6

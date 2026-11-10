@@ -549,6 +549,13 @@ export const ModifierSchema = z.discriminatedUnion('type', [
     size: z.number().min(0.1).max(LIMITS.maxDimension),
     seed: z.number().int().min(0).max(9999),
   }),
+  // 형식 v42: 변형 (비틀기 amount°·휘기 amount°·가늘게 amount 배율 변화), 축 x·y·z
+  z.strictObject({
+    type: z.literal('deform'),
+    mode: z.enum(['twist', 'bend', 'taper']),
+    amount: z.number().min(-3600).max(3600),
+    axis: z.enum(['x', 'y', 'z']),
+  }),
   // 형식 v33: 베벨 (각 > angle° 인 선을 width mm 만큼, segments 단계)
   z.strictObject({
     type: z.literal('bevel'),
@@ -800,7 +807,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 41;
+export const MODEL_SCHEMA_VERSION = 42;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
