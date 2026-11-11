@@ -102,4 +102,35 @@ describe('부품 삽입', () => {
     const group = m.objects.find((o) => o.name === '브래킷')!;
     expect(group).toMatchObject({ kind: 'boolean', boolean: { operation: 'union', base: 'base_p1', tools: ['cylinder_1_p1'] }, transform: { position: [100, 0, 0] } });
   });
+
+  it('메이트 지키며 끌기: 면 위에서는 미끄러지고 들리지 않는다, 동심 핀은 축 둘레로만 돈다, 고정 부품은 거부', () => {
+    const m = run([{ type: 'add_mate', mate: 'coincident', refs: ['base.top', 'cap.bottom'] }], two);
+    const p0 = obj(m, 'cap').transform.position;
+    const d = run([{ type: 'move_with_mates', target: 'cap', position: [p0[0] + 30, p0[1] - 10, p0[2] + 50] }], m);
+    const p1 = obj(d, 'cap').transform.position;
+    expect(p1[0]).toBeCloseTo(p0[0] + 30, 4);
+    expect(p1[1]).toBeCloseTo(p0[1] - 10, 4);
+    expect(p1[2]).toBeCloseTo(10, 5); // 들어 올린 50 은 메이트가 막는다
+    expect(obj(d, 'base').transform).toEqual(obj(m, 'base').transform);
+    expect(Math.max(...mateResiduals(d).values())).toBeLessThan(1e-5);
+
+    const pin = run([
+      { type: 'create_cylinder', id: 'boss', radius: 6, height: 8 },
+      { type: 'create_cylinder', id: 'pin', radius: 3, height: 20, position: [80, 0, 0] },
+      { type: 'add_mate', id: 'c1', mate: 'concentric', refs: ['boss.axis', 'pin.axis'] },
+      { type: 'add_mate', id: 'd1', mate: 'distance', refs: ['boss.top', 'pin.bottom'], value: 2, flip: false },
+    ]);
+    const spun = run([{ type: 'move_with_mates', target: 'pin', position: [15, 5, 30], rotation: [20, 0, 40] }], pin);
+    const t = obj(spun, 'pin').transform;
+    expect(t.position[0]).toBeCloseTo(0, 4);
+    expect(t.position[1]).toBeCloseTo(0, 4);
+    expect(t.position[2]).toBeCloseTo(10, 4);
+    expect(Math.abs(t.rotation[2])).toBeGreaterThan(20); // 축(Z) 둘레 회전은 남는다
+    expect(Math.max(...mateResiduals(spun).values())).toBeLessThan(1e-5);
+
+    const fixed = run([{ type: 'add_mate', mate: 'fix', refs: ['base'] }], m);
+    expect(err(fixed, { type: 'move_with_mates', target: 'base', position: [5, 0, 0] })).toMatch(/고정/);
+    // 메이트 없는 부품은 그냥 옮겨진다
+    expect(obj(run([{ type: 'move_with_mates', target: 'base', position: [5, 0, 0] }], two), 'base').transform.position).toEqual([5, 0, 0]);
+  });
 });

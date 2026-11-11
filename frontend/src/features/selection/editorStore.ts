@@ -74,6 +74,9 @@ interface EditorState {
   /** 타임라인 (형식 v43): 열려 있으면 애니메이션 자세로 보이고, 기즈모로 옮기면 지금 프레임에 키가 들어간다 */
   timeline: { open: boolean; frame: number; playing: boolean };
   setTimeline: (t: Partial<{ open: boolean; frame: number; playing: boolean }>) => void;
+  /** 메이트 지키며 끌기: 켜면 메이트된 부품을 기즈모로 옮길 때 남은 자유도 안에서만 (move_with_mates) */
+  dragWithMates: boolean;
+  setDragWithMates: (on: boolean) => void;
   /** 분해 보기 (형식 v41): 켜면 최상위 부품을 model.explode 만큼 떨어뜨려 보인다 (화면만) */
   exploded: boolean;
   setExploded: (on: boolean) => void;
@@ -149,6 +152,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   setDraft: (draft) => set(draft ? { draft, thickness: null } : { draft }),
   timeline: { open: false, frame: 0, playing: false },
   setTimeline: (t) => set((s) => ({ timeline: { ...s.timeline, ...t } })),
+  dragWithMates: false,
+  setDragWithMates: (dragWithMates) => set({ dragWithMates }),
   exploded: false,
   setExploded: (exploded) => set({ exploded }),
   refPick: null,

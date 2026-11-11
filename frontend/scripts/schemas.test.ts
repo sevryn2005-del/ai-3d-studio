@@ -91,6 +91,7 @@ describe('shared/schemas 동기화', () => {
       'chamfer',
       'translate',
       'set_transform',
+      'move_with_mates',
       'rename_object',
       'duplicate_object',
       'delete_object',

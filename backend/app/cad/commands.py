@@ -1924,6 +1924,15 @@ class SetTransform(Strict):
     rotation: Rotation | None = None
 
 
+class MoveWithMates(Strict):
+    """메이트 지키며 끌기: 남은 자유도 안에서 원하는 자리에 가장 가까운 자세로 (풀이는 프론트 mates.ts)"""
+
+    type: Literal["move_with_mates"]
+    target: ObjectId
+    position: Vec3 | None = None
+    rotation: Rotation | None = None
+
+
 class RenameObject(Strict):
     type: Literal["rename_object"]
     target: ObjectId
@@ -2067,6 +2076,7 @@ CadCommand = Annotated[
         Chamfer,
         Translate,
         SetTransform,
+        MoveWithMates,
         RenameObject,
         DuplicateObject,
         DeleteObject,
@@ -2152,6 +2162,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     Chamfer,
     Translate,
     SetTransform,
+    MoveWithMates,
     RenameObject,
     DuplicateObject,
     DeleteObject,

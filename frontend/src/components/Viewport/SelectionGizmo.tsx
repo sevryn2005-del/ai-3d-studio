@@ -10,6 +10,7 @@ import { transformFromObject3D, transformsEqual } from '../../cad/transformUtils
 import { DEG2RAD } from '../../cad/units';
 import { newCommandId } from '../../cad/commandEnvelope';
 import { selectSnap, useEditorStore } from '../../features/selection/editorStore';
+import { matesOf } from '../../cad/mates';
 
 /**
  * 선택된 객체에 이동/회전 기즈모를 붙인다.
@@ -65,12 +66,15 @@ export function SelectionGizmo({ activeRef }: { activeRef: RefObject<boolean> })
       command:
         tl.open && topLevel
           ? { type: 'insert_keyframe', target: drag.objectId, frame: Math.round(tl.frame), position: next.position, rotation: next.rotation }
-          : { type: 'set_transform', target: drag.objectId, position: next.position, rotation: next.rotation },
+          : useEditorStore.getState().dragWithMates && topLevel && matesOf(store.history.present.model, drag.objectId).length > 0
+            ? { type: 'move_with_mates', target: drag.objectId, position: next.position, rotation: next.rotation }
+            : { type: 'set_transform', target: drag.objectId, position: next.position, rotation: next.rotation },
     });
     // 적용되면 반올림된 값으로, 아니면 최신 설계 원본 값으로 맞춘다
     // (React props 가 같으면 R3F 가 다시 적용하지 않으므로 직접 설정)
     const latest = findObject(useSceneStore.getState().history.present.model, drag.objectId);
-    applyTransform(target, result.status === 'applied' ? next : track ? shown : (latest ?? current).transform);
+    // 메이트 끌기는 풀이가 자세를 바꾸므로 적용 뒤 설계 원본 값으로
+    applyTransform(target, result.status === 'applied' ? (track ? next : (latest ?? current).transform) : track ? shown : (latest ?? current).transform);
   };
 
   return (

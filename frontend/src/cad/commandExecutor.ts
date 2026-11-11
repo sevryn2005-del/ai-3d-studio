@@ -40,7 +40,7 @@ import {
 } from './commandTypes';
 import { KIND_INFO, OPERATION_INFO, PATTERN_LABEL } from './objectKinds';
 import { byId, depthOf, parentMap, sketchIndex, subtreeIds, topLevelObjects, validateGraph, wrapperSource } from './modelGraph';
-import { mateError, pruneMates, refObject, solveMates } from './mates';
+import { dragWithMates, mateError, pruneMates, refObject, solveMates } from './mates';
 import { IDENTITY, composeTransform, fromMatrix, relativeTransform, toMatrix } from './transformMath';
 import { Matrix4 } from 'three';
 import { patternError, shellError } from './features';
@@ -95,7 +95,7 @@ export function executeCommand(model: ModelDefinition, input: unknown): ExecuteR
   return { ...r, model: solved.model };
 }
 
-const MATE_COMMANDS = new Set<CadCommand['type']>(['add_mate', 'set_mate', 'delete_mate']);
+const MATE_COMMANDS = new Set<CadCommand['type']>(['add_mate', 'set_mate', 'delete_mate', 'move_with_mates']);
 
 function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
   if (isSketchCommand(cmd)) return executeSketchCommand(model, cmd);
@@ -194,6 +194,18 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
         cmd,
         target.id,
       );
+    }
+
+    case 'move_with_mates': {
+      const target = findObject(model, cmd.target);
+      if (!target) return missing(cmd.target);
+      if (!topLevelObjects(model).some((o) => o.id === target.id)) return fail(`메이트 끌기는 최상위 부품만 됩니다: ${target.name}`);
+      const want = { position: cmd.position ?? target.transform.position, rotation: cmd.rotation ?? target.transform.rotation };
+      if (!(model.mates ?? []).some((m) => m.refs.some((r) => refObject(r) === target.id)))
+        return done(model, replaceObject(model, { ...target, transform: want }), cmd, target.id);
+      const solved = dragWithMates(pruneMates(model), target.id, want);
+      if (!solved.ok) return fail(`메이트 때문에 끌 수 없습니다: ${solved.error}`);
+      return done(model, solved.model, cmd, target.id);
     }
 
     case 'set_transform': {

@@ -184,8 +184,11 @@ export function mateResiduals(model: ModelDefinition): Map<string, number> {
   return out;
 }
 
-/** 움직이지 않는 객체: 고정 메이트 + pinned + (고정이 없는 무리마다) 모델 순서상 첫 객체 */
-function grounded(model: ModelDefinition, pinned: ReadonlySet<ObjectId>): { movers: ObjectId[]; fixed: Set<ObjectId> } {
+/**
+ * 움직이지 않는 객체: 고정 메이트 + pinned + (고정이 없는 무리마다) 모델 순서상 첫 객체.
+ * free = 자동 고정에서 빼는 객체 (끌고 있는 부품 — 그 무리에서는 다음 부품을 고정)
+ */
+function grounded(model: ModelDefinition, pinned: ReadonlySet<ObjectId>, free: ReadonlySet<ObjectId> = new Set()): { movers: ObjectId[]; fixed: Set<ObjectId> } {
   const mates = model.mates ?? [];
   const order = new Map(model.objects.map((o, i) => [o.id, i]));
   const parent = new Map<ObjectId, ObjectId>();
@@ -203,7 +206,8 @@ function grounded(model: ModelDefinition, pinned: ReadonlySet<ObjectId>): { move
   for (const id of ids) groups.set(find(id), [...(groups.get(find(id)) ?? []), id]);
   for (const members of groups.values()) {
     if (members.some((id) => fixed.has(id))) continue;
-    fixed.add(members.sort((a, b) => order.get(a)! - order.get(b)!)[0]!);
+    const ground = members.sort((a, b) => order.get(a)! - order.get(b)!).find((id) => !free.has(id));
+    if (ground) fixed.add(ground);
   }
   return { movers: [...ids].filter((id) => !fixed.has(id)).sort((a, b) => order.get(a)! - order.get(b)!), fixed };
 }
@@ -233,14 +237,14 @@ export type MateSolve = { ok: true; model: ModelDefinition; dof: number } | { ok
  * 메이트를 풀어 변환을 반영한다. pinned = 이번 편집에서 사용자가 옮긴 객체(움직이지 않음).
  * 풀 수 없으면 실패 → 실행기가 원본을 그대로 둔다.
  */
-export function solveMates(model: ModelDefinition, pinned: ReadonlySet<ObjectId> = new Set()): MateSolve {
+export function solveMates(model: ModelDefinition, pinned: ReadonlySet<ObjectId> = new Set(), free: ReadonlySet<ObjectId> = new Set()): MateSolve {
   const mates = model.mates ?? [];
   for (const m of mates) {
     const err = mateError(model, m);
     if (err) return { ok: false, error: `메이트 ${m.id}: ${err}` };
   }
   if (!mates.length) return { ok: true, model, dof: 0 };
-  const { movers } = grounded(model, pinned);
+  const { movers } = grounded(model, pinned, free);
   const R = (x: number[]) => {
     const w = makeWorld(model, movers, x);
     return mates.flatMap((m) => residuals(model, m, w));
@@ -257,6 +261,21 @@ export function solveMates(model: ModelDefinition, pinned: ReadonlySet<ObjectId>
   const worst = Math.max(0, ...mateResiduals(solved).values());
   if (worst > MATE_TOLERANCE) return { ok: false, error: '메이트를 동시에 만족할 수 없습니다' };
   return { ok: true, model: solved, dof: mateDof(solved) };
+}
+
+/** 고정 메이트가 걸린 부품인가 (끌 수 없음) */
+export function isMateFixed(model: ModelDefinition, id: ObjectId): boolean {
+  return (model.mates ?? []).some((m) => m.type === 'fix' && refObject(m.refs[0]!) === id);
+}
+
+/**
+ * 메이트 지키며 끌기: id 를 want 자세에 두고 끌고 있는 부품은 자동 고정에서 빼서 푼다 →
+ * 최소 이동 풀이가 want 에서 가장 가까운, 메이트를 만족하는 자세로 되돌린다 (남은 자유도 쪽 움직임만 남음).
+ */
+export function dragWithMates(model: ModelDefinition, id: ObjectId, want: { position: [number, number, number]; rotation: [number, number, number] }): MateSolve {
+  if (isMateFixed(model, id)) return { ok: false, error: '고정된 부품은 끌 수 없습니다' };
+  const moved: ModelDefinition = { ...model, objects: model.objects.map((o) => (o.id === id ? { ...o, transform: want } : o)) };
+  return solveMates(moved, new Set(), new Set([id]));
 }
 
 /** 남은 자유도 = 움직일 수 있는 부품 수 × 6 − 메이트 자코비안 계수. 0 이면 완전 정의 */

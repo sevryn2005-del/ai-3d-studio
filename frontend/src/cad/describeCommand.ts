@@ -80,6 +80,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
     }
     case 'translate':
       return `${name(cmd.target)} 이동 ${vec(cmd.offset)}mm`;
+    case 'move_with_mates':
+      return `${name(cmd.target)} 메이트 지키며 끌기`;
     case 'set_transform':
       return [
         cmd.position && `${name(cmd.target)} 위치 ${vec(cmd.position)}mm`,

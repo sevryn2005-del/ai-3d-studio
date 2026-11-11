@@ -1431,6 +1431,17 @@ export const SetTransformCommandSchema = z.strictObject({
   rotation: RotationSchema.optional(), // 절대 회전
 });
 
+/**
+ * 메이트 지키며 끌기 (솔리드웍스 부품 끌기 / 인벤터 구속된 끌기): target 을 원하는 자리로 옮기되, 메이트가 허락하는
+ * 가장 가까운 자세로 (남은 자유도 안에서만). 고정 부품은 그대로, 이어진 부품은 따라 움직인다
+ */
+export const MoveWithMatesCommandSchema = z.strictObject({
+  type: z.literal('move_with_mates'),
+  target: ObjectIdSchema,
+  position: Vec3Schema.optional(),
+  rotation: RotationSchema.optional(),
+});
+
 export const RenameObjectCommandSchema = z.strictObject({
   type: z.literal('rename_object'),
   target: ObjectIdSchema,
@@ -1582,6 +1593,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   ChamferCommandSchema,
   TranslateCommandSchema,
   SetTransformCommandSchema,
+  MoveWithMatesCommandSchema,
   RenameObjectCommandSchema,
   DuplicateObjectCommandSchema,
   DeleteObjectCommandSchema,

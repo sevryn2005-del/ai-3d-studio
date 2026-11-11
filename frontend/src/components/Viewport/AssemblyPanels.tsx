@@ -64,6 +64,8 @@ function MatePanel() {
       set(keyOf(ref));
     });
   const dof = useMemo(() => mateDof(model), [model]);
+  const dragWithMates = useEditorStore((s) => s.dragWithMates);
+  const setDragWithMates = useEditorStore((s) => s.setDragWithMates);
   const needsValue = type === 'distance' || type === 'angle';
   const add = () => {
     const v = Number(value);
@@ -80,6 +82,9 @@ function MatePanel() {
       <div className="pm-head">
         <strong>메이트</strong> <span className="muted small" data-testid="mate-dof">자유도 {dof}{(model.mates?.length ?? 0) > 0 && dof === 0 ? ' · 완전 정의' : ''}</span>
       </div>
+      <label className="check" title="켜면 메이트된 부품을 이동 기즈모로 끌 때 메이트가 허락하는 방향(남은 자유도)으로만 움직입니다. 끄면 옮긴 부품은 그 자리, 짝 부품이 따라옵니다">
+        <input type="checkbox" checked={dragWithMates} onChange={(e) => setDragWithMates(e.target.checked)} data-testid="mate-drag" /> 메이트 지키며 끌기
+      </label>
       <label className="field">
         종류
         <select value={type} onChange={(e) => setType(e.target.value as Mate['type'])} data-testid="mate-type">
