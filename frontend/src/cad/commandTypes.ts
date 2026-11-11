@@ -807,7 +807,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 43;
+export const MODEL_SCHEMA_VERSION = 44;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
@@ -825,7 +825,10 @@ export const MAX_REFERENCES = 100;
 /**
  * 애니메이션 (형식 v43, 블렌더 키프레임): 최상위 객체의 위치·회전 키 → 키 사이 직선 보간. 화면 재생만 (설계 위치·형상·내보내기 그대로)
  */
-export const KeyframeSchema = z.strictObject({ frame: z.number().int().min(0).max(100_000), position: Vec3Schema, rotation: Vec3Schema });
+/** 이 키에서 다음 키로 가는 방식 (형식 v44): linear = 일정한 속도, ease = 천천히 출발·도착, constant = 다음 키까지 그대로 (계단) */
+export const KeyInterpSchema = z.enum(['linear', 'ease', 'constant']);
+export const KeyframeSchema = z.strictObject({ frame: z.number().int().min(0).max(100_000), position: Vec3Schema, rotation: Vec3Schema, interp: KeyInterpSchema.optional() });
+export type KeyInterp = z.infer<typeof KeyInterpSchema>;
 export const AnimationTrackSchema = z.strictObject({ id: ObjectIdSchema, keys: z.array(KeyframeSchema).min(1).max(1000) });
 export const AnimationSchema = z.strictObject({
   fps: z.number().int().min(1).max(120),
@@ -897,6 +900,8 @@ export const InsertKeyframeCommandSchema = z.strictObject({
   frame: z.number().int().min(0).max(100_000),
   position: Vec3Schema.optional(),
   rotation: Vec3Schema.optional(),
+  /** 형식 v44: 보간 방식 (비우면 같은 프레임에 있던 키의 방식, 없으면 linear) */
+  interp: KeyInterpSchema.optional(),
 });
 export const DeleteKeyframeCommandSchema = z.strictObject({ type: z.literal('delete_keyframe'), target: ObjectIdSchema, frame: z.number().int().min(0).max(100_000) });
 /** 애니메이션 설정 (초당 프레임·끝 프레임). clear = 모든 키 지우기 */

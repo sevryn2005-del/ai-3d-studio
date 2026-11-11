@@ -434,7 +434,14 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       if (!topLevelObjects(model).some((o) => o.id === target.id)) return fail(`애니메이션은 최상위 객체만 움직일 수 있습니다: ${target.name}`);
       const anim = model.animation ?? DEFAULT_ANIMATION;
       if ((anim.tracks.find((t) => t.id === target.id)?.keys.length ?? 0) >= 1000) return fail('키는 객체마다 최대 1000개까지 가능합니다');
-      const key = { frame: cmd.frame, position: cmd.position ?? target.transform.position, rotation: cmd.rotation ?? target.transform.rotation };
+      const prev = anim.tracks.find((t) => t.id === target.id)?.keys.find((k) => k.frame === cmd.frame);
+      const interp = cmd.interp ?? prev?.interp;
+      const key = {
+        frame: cmd.frame,
+        position: cmd.position ?? target.transform.position,
+        rotation: cmd.rotation ?? target.transform.rotation,
+        ...(interp && interp !== 'linear' ? { interp } : {}),
+      };
       return done(model, { ...model, animation: withKey(anim, target.id, key) }, cmd, target.id);
     }
 

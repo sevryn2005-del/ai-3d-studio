@@ -1,10 +1,18 @@
 /**
- * 애니메이션 (형식 v43): 최상위 객체 위치·회전 키프레임, 키 사이 직선 보간 (첫 키 앞·마지막 키 뒤는 그 키 그대로).
+ * 애니메이션 (형식 v43): 최상위 객체 위치·회전 키프레임, 키 사이 보간 (첫 키 앞·마지막 키 뒤는 그 키 그대로).
+ * 보간 방식 (형식 v44, 앞 키에 붙음): linear 직선 · ease 천천히 출발·도착(smoothstep) · constant 다음 키까지 그대로.
  * 화면 재생만 — 설계 위치·형상·메이트·내보내기는 바뀌지 않는다.
  */
-import type { Animation, AnimationTrack, Keyframe, ModelDefinition, Transform, Vec3 } from './commandTypes';
+import type { Animation, AnimationTrack, KeyInterp, Keyframe, ModelDefinition, Transform, Vec3 } from './commandTypes';
 
 export const DEFAULT_ANIMATION: Animation = { fps: 24, end: 120, tracks: [] };
+
+/** 0~1 진행 → 보간 방식에 따른 섞는 비율 */
+export function easeOf(interp: KeyInterp | undefined, t: number): number {
+  if (interp === 'constant') return 0;
+  if (interp === 'ease') return t * t * (3 - 2 * t);
+  return t;
+}
 
 const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
@@ -18,7 +26,7 @@ export function poseAt(track: AnimationTrack, frame: number): Transform {
   while (k[i + 1]!.frame < frame) i++;
   const a = k[i]!;
   const b = k[i + 1]!;
-  const t = (frame - a.frame) / (b.frame - a.frame);
+  const t = easeOf(a.interp, (frame - a.frame) / (b.frame - a.frame));
   return { position: lerp(a.position, b.position, t), rotation: lerp(a.rotation, b.rotation, t) };
 }
 

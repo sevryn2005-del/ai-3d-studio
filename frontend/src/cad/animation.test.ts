@@ -39,4 +39,23 @@ describe('애니메이션 (형식 v43)', () => {
     expect(run(m1, [{ type: 'set_animation', fps: 30, end: 60 }]).animation).toMatchObject({ fps: 30, end: 60 });
     expect(run(m1, [{ type: 'set_animation', clear: true }]).animation!.tracks).toEqual([]);
   });
+  it('보간 방식 (형식 v44): 부드럽게 = smoothstep, 계단 = 다음 키까지 그대로, 같은 프레임 다시 넣으면 방식 유지', () => {
+    const v = (x: number): [number, number, number] => [x, 0, 0];
+    const z: [number, number, number] = [0, 0, 0];
+    const ease = { id: 'b', keys: [{ frame: 0, position: v(0), rotation: z, interp: 'ease' as const }, { frame: 10, position: v(100), rotation: z }] };
+    expect(poseAt(ease, 5).position[0]).toBeCloseTo(50);
+    expect(poseAt(ease, 2.5).position[0]).toBeCloseTo(15.625);
+    const step = { id: 'b', keys: [{ frame: 0, position: v(0), rotation: z, interp: 'constant' as const }, { frame: 10, position: v(100), rotation: z }] };
+    expect(poseAt(step, 9.9).position[0]).toBe(0);
+    expect(poseAt(step, 10).position[0]).toBe(100);
+    const m = run(createDefaultModel(), [
+      { type: 'insert_keyframe', target: 'box_1', frame: 0, interp: 'ease' },
+      { type: 'insert_keyframe', target: 'box_1', frame: 0, position: [5, 0, 0] },
+      { type: 'insert_keyframe', target: 'box_1', frame: 10, interp: 'linear' },
+    ]);
+    expect(m.animation!.tracks[0]!.keys).toEqual([
+      { frame: 0, position: [5, 0, 0], rotation: [0, 0, 0], interp: 'ease' },
+      { frame: 10, position: [0, 0, 0], rotation: [0, 0, 0] },
+    ]);
+  });
 });

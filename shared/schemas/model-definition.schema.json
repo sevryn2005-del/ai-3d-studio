@@ -4,7 +4,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 43
+      "const": 44
     },
     "units": {
       "type": "string",
@@ -5859,6 +5859,14 @@
                       "items": false,
                       "minItems": 3,
                       "maxItems": 3
+                    },
+                    "interp": {
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "ease",
+                        "constant"
+                      ]
                     }
                   },
                   "required": [

@@ -1183,6 +1183,8 @@ class Keyframe(Strict):
     frame: Annotated[int, Field(strict=True, ge=0, le=100_000)]
     position: Vec3
     rotation: Vec3
+    # 형식 v44: 다음 키로 가는 방식 (linear·ease·constant)
+    interp: Literal["linear", "ease", "constant"] | None = None
 
 
 class AnimationTrack(Strict):
@@ -1204,7 +1206,7 @@ class ExplodeOffset(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[43]
+    schemaVersion: Literal[44]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1459,6 +1461,7 @@ class InsertKeyframe(Strict):
     frame: Annotated[int, Field(strict=True, ge=0, le=100_000)]
     position: Vec3 | None = None
     rotation: Vec3 | None = None
+    interp: Literal["linear", "ease", "constant"] | None = None
 
 
 class DeleteKeyframe(Strict):
