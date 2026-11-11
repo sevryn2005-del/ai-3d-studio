@@ -47,7 +47,7 @@ test('애니메이션: 키 넣기·보간·재생·저장', async ({ page }) => 
   expect((await page.evaluate(() => window.__AI3D_DEV__!.scene())).objects.find((o) => o.id === 'box_1')!.position).toEqual([0, 0, 0]);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(44);
+  expect(saved.formatVersion).toBe(45);
   expect(saved.model.animation.tracks[0].keys.map((k: { frame: number }) => k.frame)).toEqual([0, 24]);
   await page.getByTestId('cmd-timeline').click();
   await expect.poll(async () => (await box()).min[0]).toBeCloseTo(-10, 3);

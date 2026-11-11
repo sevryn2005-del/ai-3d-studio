@@ -26,6 +26,7 @@ describe('shared/schemas 동기화', () => {
       'create_cylinder',
       'create_sphere',
       'create_cone',
+      'create_sheet_metal',
       'create_sketch',
       'add_rectangle',
       'add_circle',

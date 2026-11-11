@@ -108,6 +108,7 @@ export function facesOf(model: ModelDefinition, obj: CadObject, depth = 0): Face
       return ['top', 'bottom', '+X', '-X', '+Y', '-Y'];
     case 'cylinder':
     case 'cone':
+    case 'sheet': // 판금: 바닥 판의 안쪽 윗면·바깥 아랫면
       return ['top', 'bottom'];
     case 'sphere':
     case 'revolve': // 회전 결과의 이름 있는 면은 아직 없음
@@ -164,6 +165,10 @@ export function faceLocalMatrix(model: ModelDefinition, obj: CadObject, face: Fa
     case 'cone': {
       const h = obj.params.height;
       return face === 'top' ? frame([0, 0, h], [0, 0, 1], [1, 0, 0]) : frame([0, 0, 0], [0, 0, -1], [1, 0, 0]);
+    }
+    case 'sheet': {
+      const t = obj.params.thickness;
+      return face === 'top' ? frame([0, 0, t], [0, 0, 1], [1, 0, 0]) : frame([0, 0, 0], [0, 0, -1], [1, 0, 0]);
     }
     case 'sphere':
     case 'revolve':

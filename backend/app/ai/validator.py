@@ -25,7 +25,7 @@ from app.cad.commands import (
 from app.cad.constraints import ARITY as CONSTRAINT_ARITY, polygon_error
 from app.cad.validation import issues_from_validation_error
 
-_CREATE_KIND = {"create_box": "box", "create_cylinder": "cylinder", "create_sphere": "sphere", "create_cone": "cone"}
+_CREATE_KIND = {"create_box": "box", "create_cylinder": "cylinder", "create_sphere": "sphere", "create_cone": "cone", "create_sheet_metal": "sheet"}
 
 
 def validate_commands(raw: Any, model: ModelDefinition) -> tuple[list[dict[str, Any]], list[str]]:

@@ -43,6 +43,20 @@ export const KIND_INFO: Record<ObjectKind, { label: string; params: ParamField[]
       { key: 'height', label: '높이 (Z)' },
     ],
   },
+  sheet: {
+    label: '판금',
+    params: [
+      { key: 'width', label: '바깥 너비 (X)' },
+      { key: 'depth', label: '바깥 깊이 (Y)' },
+      { key: 'thickness', label: '두께' },
+      { key: 'bendRadius', label: '굽힘 반지름 (안쪽)' },
+      { key: 'flangePX', label: '플랜지 +X 높이 (0 = 없음)' },
+      { key: 'flangeNX', label: '플랜지 −X 높이 (0 = 없음)' },
+      { key: 'flangePY', label: '플랜지 +Y 높이 (0 = 없음)' },
+      { key: 'flangeNY', label: '플랜지 −Y 높이 (0 = 없음)' },
+      { key: 'kFactor', label: 'K 계수 (전개)', unit: '개' },
+    ],
+  },
   extrude: { label: '돌출', params: [{ key: 'distance', label: '돌출 거리' }] },
   revolve: { label: '회전', params: [{ key: 'angle', label: '회전 각도', unit: '°' }] },
   boolean: { label: '불리언', params: [] },
@@ -102,6 +116,10 @@ export function localSize(obj: CadObject, model: ModelDefinition): [number, numb
     case 'cone': {
       const d = Math.max(obj.params.radiusBottom, obj.params.radiusTop) * 2;
       return [d, d, obj.params.height];
+    }
+    case 'sheet': {
+      const p = obj.params;
+      return [p.width, p.depth, Math.max(p.thickness, p.flangePX, p.flangeNX, p.flangePY, p.flangeNY)];
     }
     case 'extrude': {
       const p = extrudeProfile(obj, model);
@@ -181,6 +199,11 @@ export function sizeSummary(obj: CadObject, model?: ModelDefinition): string {
       return `Ø${formatMm(obj.params.radius * 2)}`;
     case 'cone':
       return `Ø${formatMm(obj.params.radiusBottom * 2)}→Ø${formatMm(obj.params.radiusTop * 2)}×${formatMm(obj.params.height)}`;
+    case 'sheet': {
+      const p = obj.params;
+      const h = Math.max(p.flangePX, p.flangeNX, p.flangePY, p.flangeNY);
+      return `${formatMm(p.width)}×${formatMm(p.depth)}${h > 0 ? `×${formatMm(h)}` : ''} t${formatMm(p.thickness)}`;
+    }
     case 'extrude': {
       const p = model ? extrudeProfile(obj, model) : null;
       const d = formatMm(obj.params.distance);

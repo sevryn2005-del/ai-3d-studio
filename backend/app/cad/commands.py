@@ -161,6 +161,32 @@ class HelixParams(Strict):
     turns: HelixTurns
 
 
+FlangeHeight = Annotated[float, _num(0, Limits.MAX_DIMENSION)]
+KFactor = Annotated[float, _num(0, 1)]
+
+
+class SheetParams(Strict):
+    """판금 (형식 v45): commandTypes.ts SheetParamsSchema 와 같은 규칙 (cad/sheet_metal.py)"""
+
+    width: Dimension
+    depth: Dimension
+    thickness: Dimension
+    bendRadius: Radius
+    flangePX: FlangeHeight
+    flangeNX: FlangeHeight
+    flangePY: FlangeHeight
+    flangeNY: FlangeHeight
+    kFactor: KFactor
+
+    @model_validator(mode="after")
+    def _rules(self) -> SheetParams:
+        from .sheet_metal import sheet_error
+
+        if err := sheet_error(self):
+            raise ValueError(err)
+        return self
+
+
 PARAMS_MODELS: dict[str, type[Strict]] = {
     "box": BoxParams,
     "cylinder": CylinderParams,
@@ -170,6 +196,7 @@ PARAMS_MODELS: dict[str, type[Strict]] = {
     "revolve": RevolveParams,
     "hole": HoleParams,
     "helix": HelixParams,
+    "sheet": SheetParams,
 }
 
 
@@ -609,6 +636,11 @@ class ConeObject(_ObjectBase):
     params: ConeParams
 
 
+class SheetObject(_ObjectBase):
+    kind: Literal["sheet"]
+    params: SheetParams
+
+
 BooleanOperation = Literal["union", "cut", "intersect"]
 ToolList = Annotated[list[ObjectId], Field(min_length=1, max_length=Limits.MAX_BOOLEAN_TOOLS)]
 
@@ -997,15 +1029,15 @@ class StepObject(_ObjectBase):
     step: StepData
 
 
-PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject]
+PrimitiveObject = Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, HoleObject, HelixObject, SheetObject]
 OBJECT_MODELS: tuple[type[_ObjectBase], ...] = (
     BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject,
+    HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject, SheetObject,
 )
 
 CadObject = Annotated[
     Union[BoxObject, CylinderObject, SphereObject, ConeObject, ExtrudeObject, RevolveObject, BooleanObject, HoleObject, PatternObject,
-          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject],
+          HelixObject, LoftObject, MeshObject, FilletObject, DraftObject, StepObject, SweepObject, PolyMeshObject, SheetObject],
     Field(discriminator="kind"),
 ]
 
@@ -1206,7 +1238,7 @@ class ExplodeOffset(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[44]
+    schemaVersion: Literal[45]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]
@@ -1253,6 +1285,21 @@ class CreateCone(_CreateBase):
     radiusBottom: RadiusOrZero
     radiusTop: RadiusOrZero
     height: Dimension
+
+
+class CreateSheetMetal(_CreateBase):
+    """판금 만들기 (형식 v45)"""
+
+    type: Literal["create_sheet_metal"]
+    width: Dimension
+    depth: Dimension
+    thickness: Dimension | None = None
+    bendRadius: Radius | None = None
+    flangePX: FlangeHeight | None = None
+    flangeNX: FlangeHeight | None = None
+    flangePY: FlangeHeight | None = None
+    flangeNY: FlangeHeight | None = None
+    kFactor: KFactor | None = None
 
 
 class CreateSketch(Strict):
@@ -1883,6 +1930,13 @@ class SetParamsParams(Strict):
     csinkDiameter: RadiusOrZero | None = None
     pitch: Dimension | None = None
     turns: HelixTurns | None = None
+    thickness: Dimension | None = None
+    bendRadius: Radius | None = None
+    flangePX: FlangeHeight | None = None
+    flangeNX: FlangeHeight | None = None
+    flangePY: FlangeHeight | None = None
+    flangeNY: FlangeHeight | None = None
+    kFactor: KFactor | None = None
 
     @model_validator(mode="after")
     def _not_empty(self) -> SetParamsParams:
@@ -2011,6 +2065,7 @@ CadCommand = Annotated[
         CreateCylinder,
         CreateSphere,
         CreateCone,
+        CreateSheetMetal,
         CreateSketch,
         AddRectangle,
         AddCircle,
@@ -2097,6 +2152,7 @@ COMMAND_MODELS: tuple[type[Strict], ...] = (
     CreateCylinder,
     CreateSphere,
     CreateCone,
+    CreateSheetMetal,
     CreateSketch,
     AddRectangle,
     AddCircle,

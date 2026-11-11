@@ -19,7 +19,9 @@ import { decodeMesh } from '../../../cad/meshData';
 import { triangulate } from '../../../cad/polymesh';
 import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { ringSolid } from './ringSolid';
-import { Vector3, type Matrix4 } from 'three';
+import { flangeFrames, flangeOf, sheetBase, sheetError, sheetProfile } from '../../../cad/sheetMetal';
+import { Matrix4 } from 'three';
+import { Vector3 } from 'three';
 import { toMatrix } from '../../../cad/transformMath';
 import { isSuppressed, patternMatrices, SPLIT_AXIS } from '../../../cad/features';
 import type { CrossSection, ManifoldToplevel, Manifold } from 'manifold-3d';
@@ -70,7 +72,7 @@ export function localManifold(
   sketches: Map<ObjectId, Sketch> = new Map(),
 ): Manifold {
   const { Manifold, CrossSection } = wasm;
-  const modelOf = (): ModelDefinition => ({ schemaVersion: 44, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
+  const modelOf = (): ModelDefinition => ({ schemaVersion: 45, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] });
   const asMatrix = (m: Matrix4) => m.elements as unknown as Parameters<Manifold['transform']>[0];
   switch (obj.kind) {
     case 'helix': {
@@ -185,7 +187,7 @@ export function localManifold(
         if (placed.isEmpty() || placed.area() < 1e-9) throw new GeometryError(`'${obj.name}': 영역이 비어 있습니다 (빼는 요소가 전부를 덮음)`);
       } else placed = section(p);
       // 평면 좌표(u, v, 법선) → 객체 로컬. 기준 평면·면 평면 모두 sketchPlane.ts 규칙 (서버 frames.py 와 같음)
-      const local = extrudeLocalMatrix({ schemaVersion: 44, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
+      const local = extrudeLocalMatrix({ schemaVersion: 45, units: 'mm', objects: [...index.values()], sketches: [...sketches.values()] }, obj);
       if (!local) throw new GeometryError(`'${obj.name}': 스케치를 붙인 면을 찾을 수 없습니다`);
       let inPlane: Manifold;
       if (obj.kind === 'revolve') {
@@ -273,6 +275,21 @@ export function localManifold(
         const R = p.csinkDiameter / 2;
         const ch = R - r; // 90°: 높이 = 반지름 차
         parts.push(scope.keep(scope.keep(Manifold.cylinder(ch, r, R, circularSegments(R, tol))).translate([0, 0, p.depth - ch])));
+      }
+      return parts.length === 1 ? parts[0]! : scope.keep(Manifold.union(parts));
+    }
+    case 'sheet': {
+      // 판금: 바닥 판 + 변마다 (굽힘 1/4 고리 + 벽) 단면을 길이만큼 밀어 붙인다 (cad/sheetMetal.ts)
+      const p = obj.params;
+      const err = sheetError(p);
+      if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+      const [x0, x1, y0, y1] = sheetBase(p);
+      const parts = [scope.keep(scope.keep(Manifold.cube([x1 - x0, y1 - y0, p.thickness], false)).translate([x0, y0, 0]))];
+      const seg = Math.max(2, circularSegments(p.bendRadius + p.thickness, tol) / 4);
+      for (const f of flangeFrames(p)) {
+        const prof = scope.keep(new CrossSection([sheetProfile(p.bendRadius, p.thickness, flangeOf(p, f.side), seg)], 'NonZero'));
+        const m = new Matrix4().makeBasis(new Vector3(...f.u), new Vector3(0, 0, 1), new Vector3(...f.s)).setPosition(...f.origin);
+        parts.push(scope.keep(scope.keep(prof.extrude(f.length)).transform(asMatrix(m))));
       }
       return parts.length === 1 ? parts[0]! : scope.keep(Manifold.union(parts));
     }

@@ -79,7 +79,7 @@
       "type": "set_params",
       "target": "box_1",
       "params": {
-        "thickness": 2
+        "wallThickness": 2
       }
     }
   },

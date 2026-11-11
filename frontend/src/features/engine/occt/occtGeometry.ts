@@ -24,6 +24,7 @@ import { decodeMesh, fromBase64 } from '../../../cad/meshData';
 import { triangulate } from '../../../cad/polymesh';
 import { evaluateModifiers } from '../../../cad/polymeshModifiers';
 import { toMatrix } from '../../../cad/transformMath';
+import { flangeFrames, flangeOf, sheetBase, sheetError } from '../../../cad/sheetMetal';
 import { isSuppressed, patternMatrices, splitCutBox } from '../../../cad/features';
 import { DISPLAY_TOLERANCE, EXPORT_TOLERANCE, GeometryError, type PlainMesh } from '../browser/geometry';
 import type { TopoEdge, TopoFace, Topology } from '../types';
@@ -73,7 +74,7 @@ interface Ctx {
   sketches: Map<ObjectId, Sketch>;
 }
 
-const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 44, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
+const modelOf = (c: Ctx): ModelDefinition => ({ schemaVersion: 45, units: 'mm', objects: [...c.index.values()], sketches: [...c.sketches.values()] });
 
 const progress = (c: Ctx) => c.gc.k(new c.oc.Message_ProgressRange());
 const pnt = (c: Ctx, x: number, y: number, z: number) => c.gc.k(new c.oc.gp_Pnt(x, y, z));
@@ -814,8 +815,32 @@ function sketchProfile(c: Ctx, obj: CadObject, sketch: ObjectId, profile: Object
   return p;
 }
 
+/** 판금 (형식 v45): 바닥 판 + 변마다 굽힘(원통 고리 1/4) + 벽 — 서버 primitives.sheet_solid 와 같은 조립 */
+function sheetShape(c: Ctx, obj: Extract<CadObject, { kind: 'sheet' }>): TopoDS_Shape {
+  const p = obj.params;
+  const err = sheetError(p);
+  if (err) throw new GeometryError(`'${obj.name}': ${err}`);
+  const [x0, x1, y0, y1] = sheetBase(p);
+  const r = p.bendRadius;
+  const t = p.thickness;
+  const a = r + t;
+  let solid = box(c, x0, y0, 0, x1 - x0, y1 - y0, t);
+  for (const f of flangeFrames(p)) {
+    const L = f.length;
+    // 기준 자리: u = X, 위 = Y, 길이 = Z. 굽힘 중심 (0, a)
+    const ring = cut(c, cylinder(c, a, L), cylinder(c, r, L));
+    const bend = common(c, moved(c, ring, 0, a, 0), box(c, 0, 0, 0, a, a, L));
+    const wall = box(c, r, a, 0, t, flangeOf(p, f.side) - a, L);
+    const m = new Matrix4().makeBasis(new Vector3(...f.u), new Vector3(0, 0, 1), new Vector3(...f.s)).setPosition(...f.origin);
+    solid = fuse(c, solid, transformed(c, fuse(c, bend, wall), m, obj.name));
+  }
+  return clean(c, solid);
+}
+
 function localShape(c: Ctx, obj: CadObject): TopoDS_Shape {
   switch (obj.kind) {
+    case 'sheet':
+      return sheetShape(c, obj);
     case 'box': {
       const { width: w, depth: d, height: h } = obj.params;
       const solid = box(c, -w / 2, -d / 2, 0, w, d, h);

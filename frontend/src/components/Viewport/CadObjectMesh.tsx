@@ -36,7 +36,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 44, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 45, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -315,6 +315,8 @@ function primitivePlacement(o: PrimitiveObject, profile: Profile | null, local: 
       return { position: [0, 0, 0] };
     case 'box':
       return { position: [0, 0, o.params.height / 2] };
+    case 'sheet': // 미리보기 = 바닥 판만 (엔진 메시가 오면 플랜지까지)
+      return { position: [0, 0, o.params.thickness / 2] };
     case 'cylinder':
     case 'cone':
       return { position: [0, 0, o.params.height / 2], rotation: [Math.PI / 2, 0, 0] };
@@ -384,6 +386,8 @@ function PrimitiveGeometry({ object: o, profile }: { object: PrimitiveObject; pr
       return null;
     case 'box':
       return <boxGeometry args={[o.params.width, o.params.depth, o.params.height]} />;
+    case 'sheet':
+      return <boxGeometry args={[o.params.width, o.params.depth, o.params.thickness]} />;
     case 'cylinder':
       return <cylinderGeometry args={[o.params.radius, o.params.radius, o.params.height, SEGMENTS]} />;
     case 'cone':

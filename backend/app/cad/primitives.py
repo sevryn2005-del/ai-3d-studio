@@ -49,6 +49,7 @@ from app.cad.commands import (
     BoxObject,
     CadObject,
     ConeObject,
+    SheetObject,
     CylinderObject,
     DraftObject,
     ExtrudeObject,
@@ -77,6 +78,7 @@ from app.cad.frames import extrude_local_matrix, sketch_local_matrix
 from app.cad.mesh_import import mesh_solid, polymesh_solid
 from app.cad.precise import draft, edge_feature, read_step
 from app.cad.sections import bounds as section_bounds
+from app.cad.sheet_metal import flange_frames, sheet_base, sheet_error
 from app.cad.sections import (
     helix_error,
     helix_profile_points,
@@ -137,6 +139,8 @@ def local_solid(obj: CadObject) -> cq.Shape:
             return cq.Solid.makeSphere(
                 p.radius, cq.Vector(0, 0, p.radius), angleDegrees1=-90, angleDegrees2=90, angleDegrees3=360
             )
+        case SheetObject(params=p):
+            return sheet_solid(obj.name, p)
         case ConeObject(params=p):
             if abs(p.radiusBottom - p.radiusTop) < 1e-9:
                 return cq.Solid.makeCylinder(p.radiusBottom, p.height)
@@ -145,6 +149,29 @@ def local_solid(obj: CadObject) -> cq.Shape:
                 | FilletObject() | DraftObject() | StepObject() | SweepObject() | PolyMeshObject():
             raise GeometryError("불리언·돌출 객체는 build_solid 로 계산해야 합니다")
     raise GeometryError(f"지원하지 않는 도형입니다: {obj.kind}")
+
+
+def sheet_solid(name: str, p) -> cq.Shape:
+    """판금 (형식 v45): 바닥 판 + 변마다 굽힘(원통 고리 1/4) + 벽 — 브라우저 occtGeometry.sheetShape 와 같은 조립"""
+    if err := sheet_error(p):
+        raise GeometryError(f"'{name}': {err}")
+    x0, x1, y0, y1 = sheet_base(p)
+    r, t = p.bendRadius, p.thickness
+    a = r + t
+    solid = cq.Solid.makeBox(x1 - x0, y1 - y0, t, pnt=cq.Vector(x0, y0, 0))
+    for f in flange_frames(p):
+        length = f["length"]
+        # 기준 자리: u = X, 위 = Y, 길이 = Z. 굽힘 중심 (0, a)
+        ring = cq.Solid.makeCylinder(a, length, cq.Vector(0, a, 0)).cut(cq.Solid.makeCylinder(r, length, cq.Vector(0, a, 0)))
+        bend = ring.intersect(cq.Solid.makeBox(a, a, length))
+        wall = cq.Solid.makeBox(t, getattr(p, f"flange{f['side']}") - a, length, pnt=cq.Vector(r, a, 0))
+        part = bend.fuse(wall)
+        u, s_ = f["u"], f["s"]
+        o = f["origin"]
+        trsf = gp_Trsf()
+        trsf.SetValues(float(u[0]), 0.0, float(s_[0]), float(o[0]), float(u[1]), 0.0, float(s_[1]), float(o[1]), float(u[2]), 1.0, float(s_[2]), float(o[2]))
+        solid = solid.fuse(cq.Shape.cast(BRepBuilderAPI_Transform(part.wrapped, trsf, True).Shape()))
+    return solid.clean()
 
 
 def apply_transform(shape: cq.Shape, t: Transform) -> cq.Shape:

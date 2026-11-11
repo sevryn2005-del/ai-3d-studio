@@ -50,7 +50,7 @@ def test_sweep_bend_too_sharp():
 
 
 def model(sketches, objects=()):
-    return ModelDefinition.model_validate({"schemaVersion": 44, "units": "mm", "sketches": sketches, "objects": list(objects)})
+    return ModelDefinition.model_validate({"schemaVersion": 45, "units": "mm", "sketches": sketches, "objects": list(objects)})
 
 
 T0 = {"position": [0, 0, 0], "rotation": [0, 0, 0]}

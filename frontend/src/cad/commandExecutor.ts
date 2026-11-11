@@ -107,6 +107,18 @@ function executeOne(model: ModelDefinition, cmd: CadCommand): ExecuteResult {
       return create(model, cmd, 'cylinder', { radius: cmd.radius, height: cmd.height });
     case 'create_sphere':
       return create(model, cmd, 'sphere', { radius: cmd.radius });
+    case 'create_sheet_metal':
+      return create(model, cmd, 'sheet', {
+        width: cmd.width,
+        depth: cmd.depth,
+        thickness: cmd.thickness ?? 1,
+        bendRadius: cmd.bendRadius ?? 1,
+        flangePX: cmd.flangePX ?? 0,
+        flangeNX: cmd.flangeNX ?? 0,
+        flangePY: cmd.flangePY ?? 0,
+        flangeNY: cmd.flangeNY ?? 0,
+        kFactor: cmd.kFactor ?? 0.44,
+      });
     case 'create_cone':
       return create(model, cmd, 'cone', {
         radiusBottom: cmd.radiusBottom,

@@ -280,6 +280,13 @@ const SPLINE_LOOP: [number, number][] = [[-10, -10], [10, -10], [10, 10], [-10, 
 const SPLINE_PATH: [number, number][] = [[0, 0], [20, 10], [40, 0], [60, 10]];
 
 export const FEATURE_CASES: Record<string, { volume: number | 'polygon'; roots: number; commands: unknown[]; bbox?: number[][] }> = {
+  'sheet-tray': {
+    // 판금 (형식 v45): 60×40 t1.5 r2, +X·−X 15, +Y 10, −Y 없음 (부피 = sheetVolume)
+    volume: 5494.171390851647,
+    roots: 1,
+    commands: [{ type: 'create_sheet_metal', id: 'sm', width: 60, depth: 40, thickness: 1.5, bendRadius: 2, flangePX: 15, flangeNX: 15, flangePY: 10 }],
+    bbox: [[-30, -20, 0], [30, 20, 15]],
+  },
   'shell-box-open-top': { volume: 24000 - 36 * 26 * 18, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['top'] }] },
   'shell-box-closed': { volume: 24000 - 36 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2 }] },
   'shell-box-two-sides': { volume: 24000 - 40 * 26 * 16, roots: 1, commands: [box('b', 40, 30, 20), { type: 'shell', target: 'b', thickness: 2, open: ['+X', '-X'] }] },

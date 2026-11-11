@@ -19,6 +19,7 @@ from app.cad.commands import (
     BoxObject,
     CadObject,
     ConeObject,
+    SheetObject,
     CylinderObject,
     ExtrudeObject,
     RevolveObject,
@@ -126,7 +127,7 @@ def faces_of(model: ModelDefinition, obj: CadObject, depth: int = 0) -> list[str
     match obj:
         case BoxObject():
             return ["top", "bottom", "+X", "-X", "+Y", "-Y"]
-        case CylinderObject() | ConeObject():
+        case CylinderObject() | ConeObject() | SheetObject():
             return ["top", "bottom"]
         case SphereObject():
             return []
@@ -164,6 +165,8 @@ def face_local_matrix(model: ModelDefinition, obj: CadObject, face: str, depth: 
             }[face]
         case CylinderObject(params=p) | ConeObject(params=p):
             return _frame((0, 0, p.height), (0, 0, 1), (1, 0, 0)) if face == "top" else _frame((0, 0, 0), (0, 0, -1), (1, 0, 0))
+        case SheetObject(params=p):  # 판금: 바닥 판 안쪽 윗면·바깥 아랫면 (sketchPlane.ts 와 같음)
+            return _frame((0, 0, p.thickness), (0, 0, 1), (1, 0, 0)) if face == "top" else _frame((0, 0, 0), (0, 0, -1), (1, 0, 0))
         case ExtrudeObject():
             p = _profile(model, obj)
             local = extrude_local_matrix(model, obj, depth + 1)

@@ -15,6 +15,7 @@
  * 이 파일의 스키마는 3주 차에 shared/schemas/cad-command.schema.json 으로
  * 내보내 백엔드(Pydantic)와 공유한다. 프론트/백엔드가 같은 계약을 쓰는 것이 원칙.
  */
+import { sheetError } from './sheetMetal';
 import { z } from 'zod';
 
 // ---- 범위 제한 (실행 전 검증) -------------------------------------------
@@ -151,6 +152,30 @@ export const HelixParamsSchema = z.strictObject({
 });
 
 /** 도형 종류별 파라미터 스키마. 새 도형은 여기와 CadObjectSchema 에 추가한다. */
+/**
+ * 판금 (형식 v45, 솔리드웍스 베이스 플랜지 + 엣지 플랜지): 바닥 판 + 네 변 90° 플랜지 (cad/sheetMetal.ts).
+ * width·depth = 바깥 치수, flange* = 그 변 플랜지의 바깥 높이 (0 = 없음), bendRadius = 안쪽 굽힘 반지름,
+ * kFactor = 전개 계산의 중립면 위치 (0 = 안쪽, 1 = 바깥쪽, 보통 0.3~0.5)
+ */
+const flangeHeight = z.number().min(0).max(LIMITS.maxDimension);
+export const SheetParamsSchema = z
+  .strictObject({
+    width: dimension,
+    depth: dimension,
+    thickness: dimension,
+    bendRadius: radius,
+    flangePX: flangeHeight,
+    flangeNX: flangeHeight,
+    flangePY: flangeHeight,
+    flangeNY: flangeHeight,
+    kFactor: z.number().min(0).max(1),
+  })
+  .superRefine((p, ctx) => {
+    const err = sheetError(p);
+    if (err) ctx.addIssue({ code: 'custom', message: err });
+  });
+export type SheetParams = z.infer<typeof SheetParamsSchema>;
+
 export const PARAMS_SCHEMAS = {
   box: BoxParamsSchema,
   cylinder: CylinderParamsSchema,
@@ -160,6 +185,7 @@ export const PARAMS_SCHEMAS = {
   revolve: RevolveParamsSchema,
   hole: HoleParamsSchema,
   helix: HelixParamsSchema,
+  sheet: SheetParamsSchema,
 } as const;
 
 export type PrimitiveKind = keyof typeof PARAMS_SCHEMAS;
@@ -577,6 +603,7 @@ export const CadObjectSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...objectBase, kind: z.literal('cylinder'), params: CylinderParamsSchema, shell: ShellSchema.optional() }),
   z.strictObject({ ...objectBase, kind: z.literal('sphere'), params: SphereParamsSchema }),
   z.strictObject({ ...objectBase, kind: z.literal('cone'), params: ConeParamsSchema }),
+  z.strictObject({ ...objectBase, kind: z.literal('sheet'), params: SheetParamsSchema }),
   z.strictObject({
     ...objectBase,
     kind: z.literal('extrude'),
@@ -807,7 +834,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 44;
+export const MODEL_SCHEMA_VERSION = 45;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).
@@ -1006,6 +1033,13 @@ export const SetParamsParamsSchema = z
     csinkDiameter: radiusOrZero,
     pitch: dimension,
     turns: HelixParamsSchema.shape.turns,
+    thickness: dimension,
+    bendRadius: radius,
+    flangePX: flangeHeight,
+    flangeNX: flangeHeight,
+    flangePY: flangeHeight,
+    flangeNY: flangeHeight,
+    kFactor: z.number().min(0).max(1),
   })
   .partial()
   .refine((p) => Object.keys(p).length > 0, { message: '변경할 파라미터가 하나 이상 필요합니다' });
@@ -1431,6 +1465,21 @@ export const SetTransformCommandSchema = z.strictObject({
   rotation: RotationSchema.optional(), // 절대 회전
 });
 
+/** 판금 만들기 (형식 v45): 생략한 값은 기본 (두께 1, 굽힘 반지름 1, K 0.44, 플랜지 없음) */
+export const CreateSheetMetalCommandSchema = z.strictObject({
+  type: z.literal('create_sheet_metal'),
+  ...createBase,
+  width: dimension,
+  depth: dimension,
+  thickness: dimension.optional(),
+  bendRadius: radius.optional(),
+  flangePX: flangeHeight.optional(),
+  flangeNX: flangeHeight.optional(),
+  flangePY: flangeHeight.optional(),
+  flangeNY: flangeHeight.optional(),
+  kFactor: z.number().min(0).max(1).optional(),
+});
+
 /**
  * 메이트 지키며 끌기 (솔리드웍스 부품 끌기 / 인벤터 구속된 끌기): target 을 원하는 자리로 옮기되, 메이트가 허락하는
  * 가장 가까운 자세로 (남은 자유도 안에서만). 고정 부품은 그대로, 이어진 부품은 따라 움직인다
@@ -1528,6 +1577,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   CreateCylinderCommandSchema,
   CreateSphereCommandSchema,
   CreateConeCommandSchema,
+  CreateSheetMetalCommandSchema,
   CreateSketchCommandSchema,
   AddRectangleCommandSchema,
   AddCircleCommandSchema,
@@ -1605,7 +1655,7 @@ export const CadCommandSchema = z.discriminatedUnion('type', [
   HoleCommandSchema,
 ]);
 export type CadCommand = z.infer<typeof CadCommandSchema>;
-export type CreateCommand = Extract<CadCommand, { type: 'create_box' | 'create_cylinder' | 'create_sphere' | 'create_cone' }>;
+export type CreateCommand = Extract<CadCommand, { type: 'create_box' | 'create_cylinder' | 'create_sphere' | 'create_cone' | 'create_sheet_metal' }>;
 export type BooleanCommand = Extract<CadCommand, { type: BooleanOperation }>;
 
 export function emptyModel(): ModelDefinition {

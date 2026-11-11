@@ -29,6 +29,8 @@ export function describeCommand(cmd: CadCommand, model: ModelDefinition): string
       return `원통 추가 지름 ${formatMm(cmd.radius * 2)} × 높이 ${formatMm(cmd.height)}mm`;
     case 'create_sphere':
       return `구 추가 지름 ${formatMm(cmd.radius * 2)}mm`;
+    case 'create_sheet_metal':
+      return `판금 추가 ${formatMm(cmd.width)}×${formatMm(cmd.depth)} 두께 ${formatMm(cmd.thickness ?? 1)}mm`;
     case 'create_cone':
       return `원뿔 추가 지름 ${formatMm(cmd.radiusBottom * 2)}→${formatMm(cmd.radiusTop * 2)} × 높이 ${formatMm(cmd.height)}mm`;
     case 'cut':

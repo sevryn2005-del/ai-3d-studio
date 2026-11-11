@@ -1,3 +1,4 @@
+import { SheetMetalFields } from './SheetMetalFields';
 import { useEffect, useMemo, useState } from 'react';
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectId, Vec3 } from '../../cad/commandTypes';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
@@ -193,6 +194,7 @@ function ObjectProperties({ object, model }: { object: CadObject; model: ModelDe
         </fieldset>
       )}
 
+      {object.kind === 'sheet' && <SheetMetalFields object={object} />}
       {object.kind === 'box' && !object.shell && <EdgeFeatureFields object={object} />}
       {(object.kind === 'box' || object.kind === 'cylinder' || object.kind === 'extrude') && !(object.kind === 'box' && object.edgeFeature) && (
         <ShellFields object={object} />
