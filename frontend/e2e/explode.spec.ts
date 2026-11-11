@@ -28,7 +28,7 @@ test('분해도: 자동 분해·부품별 이동·보기 끄기, 설계 위치·
   await expect.poll(async () => (await src()).lid?.min[0]).toBeCloseTo(15, 3);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(45);
+  expect(saved.formatVersion).toBe(46);
   expect(saved.model.explode).toEqual([
     { id: 'box_1', offset: [0, 0, -10] },
     { id: 'lid', offset: [25, 0, 10] },

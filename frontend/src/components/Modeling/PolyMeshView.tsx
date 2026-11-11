@@ -6,7 +6,7 @@ import { DEFAULT_MATERIAL } from '../../cad/commandTypes';
 import { edges, selectedFaces, triangulate, type PolyMesh } from '../../cad/polymesh';
 import type { SelectMode } from '../../features/modeling/modelingStore';
 import { evaluateModifiers } from '../../cad/polymeshModifiers';
-import { boxUvGeometry } from '../../cad/textureMap';
+import { textureUvGeometry } from '../../cad/textureMap';
 import { useImageTexture } from '../Viewport/useImageTexture';
 
 const DEG = Math.PI / 180;
@@ -96,7 +96,8 @@ export function PolyMeshView({ object, mesh, transform, selected, editing, selVe
   // 텍스처 (형식 v30): 객체 로컬 박스 투영 — 설계 모드 화면·GLB 와 같은 규칙. 마스크 보기 중에는 끈다
   const map = useImageTexture(showMask ? undefined : object.texture?.image);
   const tile = object.texture?.tile;
-  const texturedGeo = useMemo(() => (map && tile ? boxUvGeometry(shaded, tile) : null), [map, tile, shaded]);
+  const projection = object.texture?.projection;
+  const texturedGeo = useMemo(() => (map && tile ? textureUvGeometry(shaded, { tile, projection }) : null), [map, tile, projection, shaded]);
   useEffect(() => () => texturedGeo?.dispose(), [texturedGeo]);
   const resultEdges = useMemo(() => (hasMods && selected && !editing ? edgeGeometry(result, edges(result)) : null), [hasMods, selected, editing, result]);
   const allEdges = useMemo(() => edges(m), [m]);

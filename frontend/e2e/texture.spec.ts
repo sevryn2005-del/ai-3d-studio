@@ -63,6 +63,16 @@ for (const engine of ["server", "browser"] as const) {
     await expect
       .poll(() => page.evaluate(() => window.__AI3D_DEV__!.scene().command))
       .toMatchObject({ type: "set_appearance", texture: { tile: 20 } });
+    // 스마트 UV 펼치기 (형식 v46): 한 장 크기 칸은 숨고, 화면은 계속 텍스처, 박스로 되돌리면 projection 이 빠진다
+    await page.getByTestId("texture-projection").selectOption("smart");
+    await expect
+      .poll(() => page.evaluate(() => window.__AI3D_DEV__!.scene().command))
+      .toMatchObject({ type: "set_appearance", texture: { tile: 20, projection: "smart" } });
+    await expect(page.getByTestId("texture-tile")).toHaveCount(0);
+    expect((await sources(page)).box_1?.textured).toBe(true);
+    await page.getByTestId("texture-projection").selectOption("box");
+    await expect(page.getByTestId("texture-tile")).toHaveValue("20");
+    expect(((await page.evaluate(() => window.__AI3D_DEV__!.scene().command)) as { texture: object }).texture).not.toHaveProperty("projection");
     await page.getByTestId("texture-remove").click();
     await expect(page.getByTestId("texture-thumb")).toHaveCount(0);
     await expect
@@ -107,7 +117,7 @@ test.describe("모델링 모드", () => {
       page.getByRole("button", { name: "저장", exact: true }).click(),
     ]);
     const saved = JSON.parse(readFileSync((await dl.path())!, "utf8"));
-    expect(saved.formatVersion).toBe(45);
+    expect(saved.formatVersion).toBe(46);
     expect(saved.model.objects[0].texture).toEqual({
       image: `data:image/png;base64,${PNG_B64}`,
       tile: 50,

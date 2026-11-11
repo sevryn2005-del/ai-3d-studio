@@ -123,13 +123,29 @@ function TextureFields({ object }: { object: CadObject }) {
               텍스처 지우기
             </button>
           </div>
-          <NumberField
-            label="한 장 크기"
-            value={tex.tile}
-            unit="mm"
-            onCommit={(tile) => submit({ type: 'set_appearance', target: object.id, texture: { ...tex, tile } })}
-            testId="texture-tile"
-          />
+          <label className="field" title="박스 투영: 면 방향마다 반복 무늬 (한 장 = 크기 mm). 스마트 UV: 면 묶음마다 펼쳐 이미지 한 장에 겹치지 않게 (스티커·라벨·도색용)">
+            UV
+            <select
+              value={tex.projection ?? 'box'}
+              onChange={(e) => {
+                const { projection: _p, ...rest } = tex;
+                submit({ type: 'set_appearance', target: object.id, texture: e.target.value === 'smart' ? { ...rest, projection: 'smart' } : rest });
+              }}
+              data-testid="texture-projection"
+            >
+              <option value="box">박스 투영 (반복)</option>
+              <option value="smart">스마트 UV 펼치기 (한 장)</option>
+            </select>
+          </label>
+          {tex.projection !== 'smart' && (
+            <NumberField
+              label="한 장 크기"
+              value={tex.tile}
+              unit="mm"
+              onCommit={(tile) => submit({ type: 'set_appearance', target: object.id, texture: { ...tex, tile } })}
+              testId="texture-tile"
+            />
+          )}
         </>
       )}
       {error && (

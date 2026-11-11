@@ -9,6 +9,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { BufferAttribute, BufferGeometry } from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { boxUv } from '../../../cad/textureMap';
+import { smartUv } from '../../../cad/smartUv';
 
 export interface NamedMesh {
   name: string;
@@ -17,7 +18,7 @@ export interface NamedMesh {
   /** PBR 재질 (형식 v29, GLB 만) */
   material?: { metallic: number; roughness: number };
   /** 텍스처 (형식 v30, GLB 만): 이미지 + 한 장 크기(mm). toLocal = 월드 → 객체 로컬 4×4 (열 우선, three Matrix4.elements) */
-  texture?: { image: string; tile: number };
+  texture?: { image: string; tile: number; projection?: 'box' | 'smart' };
   toLocal?: number[];
   positions: Float32Array; // 월드 좌표 mm
   indices: Uint32Array;
@@ -218,6 +219,17 @@ export function toGlb(meshes: NamedMesh[]): Uint8Array {
         min[k] = Math.min(min[k]!, pos[i + k]!);
         max[k] = Math.max(max[k]!, pos[i + k]!);
       }
+    }
+    if (m.texture?.projection === 'smart') {
+      // 스마트 UV (형식 v46): 객체 로컬 삼각형으로 펼친다 — 화면 textureMap.smartUvGeometry · 서버 smart_uv 와 같은 계산
+      const local = L
+        ? Float64Array.from({ length: src.length }, (_, j) => {
+            const i = j - (j % 3);
+            const r = j % 3;
+            return L[r]! * src[i]! + L[4 + r]! * src[i + 1]! + L[8 + r]! * src[i + 2]! + L[12 + r]!;
+          })
+        : src;
+      uv.set(smartUv(local).uv);
     }
     creased.dispose();
     accessors.push({ bufferView: addView(pos), componentType: 5126, count: pos.length / 3, type: 'VEC3', min, max });

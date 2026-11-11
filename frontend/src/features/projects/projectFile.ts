@@ -56,9 +56,10 @@ export const PROJECT_FORMAT = 'ai3d-project';
  * - 43: + 애니메이션 키프레임. v42 내용은 그대로 유효
  * - 44: + 키 보간 방식(interp). v43 내용은 그대로 유효
  * - 45: + 판금 객체(sheet). v44 내용은 그대로 유효
- * 읽기는 1~45 모두, 쓰기는 항상 최신(45). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
+ * - 46: + 텍스처 투영 방식(projection). v45 내용은 그대로 유효
+ * 읽기는 1~46 모두, 쓰기는 항상 최신(46). 열기는 파일을 바꾸지 않는다 — 저장할 때 새 형식으로 쓴다.
  */
-export const PROJECT_FORMAT_VERSION = 45;
+export const PROJECT_FORMAT_VERSION = 46;
 export const PROJECT_EXTENSION = '.ai3d';
 export const APP_VERSION = '0.1.0';
 
@@ -387,8 +388,14 @@ export function migrate(raw: Record<string, unknown>, fromVersion: number): unkn
   if ((file.formatVersion as number) < 45) {
     // v44 → v45: 판금 객체(sheet)(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
     const model = file.model as Record<string, unknown> | undefined;
-    const migrated = model && typeof model === 'object' && model.schemaVersion === 44 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 44 ? { ...model, schemaVersion: 45 } : model;
     file = { ...file, formatVersion: 45, model: migrated };
+  }
+  if ((file.formatVersion as number) < 46) {
+    // v45 → v46: 텍스처 투영 방식(projection)(선택 항목)만 추가 → 내용 그대로, 버전만 올린다
+    const model = file.model as Record<string, unknown> | undefined;
+    const migrated = model && typeof model === 'object' && model.schemaVersion === 45 ? { ...model, schemaVersion: MODEL_SCHEMA_VERSION } : model;
+    file = { ...file, formatVersion: 46, model: migrated };
   }
   return file;
 }

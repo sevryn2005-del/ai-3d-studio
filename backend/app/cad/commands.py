@@ -566,6 +566,8 @@ class Texture(Strict):
 
     image: Annotated[str, StringConstraints(max_length=MAX_TEXTURE_CHARS, pattern=r"^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$")]
     tile: Annotated[float, _num(0.1, 100_000)]
+    # 형식 v46: box (박스 투영, 기본) · smart (스마트 UV 펼치기, 한 장에 펼침)
+    projection: Literal["box", "smart"] | None = _opt()
 
 
 class _ObjectBase(Strict):
@@ -1216,7 +1218,7 @@ class Keyframe(Strict):
     position: Vec3
     rotation: Vec3
     # 형식 v44: 다음 키로 가는 방식 (linear·ease·constant)
-    interp: Literal["linear", "ease", "constant"] | None = None
+    interp: Literal["linear", "ease", "constant"] | None = _opt()
 
 
 class AnimationTrack(Strict):
@@ -1238,7 +1240,7 @@ class ExplodeOffset(Strict):
 
 
 class ModelDefinition(Strict):
-    schemaVersion: Literal[45]
+    schemaVersion: Literal[46]
     units: Literal["mm"]
     sketches: Annotated[list[Sketch], Field(max_length=Limits.MAX_SKETCHES)]
     objects: Annotated[list[CadObject], Field(max_length=Limits.MAX_OBJECTS)]

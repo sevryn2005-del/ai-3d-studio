@@ -383,6 +383,8 @@ export const MAX_TEXTURE_CHARS = 4_000_000;
 export const TextureSchema = z.strictObject({
   image: z.string().max(MAX_TEXTURE_CHARS).regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/, '텍스처는 PNG·JPEG data URL 이어야 합니다'),
   tile: z.number().min(0.1).max(100_000),
+  /** 형식 v46: box = 객체 로컬 박스 투영 (한 장 = tile mm, 반복), smart = 스마트 UV 펼치기 (이미지 한 장에 펼침, tile 무시) */
+  projection: z.enum(['box', 'smart']).optional(),
 });
 export type Texture = z.infer<typeof TextureSchema>;
 
@@ -834,7 +836,7 @@ export const DEFAULT_DRAWING: DrawingSettings = { paper: 'A4', scale: 'auto', vi
 export const WorkspaceSchema = z.enum(['design', 'modeling']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const MODEL_SCHEMA_VERSION = 45;
+export const MODEL_SCHEMA_VERSION = 46;
 
 /**
  * 참조 형상 (형식 v34, 솔리드웍스 Reference Geometry): 형상을 만들지 않는 기준 — 평면·축·점·좌표계. 월드 좌표 (mm).

@@ -26,6 +26,7 @@ import cadquery as cq
 import numpy as np
 
 from app.cad.mesh import tessellate
+from app.cad.smart_uv import smart_uv
 
 EXPORT_LINEAR_TOLERANCE = 0.01  # mm
 EXPORT_ANGULAR_TOLERANCE = 0.1  # rad (~5.7°)
@@ -259,7 +260,17 @@ def to_glb(objects: list[NamedShape]) -> bytes:
         pos = (v.astype(np.float64) @ _Z_UP_MM_TO_GLTF.T).astype("<f4")
         n_cad = _vertex_normals(v.astype(np.float64), t)
         nrm = (n_cad @ (_Z_UP_MM_TO_GLTF.T / 0.001)).astype("<f4")
-        if obj.texture and obj.to_local is not None:
+        if obj.texture and obj.texture.get("projection") == "smart":
+            # 스마트 UV (형식 v46): 삼각형마다 꼭짓점을 나눠(이음선) 객체 로컬로 펼친다 — smartUv.ts 와 같은 계산
+            corner = t.reshape(-1)
+            v = v[corner]
+            n_cad = n_cad[corner]
+            t = np.arange(len(corner), dtype=t.dtype).reshape(-1, 3)
+            pos = (v.astype(np.float64) @ _Z_UP_MM_TO_GLTF.T).astype("<f4")
+            nrm = (n_cad @ (_Z_UP_MM_TO_GLTF.T / 0.001)).astype("<f4")
+            lm = obj.to_local if obj.to_local is not None else np.eye(4)
+            uv = smart_uv(v.astype(np.float64) @ lm[:3, :3].T + lm[:3, 3])[0].astype("<f4")
+        elif obj.texture and obj.to_local is not None:
             # 객체 로컬 좌표·법선으로 (객체를 옮겨도 무늬가 따라감), 한 장 = tile mm — 화면·브라우저와 같은 규칙
             lm = obj.to_local
             uv = box_uv(v.astype(np.float64) @ lm[:3, :3].T + lm[:3, 3], n_cad @ lm[:3, :3].T, 1 / obj.texture["tile"]).astype("<f4")

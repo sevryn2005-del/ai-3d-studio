@@ -3,6 +3,8 @@
  * 좌표는 객체 로컬 (mm, Z-up) — 객체를 옮기거나 돌려도 무늬가 따라간다. 이미지 한 장 = tile mm 정사각형.
  */
 import { BufferAttribute, type BufferGeometry } from 'three';
+import type { Texture } from './commandTypes';
+import { smartUv } from './smartUv';
 
 /**
  * 박스 투영 UV: 법선에서 가장 큰 축으로 면을 고르고 나머지 두 좌표를 UV 로.
@@ -41,4 +43,16 @@ export function boxUvGeometry(g: BufferGeometry, tile: number): BufferGeometry {
   }
   out.setAttribute('uv', new BufferAttribute(uv, 2));
   return out;
+}
+
+/** 스마트 UV 펼치기 (형식 v46): 인덱스 없는 복사본 + 차트마다 펼친 uv (0~1, 한 장). GLB 와 같은 규칙 (smartUv.ts) */
+export function smartUvGeometry(g: BufferGeometry): BufferGeometry {
+  const out = g.index ? g.toNonIndexed() : g.clone();
+  out.setAttribute('uv', new BufferAttribute(smartUv(out.getAttribute('position').array).uv, 2));
+  return out;
+}
+
+/** 텍스처 설정에 맞는 UV 메시 */
+export function textureUvGeometry(g: BufferGeometry, tex: Pick<Texture, 'tile' | 'projection'>): BufferGeometry {
+  return tex.projection === 'smart' ? smartUvGeometry(g) : boxUvGeometry(g, tex.tile);
 }

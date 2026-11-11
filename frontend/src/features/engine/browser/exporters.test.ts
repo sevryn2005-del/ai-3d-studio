@@ -1,3 +1,4 @@
+import { smartUv } from '../../../cad/smartUv';
 import { strFromU8, unzipSync } from 'fflate';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -204,5 +205,20 @@ describe('GLB 텍스처 (형식 v30, 서버 exporter.py 와 같은 규칙)', () 
     const bv = gltf.bufferViews[acc.bufferView];
     const uv = [...new Float32Array(bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength).buffer)].map((x) => Math.round(x * 1e6) / 1e6 + 0);
     expect(uv).toEqual([0, 0, 0.5, 0, 0, -0.5]);
+  });
+  it('스마트 UV (형식 v46): 객체 로컬 삼각형을 펼쳐 0~1 한 장 — smartUv 와 같은 값', () => {
+    const toLocal = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -100, 0, 0, 1];
+    const tri = { positions: new Float32Array([100, 0, 0, 110, 0, 0, 100, 10, 0]), indices: new Uint32Array([0, 1, 2]) };
+    const data = toGlb([{ name: 'a', texture: { image: PNG_1PX, tile: 20, projection: 'smart' }, toLocal, ...tri }]);
+    const dv = new DataView(data.buffer, data.byteOffset);
+    const jlen = dv.getUint32(12, true);
+    const gltf = JSON.parse(strFromU8(data.subarray(20, 20 + jlen)));
+    const bin = data.subarray(28 + jlen);
+    const acc = gltf.accessors[gltf.meshes[0].primitives[0].attributes.TEXCOORD_0];
+    const bv = gltf.bufferViews[acc.bufferView];
+    const uv = [...new Float32Array(bin.slice(bv.byteOffset, bv.byteOffset + bv.byteLength).buffer)];
+    expect(uv).toEqual([...smartUv([0, 0, 0, 10, 0, 0, 0, 10, 0]).uv]);
+    expect(Math.min(...uv)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...uv)).toBeLessThanOrEqual(1);
   });
 });

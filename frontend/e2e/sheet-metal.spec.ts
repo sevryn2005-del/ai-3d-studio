@@ -41,7 +41,7 @@ for (const engine of ['server', 'browser'] as const) {
     // 저장
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
     const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-    expect(saved.formatVersion).toBe(45);
+    expect(saved.formatVersion).toBe(46);
     expect(saved.model.objects.at(-1)).toMatchObject({ kind: 'sheet', params: { flangePX: 35, flangeNY: 20 } });
   });
 }

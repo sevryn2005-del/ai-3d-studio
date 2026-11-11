@@ -59,7 +59,7 @@ test('참조 형상: 세 점 기준 평면 → 스케치, 좌표로 기준 축, 
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '저장', exact: true }).click()]);
   const saved = JSON.parse(readFileSync((await dl.path())!, 'utf8'));
-  expect(saved.formatVersion).toBe(45);
+  expect(saved.formatVersion).toBe(46);
   expect(saved.model.references.map((r: { id: string; type: string }) => [r.id, r.type])).toEqual([
     ['ref_plane_1', 'plane'],
     ['ref_axis_1', 'axis'],

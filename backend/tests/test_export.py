@@ -68,7 +68,7 @@ def test_invalid_model_returns_issues(client, default_model):
 
 
 def test_empty_model(client):
-    r = client.post("/api/export/stl", json={"schemaVersion": 45, "units": "mm", "sketches": [], "objects": []})
+    r = client.post("/api/export/stl", json={"schemaVersion": 46, "units": "mm", "sketches": [], "objects": []})
     assert r.status_code == 422
     assert "내보낼 객체가 없습니다" in r.json()["issues"][0]["message"]
 
@@ -284,3 +284,37 @@ def test_glb_texture_embeds_image_and_local_uv(client, default_model):
     # 로컬 박스 x, y ∈ [−10, 10], z ∈ [0, 20] → u ∈ [−0.5, 0.5], v ∈ [−1, 0.5]
     np.testing.assert_allclose(uv.min(axis=0), [-0.5, -1], atol=1e-5)
     np.testing.assert_allclose(uv.max(axis=0), [0.5, 0.5], atol=1e-5)
+
+
+def test_glb_smart_uv_unwraps_box_into_one_image(client, default_model):
+    """스마트 UV (형식 v46): 꼭짓점을 삼각형마다 나누고 (이음선) 0~1 한 장에 6개 면 — 옮기고 돌려도 같은 UV"""
+    from app.cad.smart_uv import smart_uv
+
+    obj = default_model["objects"][0]
+    obj["texture"] = {"image": PNG_1PX, "tile": 20, "projection": "smart"}
+    for transform in ({"position": [0, 0, 0], "rotation": [0, 0, 0]}, {"position": [300, 50, 0], "rotation": [0, 0, 90]}):
+        obj["transform"] = transform
+        gltf, binary = _parse_glb(fetch(client, "glb", default_model))
+        prim = gltf["meshes"][0]["primitives"][0]
+        acc = gltf["accessors"][prim["attributes"]["TEXCOORD_0"]]
+        bv = gltf["bufferViews"][acc["bufferView"]]
+        uv = np.frombuffer(binary[bv["byteOffset"] : bv["byteOffset"] + bv["byteLength"]], dtype="<f4").reshape(-1, 2)
+        assert gltf["accessors"][prim["indices"]]["count"] == len(uv)  # 꼭짓점 = 삼각형 모서리 (이음선)
+        assert uv.min() >= 0 and uv.max() <= 1
+        # 면마다(삼각형 2개) 늘어나지 않음: 20×20 면 6개가 같은 UV 넓이
+        tri = uv.reshape(-1, 3, 2)
+        a, b = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+        area = np.abs(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]) / 2
+        np.testing.assert_allclose(area, area[0], rtol=1e-4)
+    # 상자 20³ 의 면 6개 = 차트 6개
+    cube = np.array([[[0, 0, 0], [1, 0, 0], [1, 1, 0]], [[0, 0, 0], [1, 1, 0], [0, 1, 0]]], dtype=float)
+    assert smart_uv(cube.reshape(-1, 3))[1] == 1
+
+
+def test_export_with_optional_model_fields_round_trips(client, default_model):
+    """선택 필드(키 보간·텍스처 투영)를 비운 모델도 작업자에게 null 없이 전달된다 (회귀: v44 interp)"""
+    default_model["animation"] = {"fps": 24, "end": 48, "tracks": [{"id": "box_1", "keys": [
+        {"frame": 0, "position": [0, 0, 0], "rotation": [0, 0, 0]},
+        {"frame": 24, "position": [10, 0, 0], "rotation": [0, 0, 0], "interp": "ease"}]}]}
+    default_model["objects"][0]["texture"] = {"image": PNG_1PX, "tile": 20}
+    assert fetch(client, "glb", default_model)[:4] == b"glTF"

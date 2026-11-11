@@ -15,7 +15,7 @@ import { useBackendStore } from '../../features/backend/backendStore';
 import { geometryKey } from '../../features/backend/renderMesh';
 import { isSuppressed, patternMatrices } from '../../cad/features';
 import { toMatrix } from '../../cad/transformMath';
-import { boxUvGeometry } from '../../cad/textureMap';
+import { textureUvGeometry } from '../../cad/textureMap';
 import { REF_POINTS } from '../../cad/references';
 import { poseAt, trackOf } from '../../cad/animation';
 import { draftGeometry, localPull, useDraftStats } from '../../cad/draftAnalysis';
@@ -36,7 +36,7 @@ type Index = Map<ObjectId, CadObject>;
 /** 스케치 목록 (바뀌지 않으면 같은 참조 → 재계산 없음) */
 function useSketches() {
   const sketches = useSceneStore((s) => s.history.present.model.sketches);
-  return useMemo(() => sketchIndex({ schemaVersion: 45, units: 'mm', sketches, objects: [] }), [sketches]);
+  return useMemo(() => sketchIndex({ schemaVersion: 46, units: 'mm', sketches, objects: [] }), [sketches]);
 }
 
 export function CadNode({ object, index, mode }: { object: CadObject; index: Index; mode: 'solid' | 'child' }) {
@@ -189,7 +189,7 @@ function ObjectMesh({
   /** 객체 회전 (구배 분석의 빼는 방향을 객체 로컬로) — 최상위 엔진 메시만 */
   rotation?: readonly number[];
   /** 텍스처 (형식 v30) — 엔진 메시(객체 로컬)에만 입힌다. 미리보기 도형은 계산이 끝날 때까지 색만 */
-  texture?: { image: string; tile: number };
+  texture?: { image: string; tile: number; projection?: 'box' | 'smart' };
   /** 외관 색 (없으면 기본 회색) */
   baseColor?: string;
   /** PBR 재질 (형식 v29, 없으면 기본) */
@@ -216,7 +216,8 @@ function ObjectMesh({
   const transparent = variant !== 'solid' || xray;
   const map = useImageTexture(geometry && variant === 'solid' ? texture?.image : undefined);
   const tile = texture?.tile;
-  const uvGeometry = useMemo(() => (geometry && map && tile ? boxUvGeometry(geometry, tile) : undefined), [geometry, map, tile]);
+  const projection = texture?.projection;
+  const uvGeometry = useMemo(() => (geometry && map && tile ? textureUvGeometry(geometry, { tile, projection }) : undefined), [geometry, map, tile, projection]);
   useEffect(() => () => uvGeometry?.dispose(), [uvGeometry]);
   // 구배 분석 (화면만): 삼각형마다 색 — 엔진 메시에만
   const draft = useEditorStore((s) => s.draft);
