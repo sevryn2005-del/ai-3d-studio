@@ -613,3 +613,29 @@ label.check.small { font-size: 12px; }
 .dim-input input { width: 70px; padding: 2px 4px; }
 .dim-input button { padding: 2px 6px; }
 .sk-badges .dimension.editable { pointer-events: auto; cursor: text; }
+
+/* 알림 상자 (오류 안내) */
+.notices { position: fixed; left: 50%; transform: translateX(-50%); bottom: 34px; z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 28px)); }
+.notice-card { background: var(--panel, #1f232a); border: 1px solid var(--border, #3a404a); border-left: 4px solid #e5534b; border-radius: 8px; padding: 9px 11px; box-shadow: 0 6px 18px rgba(0,0,0,.35); font-size: 13px; animation: notice-in .18s ease-out; }
+.notice-card.warn { border-left-color: #e8a33d; }
+.notice-card.info { border-left-color: #4c9aff; }
+.notice-head { display: flex; align-items: flex-start; gap: 7px; }
+.notice-head strong { flex: 1; line-height: 1.35; font-weight: 600; }
+.notice-icon { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: rgba(229,83,75,.18); color: #f08a83; flex: none; }
+.notice-card.warn .notice-icon { background: rgba(232,163,61,.18); color: #f0b65a; }
+.notice-card.info .notice-icon { background: rgba(76,154,255,.18); color: #7fb6ff; }
+.notice-count { font-size: 11px; padding: 0 6px; border-radius: 9px; background: var(--accent-soft, rgba(76,154,255,.2)); }
+.notice-close { border: none; background: transparent; padding: 0 4px; font-size: 16px; line-height: 1; opacity: .6; cursor: pointer; }
+.notice-close:hover { opacity: 1; }
+.notice-hint { margin: 5px 0 0 25px; line-height: 1.45; opacity: .85; }
+.notice-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0 25px; }
+.notice-actions button { padding: 3px 8px; font-size: 12px; }
+.notice-actions button.link { border: none; background: transparent; text-decoration: underline; opacity: .7; padding: 3px 2px; }
+.notice-raw { margin: 6px 0 0 25px; padding: 6px; font-size: 11px; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,.2); border-radius: 4px; max-height: 120px; overflow: auto; }
+@keyframes notice-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* 숫자 칸 아래 한 줄 (계산·단위 바꿈 결과, 읽을 수 없는 이유) */
+.field-message { grid-column: 1 / -1; font-size: 11px; color: #5fb878; margin-top: 2px; }
+.field-message.bad { color: #f08a83; }
+/* 화면 한 부분이 고장 났을 때 */
+.crash-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; align-items: flex-start; justify-content: center; }
+.crash-actions { display: flex; gap: 8px; flex-wrap: wrap; }

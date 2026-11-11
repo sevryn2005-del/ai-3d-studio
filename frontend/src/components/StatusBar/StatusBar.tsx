@@ -6,6 +6,7 @@ import { appConfig } from '../../api/config';
 import { PrintCheckStatus } from '../PrintCheck/PrintCheckStatus';
 import { selectSelectedSketch } from '../../cad/sceneStore';
 import { degreesOfFreedom } from '../../cad/solver';
+import { explainError } from '../../features/errors/errorGuide';
 
 export function StatusBar() {
   const model = useSceneStore(selectModel);
@@ -37,8 +38,8 @@ export function StatusBar() {
         </span>
       )}
       {lastError ? (
-        <button className="status-error" onClick={clearError} title="클릭하여 닫기" role="alert">
-          ⚠ {lastError}
+        <button className="status-error" onClick={clearError} title={`${lastError}\n(클릭하여 닫기)`} role="alert">
+          ⚠ {explainError(lastError).title}
         </button>
       ) : (
         <span className="status-ok">● 설계 정상</span>

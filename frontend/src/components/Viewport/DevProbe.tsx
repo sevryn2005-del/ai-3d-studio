@@ -1,3 +1,4 @@
+import { useDevCrash } from '../../features/errors/devCrash';
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Box3, Mesh, Vector3 } from 'three';
@@ -58,6 +59,7 @@ export function DevProbe() {
       },
       submit: (envelope) => useSceneStore.getState().submit(envelope),
       dispatch: (command) => useSceneStore.getState().dispatch(command),
+      crash: () => useDevCrash.getState().set(true),
     };
     return () => {
       delete window.__AI3D_DEV__;

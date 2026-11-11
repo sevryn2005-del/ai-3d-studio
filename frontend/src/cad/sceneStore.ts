@@ -16,6 +16,8 @@ interface SceneState {
   history: HistoryState;
   selectedId: ObjectId | null;
   lastError: string | null;
+  /** 오류가 날 때마다 1 씩 (같은 문구가 잇따라도 알림이 다시 뜨게) */
+  errorSeq: number;
 
   dispatch: (command: CadCommand | unknown) => ExecuteResult;
   /** 명령 봉투 적용: 중복 → 오래된 리비전 → 검증 순으로 거른 뒤 이력 1건으로 커밋 */
@@ -37,12 +39,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   history: createHistory(createDefaultModel()),
   selectedId: 'box_1',
   lastError: null,
+  errorSeq: 0,
 
   dispatch: (command) => {
     const { history } = get();
     const result = executeCommand(history.present.model, command);
     if (!result.ok) {
-      set({ lastError: result.error });
+      set({ lastError: result.error, errorSeq: get().errorSeq + 1 });
       return result;
     }
     set((s) => ({
@@ -60,7 +63,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const env = CommandEnvelopeSchema.safeParse(raw);
     if (!env.success) {
       const error = '잘못된 명령 봉투입니다';
-      set({ lastError: error });
+      set({ lastError: error, errorSeq: get().errorSeq + 1 });
       return { status: 'rejected', error };
     }
     const { commandId, baseRevision, command } = env.data;
@@ -70,12 +73,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     if (history.appliedCommandIds.includes(commandId)) return { status: 'duplicate', revision: current };
     if (baseRevision !== current) {
       const error = '편집하는 동안 다른 변경이 먼저 적용되어 이 편집을 반영하지 않았습니다';
-      set({ lastError: error });
+      set({ lastError: error, errorSeq: get().errorSeq + 1 });
       return { status: 'stale', error, baseRevision, currentRevision: current };
     }
     const result = executeCommand(history.present.model, command);
     if (!result.ok) {
-      set({ lastError: result.error });
+      set({ lastError: result.error, errorSeq: get().errorSeq + 1 });
       return { status: 'rejected', error: result.error };
     }
     const next = pushHistory(history, result.command, result.model, { commandId });
@@ -94,7 +97,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     const { history } = get();
     const result = executeBatch(history.present.model, commands);
     if (!result.ok) {
-      set({ lastError: result.error });
+      set({ lastError: result.error, errorSeq: get().errorSeq + 1 });
       return result;
     }
     const last = result.commands[result.commands.length - 1]!;
@@ -128,7 +131,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set({ history: createHistory(model ?? createDefaultModel()), selectedId: null, lastError: null }),
 
   clearError: () => set({ lastError: null }),
-  reportError: (message) => set({ lastError: message }),
+  reportError: (message) => set({ lastError: message, errorSeq: get().errorSeq + 1 }),
 }));
 
 /** 선택 가능한 ID: 객체 또는 스케치 (같은 ID 이름공간) */

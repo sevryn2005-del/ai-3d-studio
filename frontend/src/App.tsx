@@ -12,14 +12,21 @@ import { useAppScreen } from './features/projects/appScreen';
 import { HomeScreen } from './components/Home/HomeScreen';
 import { ModelingWorkspace } from './components/Modeling/ModelingWorkspace';
 import { useSceneStore } from './cad/sceneStore';
+import { ErrorBoundary } from './components/Errors/ErrorBoundary';
+import { Notices } from './components/Errors/Notices';
+import { useGlobalErrors } from './features/errors/useGlobalErrors';
 
 export function App() {
   const screen = useAppScreen((s) => s.screen);
+  useGlobalErrors();
   if (screen === 'home')
     return (
       <>
-        <HomeScreen />
+        <ErrorBoundary area="시작 화면">
+          <HomeScreen />
+        </ErrorBoundary>
         <ConfirmDialog />
+        <Notices />
       </>
     );
   return <Editor />;
@@ -34,23 +41,39 @@ function Editor() {
   if (workspace === 'modeling')
     return (
       <div className="app modeling">
-        <Toolbar />
-        <ModelingWorkspace />
+        <ErrorBoundary area="도구 막대">
+          <Toolbar />
+        </ErrorBoundary>
+        <ErrorBoundary area="3D 모델링 화면">
+          <ModelingWorkspace />
+        </ErrorBoundary>
         <StatusBar />
         <ConfirmDialog />
+        <Notices />
       </div>
     );
   return (
     <div className="app">
-      <Toolbar />
+      <ErrorBoundary area="도구 막대">
+        <Toolbar />
+      </ErrorBoundary>
       {/* 솔리드웍스식 배치: 왼쪽 피처 트리·속성 / 가운데 그래픽 영역 / 오른쪽 작업창(AI 도우미, 접을 수 있음) */}
       <main className={`workspace${chatOpen ? '' : ' no-chat'}`}>
-        <PropertyPanel />
-        <Viewport />
-        {chatOpen && <ChatPanel />}
+        <ErrorBoundary area="피처 트리·속성">
+          <PropertyPanel />
+        </ErrorBoundary>
+        <ErrorBoundary area="3D 뷰포트">
+          <Viewport />
+        </ErrorBoundary>
+        {chatOpen && (
+          <ErrorBoundary area="AI 도우미">
+            <ChatPanel />
+          </ErrorBoundary>
+        )}
       </main>
       <StatusBar />
       <ConfirmDialog />
+      <Notices />
     </div>
   );
 }

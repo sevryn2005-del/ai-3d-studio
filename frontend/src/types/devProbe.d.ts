@@ -24,6 +24,8 @@ declare global {
       /** 명령 봉투를 직접 제출 (재시도·오래된 리비전 시험용) */
       submit: (envelope: unknown) => unknown;
       dispatch: (command: unknown) => unknown;
+      /** 개발·E2E: 속성 패널을 한 번 일부러 고장 내기 (오류 경계 시험) */
+      crash: () => void;
     };
   }
 }

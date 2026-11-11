@@ -1,4 +1,5 @@
 import { SheetMetalFields } from './SheetMetalFields';
+import { DevCrashProbe } from '../../features/errors/devCrash';
 import { useEffect, useMemo, useState } from 'react';
 import type { BooleanOperation, CadObject, ModelDefinition, ObjectId, Vec3 } from '../../cad/commandTypes';
 import { selectModel, selectSelectedObject, selectSelectedSketch, useSceneStore } from '../../cad/sceneStore';
@@ -45,6 +46,7 @@ export function PropertyPanel() {
 
   return (
     <aside className="panel properties" aria-label="속성 패널">
+      {import.meta.env.DEV && <DevCrashProbe />}
       <header className="panel-header">피처 트리</header>
       <ul className="origin-list" aria-label="기준 평면">
         {ORIGIN_PLANES.map((p) => (

@@ -82,7 +82,7 @@ test('드래그하는 동안 다른 변경이 먼저 적용되면 이 드래그�
   expect(afterOther).toMatchObject({ revision: 1, past: 1 });
   await page.mouse.up();
 
-  await expect(page.getByRole('alert')).toContainText('다른 변경이 먼저 적용되어');
+  await expect(page.getByRole('alert')).toContainText('다른 변경과 겹쳐');
   expect(await scene(page)).toEqual(afterOther); // 원본·이력 보존 (드래그는 이력에 없음)
   // 화면의 객체도 최신 원본 위치(0,0,0)로 되돌아감
   const box = (await page.evaluate(() => window.__AI3D_DEV__!.meshSources())).box_1!;
