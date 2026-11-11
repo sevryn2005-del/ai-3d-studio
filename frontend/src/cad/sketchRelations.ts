@@ -13,6 +13,8 @@ export interface Badge {
   text: string;
   title: string;
   kind: 'relation' | 'dimension';
+  /** 더블클릭으로 고칠 수 있는 치수 (smartDimension.dimensionCommand 에 넘긴다) */
+  edit?: { type: 'constraint'; constraint: 'length' | 'distance' | 'angle'; refs: string[]; value: number; existing: string; label: string } | { type: 'dimension'; dimension: string; value: number; label: string };
 }
 
 const SYMBOL: Record<string, string> = {
@@ -28,6 +30,8 @@ const SYMBOL: Record<string, string> = {
   symmetric: '⇋',
   midpoint: 'M',
 };
+
+const dimId = (sketch: Sketch, entity: string, kind: string) => sketch.dimensions.find((d) => d.entity === entity && d.kind === kind)?.id ?? `${entity}.${kind}`;
 
 const RECT: Point2[] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 
@@ -71,7 +75,8 @@ export function sketchBadges(sketch: Sketch): Badge[] {
         const [a, b] = [where(c.refs[0]!), where(c.refs[1]!)];
         at = a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : null;
       } else at = where(c.refs[0]!);
-      if (at) out.push({ at, text, title, kind: 'dimension' });
+      const edit = { type: 'constraint' as const, constraint: c.type, refs: c.refs, value: c.value ?? 0, existing: c.id, label: CONSTRAINT_LABEL[c.type] };
+      if (at) out.push({ at, text, title, kind: 'dimension', edit });
       continue;
     }
     if ((c.type === 'horizontal' || c.type === 'vertical' || c.type === 'coincident') && c.refs.length === 2) {
@@ -91,11 +96,11 @@ export function sketchBadges(sketch: Sketch): Badge[] {
     if (e.type === 'rectangle') {
       const w = dimensionValue(sketch, e.id, 'width') ?? 0;
       const h = dimensionValue(sketch, e.id, 'height') ?? 0;
-      out.push({ at: [e.center[0], e.center[1] - h / 2], text: formatMm(w), title: `${e.id} 폭`, kind: 'dimension' });
-      out.push({ at: [e.center[0] + w / 2, e.center[1]], text: formatMm(h), title: `${e.id} 높이`, kind: 'dimension' });
+      out.push({ at: [e.center[0], e.center[1] - h / 2], text: formatMm(w), title: `${e.id} 폭`, kind: 'dimension', edit: { type: 'dimension', dimension: dimId(sketch, e.id, 'width'), value: w, label: '폭' } });
+      out.push({ at: [e.center[0] + w / 2, e.center[1]], text: formatMm(h), title: `${e.id} 높이`, kind: 'dimension', edit: { type: 'dimension', dimension: dimId(sketch, e.id, 'height'), value: h, label: '높이' } });
     } else if (e.type === 'circle') {
       const d = dimensionValue(sketch, e.id, 'diameter') ?? 0;
-      out.push({ at: [e.center[0] + d / 2 / Math.SQRT2, e.center[1] + d / 2 / Math.SQRT2], text: `Ø${formatMm(d)}`, title: `${e.id} 지름`, kind: 'dimension' });
+      out.push({ at: [e.center[0] + d / 2 / Math.SQRT2, e.center[1] + d / 2 / Math.SQRT2], text: `Ø${formatMm(d)}`, title: `${e.id} 지름`, kind: 'dimension', edit: { type: 'dimension', dimension: dimId(sketch, e.id, 'diameter'), value: d, label: '지름' } });
     }
   }
   return out;

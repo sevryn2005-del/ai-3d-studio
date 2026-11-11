@@ -607,3 +607,9 @@ label.check.small { font-size: 12px; }
 .tl-track input { width: 100%; }
 .tl-key { position: absolute; top: -6px; width: 8px; height: 8px; margin-left: -4px; background: #f2c14e; transform: rotate(45deg); pointer-events: none; }
 .tl-num { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 지능형 치수 값 입력 (스케치) */
+.dim-input { display: flex; align-items: center; gap: 4px; background: var(--panel, #1f232a); border: 1px solid var(--accent, #4c9aff); border-radius: 6px; padding: 3px 6px; box-shadow: 0 2px 8px rgba(0,0,0,.35); transform: translate(8px, -50%); white-space: nowrap; }
+.dim-input input { width: 70px; padding: 2px 4px; }
+.dim-input button { padding: 2px 6px; }
+.sk-badges .dimension.editable { pointer-events: auto; cursor: text; }

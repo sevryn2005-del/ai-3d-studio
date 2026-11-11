@@ -162,7 +162,7 @@ export function SketchDrawTool() {
   };
 
   useEffect(() => {
-    if (!tool) return;
+    if (!tool || tool === 'trim' || tool === 'extend' || tool === 'dimension') return;
     // 캡처 단계: 전역 단축키(Esc = 그리기 끝, Enter = 확인)보다 먼저 받는다
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -224,7 +224,7 @@ export function SketchDrawTool() {
     };
   }, [tool]);
 
-  if (!tool || tool === 'trim' || tool === 'extend') return null;
+  if (!tool || tool === 'trim' || tool === 'extend' || tool === 'dimension') return null;
 
   const step = drawStep(view);
   const tol = view.mmPerPx * SNAP_PX;

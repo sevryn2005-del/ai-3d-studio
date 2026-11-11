@@ -63,7 +63,7 @@ export function Toolbar() {
   const workspace = useSceneStore((s) => s.history.present.model.workspace);
   const drawingOpen = useDrawingStore((s) => s.open);
   const assembly = (p: 'mate' | 'interference' | 'bom' | 'explode') => useEditorStore.getState().setAssemblyPanel(assemblyPanel === p ? null : p);
-  const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline' | 'trim' | 'extend') => editor.setDrawTool(drawTool === t ? null : t);
+  const draw = (t: 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'path' | 'arc' | 'spline' | 'trim' | 'extend' | 'dimension') => editor.setDrawTool(drawTool === t ? null : t);
 
   return (
     <header className="toolbar">
@@ -197,7 +197,9 @@ export function Toolbar() {
             <Cmd icon="trim" label="잘라내기" title="잘라내기: 구성선·경로에서 누른 조각(교차점 사이)을 지웁니다" pressed={drawTool === 'trim'} onClick={() => draw('trim')} testId="cmd-trim" />
             <Cmd icon="extend" label="연장" title="연장: 구성선·경로 끝을 눌러 가장 가까운 다른 요소까지 늘입니다" pressed={drawTool === 'extend'} onClick={() => draw('extend')} testId="cmd-extend" />
             <span className="sep" />
-            <span className="cmd-hint">구속(수평·수직·길이…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
+            <Cmd icon="dimension" label="지능형 치수" shortcut="D" title="치수 (D): 변 = 길이, 원 = 지름, 점 두 개 = 거리, 변 두 개 = 각도 — 클릭한 뒤 값을 입력 (Enter). 화면의 치수 숫자를 더블클릭하면 고칩니다" pressed={drawTool === 'dimension'} onClick={() => draw('dimension')} testId="cmd-dimension" />
+            <span className="sep" />
+            <span className="cmd-hint">그 밖의 구속(수평·수직·평행…)은 스케치를 선택하면 왼쪽 속성에 나옵니다</span>
           </>
         )}
         {tab === 'assembly' && (

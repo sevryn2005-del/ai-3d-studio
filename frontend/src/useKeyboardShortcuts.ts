@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSceneStore } from './cad/sceneStore';
+import { selectSelectedSketch, useSceneStore } from './cad/sceneStore';
 import { useEditorStore } from './features/selection/editorStore';
 import { cancelPending, commitPending } from './features/selection/featureFlow';
 import { openProject, saveProject } from './features/projects/projectActions';
@@ -87,6 +87,7 @@ export function useKeyboardShortcuts() {
         else if (key === 'r') editor.setDrawTool(editor.drawTool === 'rectangle' ? null : 'rectangle');
         else if (key === 'c') editor.setDrawTool(editor.drawTool === 'circle' ? null : 'circle');
         else if (key === 'p') editor.setDrawTool(editor.drawTool === 'polygon' ? null : 'polygon');
+        else if (key === 'd' && !!selectSelectedSketch(useSceneStore.getState())) editor.setDrawTool(editor.drawTool === 'dimension' ? null : 'dimension');
       }
     };
     window.addEventListener('keydown', onKey);

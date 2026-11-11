@@ -7,8 +7,11 @@ import { autoGridStep, sketchSnapPoints } from '../../cad/sketchSnap';
 import { gridSteps, useSketchView } from '../../features/sketch/sketchSettings';
 import { useActiveSketch } from '../../features/sketch/activeSketch';
 import { useSketchDrag } from '../../features/sketch/sketchDrag';
-import { groupBadges, sketchBadges } from '../../cad/sketchRelations';
-import type { Sketch } from '../../cad/commandTypes';
+import { groupBadges, sketchBadges, type Badge } from '../../cad/sketchRelations';
+import { dimensionCommand } from '../../cad/smartDimension';
+import { DimensionInput } from './SketchDimensionTool';
+import { useSceneStore } from '../../cad/sceneStore';
+import type { Point2, Sketch } from '../../cad/commandTypes';
 import { Html } from '@react-three/drei';
 
 /** 종이 + 격자 (모눈종이처럼): 잔 칸·굵은 칸 선을 화면 해상도에 맞춰 부드럽게 (fwidth) */
@@ -195,22 +198,45 @@ function SketchPoints({ sketch, px, paper }: { sketch: import('../../cad/command
   );
 }
 
-/** 구속 기호·치수 (솔리드웍스처럼 선·점 옆) — 같은 자리는 한 묶음 */
+/** 구속 기호·치수 (솔리드웍스처럼 선·점 옆) — 같은 자리는 한 묶음. 치수 숫자는 더블클릭으로 고친다 */
 function SketchBadges({ sketch, paper }: { sketch: Sketch; paper: boolean }) {
   const groups = useMemo(() => groupBadges(sketchBadges(sketch)).slice(0, 150), [sketch]);
+  const [editing, setEditing] = useState<{ at: Point2; edit: NonNullable<Badge['edit']> } | null>(null);
   return (
     <>
       {groups.map((g) => (
         <Html key={g.at.join(',')} position={[g.at[0], g.at[1], 0]} style={{ pointerEvents: 'none' }} zIndexRange={[5, 0]}>
           <div className={`sk-badges${paper ? ' on-paper' : ''}`} data-testid="sketch-badge">
             {g.items.map((b, i) => (
-              <span key={i} className={b.kind} title={b.title}>
+              <span
+                key={i}
+                className={`${b.kind}${b.edit ? ' editable' : ''}`}
+                title={b.edit ? `${b.title} — 더블클릭해서 값 고치기` : b.title}
+                onDoubleClick={b.edit ? (e) => (e.stopPropagation(), setEditing({ at: g.at, edit: b.edit! })) : undefined}
+                // 뷰포트(R3F)가 이 클릭을 빈 곳 클릭(선택 해제)으로 받지 않게
+                onPointerDown={b.edit ? (e) => e.stopPropagation() : undefined}
+                onPointerUp={b.edit ? (e) => e.stopPropagation() : undefined}
+                onClick={b.edit ? (e) => e.stopPropagation() : undefined}
+                data-testid={b.edit ? 'sketch-dim-label' : undefined}
+              >
                 {b.text}
               </span>
             ))}
           </div>
         </Html>
       ))}
+      {editing && (
+        <DimensionInput
+          key={`${editing.at.join(',')}${editing.edit.label}`}
+          at={editing.at}
+          plan={editing.edit}
+          onCommit={(v) => {
+            if (v > 0 && v !== editing.edit.value) useSceneStore.getState().submitNow(dimensionCommand(sketch, editing.edit, v));
+            setEditing(null);
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
     </>
   );
 }
