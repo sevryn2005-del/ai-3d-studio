@@ -8,6 +8,7 @@ import { ExportMenu } from './ExportMenu';
 import { ModelingHeader } from '../Modeling/ModelingHeader';
 import { useEditorStore } from '../../features/selection/editorStore';
 import { startDomePick, startMeasurePick, startMoveFacePick, startSketchOnFace } from '../Viewport/PickFlows';
+import { startConvertEntities } from '../../features/selection/faceSketch';
 import { useDrawingStore } from '../Drawing/DrawingPanel';
 import {
   importMeshFile, insertPartFile, openLoft, openSweep, quickDraft, quickEdgeFeature, quickRib, quickHelix, quickInternalThread, quickHole, quickLine, quickPattern, quickCurvePattern, quickSketchPattern, quickSplit, quickScale, quickShell, quickSlot, quickThread, startFeature, startSketch,
@@ -120,7 +121,7 @@ export function Toolbar() {
       <div className="command-bar" role="toolbar" aria-label={TABS.find((t) => t.id === tab)!.label}>
         {tab === 'feature' && (
           <>
-            <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓)" onClick={() => startFeature('extrude')} />
+            <Cmd icon="extrude" label="돌출 보스/베이스" title="선택한 스케치를 돌출 (속성 관리자에서 깊이 확인 후 ✓) — 스케치가 없으면 평면을 클릭해 그 면 윤곽으로 돌출" onClick={() => startFeature('extrude')} />
             <Cmd icon="revolve" label="회전 보스/베이스" title="선택한 스케치를 v 축 둘레로 회전" onClick={() => startFeature('revolve')} />
             <Cmd icon="extrudeCut" label="돌출 컷" title="선택한 스케치를 돌출해 바디에서 뺌 (면 위 스케치는 안쪽으로)" onClick={() => startFeature('extrude', true)} testId="cmd-extrude-cut" />
             <Cmd icon="sweep" label="스윕" title="단면을 경로를 따라 쓸기 (파이프·손잡이·레일)" onClick={openSweep} testId="cmd-sweep" />
@@ -194,6 +195,7 @@ export function Toolbar() {
             <Cmd icon="spline" label="스플라인" title="스플라인 그리기: 클릭한 점들을 매끈하게 지나는 곡선 — 첫 점을 다시 누르면 닫힌 곡선(돌출용), Enter 면 열린 곡선(스윕 경로)" pressed={drawTool === 'spline'} onClick={() => draw('spline')} testId="cmd-spline" />
             <Cmd icon="path" label="경로" title="경로(열린 선) 그리기: 클릭으로 점, 마지막 점을 다시 클릭하거나 Enter 로 끝 — 스윕·리브 중심선" pressed={drawTool === 'path'} onClick={() => draw('path')} testId="cmd-path" />
             <span className="sep" />
+            <Cmd icon="convert" label="요소 변환" title="요소 변환: 형상의 평면을 클릭하면 그 윤곽(바깥 + 구멍)이 고른 스케치에 들어옵니다 — 다시 그리지 않고 돌출·컷" onClick={startConvertEntities} testId="cmd-convert" />
             <Cmd icon="trim" label="잘라내기" title="잘라내기: 구성선·경로에서 누른 조각(교차점 사이)을 지웁니다" pressed={drawTool === 'trim'} onClick={() => draw('trim')} testId="cmd-trim" />
             <Cmd icon="extend" label="연장" title="연장: 구성선·경로 끝을 눌러 가장 가까운 다른 요소까지 늘입니다" pressed={drawTool === 'extend'} onClick={() => draw('extend')} testId="cmd-extend" />
             <span className="sep" />

@@ -36,6 +36,7 @@ const PATHS: Record<string, string> = {
   linear: 'M3 8h5v8H3zM10 8h5v8h-5zM17 8h4v8h-4',
   circular: 'M12 3a2 2 0 1 0 0 .1M19.8 16.5a2 2 0 1 0 0 .1M4.2 16.5a2 2 0 1 0 0 .1M7 6.5a8 8 0 0 0-3 7M17 6.5a8 8 0 0 1 3 7M8 20a8 8 0 0 0 8 0',
   mirror: 'M12 2v20M4 7h5v10H4zM15 7h5v10h-5z',
+  convert: 'M4 6h10v10H4zM14 9l6-3v12l-6-3M7 9h4v4H7z',
   dimension: 'M4 17h16M4 14v6M20 14v6M7 17l-2-1.5v3zM17 17l2-1.5v3zM9 9h6M12 5v8',
   sheetMetal: 'M3 7v8a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V7M6 7v7.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V7',
   shadedEdges: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5',

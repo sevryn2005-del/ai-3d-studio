@@ -20,6 +20,7 @@ import { pickFileWithInput } from '../projects/projectStorage';
 import { nameFromFileName, parseProject } from '../projects/projectFile';
 import { useProjectStore } from '../projects/projectStore';
 import { useEditorStore, type PendingFeature } from './editorStore';
+import { startFaceSketchFeature } from './faceSketch';
 
 export function pendingCommand(p: PendingFeature): CadCommand {
   return p.kind === 'extrude'
@@ -90,7 +91,9 @@ export function startFeature(kind: PendingFeature['kind'], cut = false) {
   const scene = useSceneStore.getState();
   const sketch = selectSelectedSketch(scene);
   if (!sketch) {
-    scene.reportError(`${kind === 'extrude' ? '돌출' : '회전'}할 스케치를 먼저 고르세요 (왼쪽 피처 트리에서 스케치를 클릭)`);
+    // 솔리드웍스처럼: 스케치를 고르지 않았으면 평면(면)을 고르게 하고, 그 면 윤곽으로 스케치를 만들어 이어서 진행
+    if (kind === 'extrude') return startFaceSketchFeature(cut ? '돌출 컷' : '돌출', () => startFeature(kind, cut));
+    scene.reportError('회전할 스케치를 먼저 고르세요 (왼쪽 피처 트리에서 스케치를 클릭)');
     return;
   }
   const usable = sketch.entities.filter((e) => {
@@ -105,7 +108,8 @@ export function startFeature(kind: PendingFeature['kind'], cut = false) {
     );
     return;
   }
-  const profile = usable[0]!.id;
+  // 영역(바깥 − 구멍)이 있으면 그것이 의도한 단면 (요소 변환·영역 단면) — 없으면 첫 도형
+  const profile = (usable.find((e) => e.type === 'region') ?? usable[0]!).id;
   // 컷: 면 위 스케치면 그 면의 (최상위) 바디, 아니면 첫 최상위 바디에서 뺀다. 음수 돌출(면 안쪽)이 기본
   let cutTarget: string | undefined;
   if (cut) {
